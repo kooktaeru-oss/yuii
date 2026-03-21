@@ -2701,7 +2701,9 @@ input:checked + .slider:before {
     to { transform: rotate(360deg); }
 }
 
-    </style>
+</style>
+    <!-- 引入 Lucide 图标 -->
+    <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
     <div class="screen">
@@ -3452,7 +3454,6 @@ input:checked + .slider:before {
         </div>
 
     </div>
-
     <script>
 /**
  * SillyPhone UI - Vanilla JS
@@ -3525,6 +3526,206 @@ document.addEventListener('DOMContentLoaded', () => {
             getChatMessages: (id) => window.parent.getChatMessages ? window.parent.getChatMessages(id) : [],
             setChatMessages: (msgs, opts) => window.parent.setChatMessages ? window.parent.setChatMessages(msgs, opts) : null,
         };
+    }
+
+
+    function buildCurrentChatPrompt(customPrompt = null) {
+        if (!state.currentChat) return '';
+
+        const chat = state.currentChat;
+        const chatId = chat.id;
+        const msgs = (state.messages[chatId] || []).slice(-12);
+
+        const history = msgs.map(m => {
+            let speaker = '我';
+
+            if (m.type === 'ai') {
+                if (chat.isGroup) {
+                    const member = chat.members?.find(x => x.id === m.senderId);
+                    speaker = member?.name || chat.name;
+                } else {
+                    speaker = chat.characterRealName || chat.name;
+                }
+            }
+
+            let content = m.text || '';
+            if (m.msgType === 'sticker') content = `[表情包:${m.label || '未命名表情'}]`;
+            if (m.msgType === 'photo') content = '[图片]';
+            if (m.msgType === 'transfer') content = `[转账:${m.amount || ''}]`;
+            if (m.msgType === 'red-packet') content = `[红包:${m.amount || ''}]`;
+
+            return `${speaker}: ${content}`;
+        }).join('\n');
+
+        return [
+            `你正在扮演手机聊天中的角色「${chat.characterRealName || chat.name}」。`,
+            chat.accountRole ? `账号身份：${chat.accountRole}` : '',
+            chat.isGroup ? '当前场景：微信群聊。请只用其中一个角色的口吻回复。' : '当前场景：微信私聊。',
+            '要求：只输出下一条聊天回复正文，不要解释，不要写分析，不要加引号，不要写“作为AI”。',
+            customPrompt ? `额外系统提示：${customPrompt}` : '',
+            '以下是最近聊天记录：',
+            history || '(暂无聊天记录)'
+        ].filter(Boolean).join('\n\n');
+    }
+
+    function buildMomentsPrompt(customPrompt = null) {
+        const recentMoments = (state.moments || []).slice(0, 8).map(post => {
+            const author = post.authorName || post.author || '未知角色';
+            const text = post.content || post.text || '';
+            const comments = (post.comments || []).map(c => `${c.authorName || c.user || c.name}: ${c.text}`).join('；');
+            return `作者:${author}\n内容:${text}\n评论:${comments || '无'}`;
+        }).join('\n\n---\n\n');
+
+        const isInteraction = !!(customPrompt && customPrompt.includes('动态ID:'));
+
+        return [
+            '你正在扮演微信朋友圈中的角色进行互动。',
+            isInteraction
+                ? '这是对已有动态的互动任务。请输出 1 到 3 行评论，每行格式必须是“角色名：评论内容”。如果系统指定了回复人，就只输出 1 行，并且角色名必须完全一致。'
+                : '这是发布新动态的任务。请只输出一条自然、简短、符合角色感的朋友圈正文，不要加引号，不要加“发布：”。',
+            '不要解释，不要分析，不要写额外说明。',
+            customPrompt ? `额外系统提示：${customPrompt}` : '',
+            '以下是最近朋友圈内容：',
+            recentMoments || '(暂无朋友圈内容)'
+        ].filter(Boolean).join('\n\n');
+    }
+
+    function requestTavernAIReply(prompt, targetId = null) {
+        return new Promise((resolve, reject) => {
+            const requestId = 'yuii_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+            let finished = false;
+
+            function cleanup() {
+                window.removeEventListener('message', onMessage);
+            }
+
+            function onMessage(event) {
+                const data = event.data || {};
+                if (data.source !== 'yuii-bridge') return;
+                if (data.requestId !== requestId) return;
+
+                finished = true;
+                cleanup();
+
+                if (data.type === 'YUII_AI_REPLY') {
+                    resolve({
+                        text: data.text || '',
+                        targetId: data.targetId || targetId
+                    });
+                } else {
+                    reject(new Error(data.error || '酒馆 AI 请求失败'));
+                }
+            }
+
+            window.addEventListener('message', onMessage);
+
+            window.parent.postMessage({
+                source: 'yuii-phone',
+                type: 'YUII_AI_REQUEST',
+                requestId,
+                prompt,
+                targetId
+            }, '*');
+
+            setTimeout(() => {
+                if (finished) return;
+                cleanup();
+                reject(new Error('酒馆 AI 请求超时'));
+            }, 90000);
+        });
+    }
+
+    function insertTavernAIReply(replyText, targetId = null) {
+        if (!state.currentChat) return;
+        if (!replyText || !replyText.trim()) return;
+
+        const chatId = state.currentChat.id;
+        let aiSenderId = state.currentChat.id;
+
+        if (state.currentChat.isGroup) {
+            if (targetId && targetId !== 'all') {
+                aiSenderId = targetId;
+            } else {
+                aiSenderId = state.currentChat.members?.[0]?.id || state.currentChat.id;
+            }
+        }
+
+        const aiMsg = {
+            id: 'msg_' + Date.now(),
+            type: 'ai',
+            senderId: aiSenderId,
+            text: replyText.trim(),
+            time: new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0')
+        };
+
+        state.messages[chatId].push(aiMsg);
+        saveMessagesToLocalStorage();
+
+        if (state.currentChat && state.currentChat.id === chatId) {
+            renderMessages(chatId);
+        }
+    }
+
+    function applyTavernMomentsReply(customPrompt, replyText) {
+        const text = (replyText || '').trim();
+        if (!text) return;
+
+        const momentIdMatch = (customPrompt || '').match(/动态ID:\s*([^,，\n]+)/);
+        const momentId = momentIdMatch ? momentIdMatch[1].trim() : null;
+        const specifiedReplyMatch = (customPrompt || '').match(/指定回复人:\s*【([^】]+)】/);
+        const specifiedReplyName = specifiedReplyMatch ? specifiedReplyMatch[1].trim() : null;
+
+        if (momentId) {
+            const moment = state.moments.find(m => m.id === momentId) || state.moments[0];
+            if (!moment) return;
+
+            const lines = text.split(/\n+/).map(s => s.trim()).filter(Boolean);
+            const parsed = [];
+
+            for (const rawLine of lines) {
+                const line = rawLine.replace(/^[\-•*\d.、\s]+/, '').trim();
+                const m = line.match(/^([^：:]{1,30})[：:](.+)$/);
+                if (m) {
+                    parsed.push({ authorName: m[1].trim(), text: m[2].trim() });
+                }
+            }
+
+            const comments = parsed.length > 0
+                ? parsed
+                : [{ authorName: specifiedReplyName || '助手', text }];
+
+            comments.forEach(item => {
+                const roleInfo = [...state.contacts, ...state.worldBook].find(c => c.name === item.authorName);
+                moment.comments.push({
+                    id: 'c' + Date.now() + Math.random().toString(36).slice(2, 7),
+                    authorId: roleInfo?.id || 'ai-bot',
+                    authorName: item.authorName,
+                    authorAvatar: roleInfo?.avatar || 'https://files.catbox.moe/blaehb.jpg',
+                    replyToName: null,
+                    text: item.text,
+                    time: '刚刚'
+                });
+            });
+
+            saveMoments();
+            renderMomentsList();
+            showToast('朋友圈已响应', 'sparkles');
+            return;
+        }
+
+        state.moments.unshift({
+            id: 'm' + Date.now(),
+            authorId: 'ai-bot',
+            authorName: '助手',
+            authorAvatar: 'https://files.catbox.moe/blaehb.jpg',
+            content: text,
+            time: '刚刚',
+            images: [],
+            comments: []
+        });
+        saveMoments();
+        renderMomentsList();
+        showToast('发布了新动态', 'image');
     }
 
     function serializeMessagesToText(messages) {
@@ -7089,387 +7290,36 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function triggerAIResponse(customPrompt = null, targetId = null) {
-        if (!state.currentChat && !customPrompt) return;
-        
-        // 如果正在加载中，点击则取消
+    async function triggerAIResponse(customPrompt = null, targetId = null) {
+        if (!state.currentChat && !customPrompt && state.currentPage !== 'moments') return;
+
         if (island.classList.contains('active') && !customPrompt) {
-            if (aiResponseTimer) {
-                clearTimeout(aiResponseTimer);
-                aiResponseTimer = null;
-                setIslandState('default');
-                showToast('已取消响应', 'x-circle');
-            }
+            showToast('正在请求酒馆 AI，请稍候...', 'loader');
             return;
         }
-        
-        // 如果在朋友圈页面，执行朋友圈逻辑
-        if (state.currentPage === 'moments') {
-            setIslandState('loading');
-            aiResponseTimer = setTimeout(() => {
-                setIslandState('default');
-                aiResponseTimer = null;
-                handleAIMomentsAction(customPrompt);
-            }, 1500);
-            return;
-        }
-
-        if (!state.currentChat) return;
-
-        const chatId = state.currentChat.id;
-        const chatName = state.currentChat.name;
-        const accountRole = state.currentChat.accountRole || '普通账号';
-        const characterRealName = state.currentChat.characterRealName || chatName;
-        
-        console.log(`身份识别：当前正在以 [${characterRealName}] 的 [${accountRole}] 身份进行对话`);
-
-        const msgs = state.messages[chatId] || [];
-        const lastUserMsg = [...msgs].reverse().find(m => m.type === 'user');
-        
-        // 获取当前角色可用的表情包标签
-        const availableStickers = [];
-        Object.values(state.stickers).forEach(cat => {
-            if (cat.roles && cat.roles.includes(chatName)) {
-                cat.items.forEach(s => availableStickers.push(s.label));
-            }
-        });
 
         setIslandState('loading');
-        
-        aiResponseTimer = setTimeout(() => {
+
+        try {
+            if (state.currentPage === 'moments') {
+                const prompt = buildMomentsPrompt(customPrompt);
+                const result = await requestTavernAIReply(prompt, targetId);
+                applyTavernMomentsReply(customPrompt, result.text);
+                return;
+            }
+
+            if (!state.currentChat) return;
+
+            const prompt = buildCurrentChatPrompt(customPrompt);
+            const result = await requestTavernAIReply(prompt, targetId);
+            insertTavernAIReply(result.text, result.targetId);
+        } catch (error) {
+            console.error('[YUII] 酒馆 AI 请求失败:', error);
+            showToast('酒馆 AI 响应失败', 'x-circle');
+        } finally {
             aiResponseTimer = null;
-            let aiSenderId = state.currentChat.id;
-            let aiSenderName = chatName;
-            if (state.currentChat.isGroup) {
-                if (targetId && targetId !== 'all') {
-                    aiSenderId = targetId;
-                } else {
-                    aiSenderId = state.currentChat.members[0]?.id || state.currentChat.id;
-                }
-                aiSenderName = state.currentChat.members.find(m => m.id === aiSenderId)?.name || chatName;
-            }
-
-            // 检查是否触发语音通话 [角色|头像|语音通话|内容|时间]
-            if (customPrompt && customPrompt.includes('|语音通话|')) {
-                const parts = customPrompt.split('|');
-                if (parts.length >= 5) {
-                    const aiName = parts[0].replace('[', '');
-                    const aiAvatar = parts[1];
-                    const aiContent = parts[3];
-                    
-                    startCall({
-                        id: aiSenderId,
-                        name: aiName,
-                        avatar: aiAvatar
-                    }, true); // 是来电
-                    
-                    // 模拟 AI 在通话中说话
-                    setTimeout(() => {
-                        if (state.call.active) {
-                            addCallTranscript(aiName, aiContent);
-                        }
-                    }, 3000);
-                    
-                    setIslandState('default');
-                    return;
-                }
-            }
-
-            let reply = `我是 ${aiSenderName} (${accountRole})，收到你的消息了。`;
-            
-            // 模拟不同身份的语气
-            if (accountRole.includes('主播')) {
-                reply = `家人们谁懂啊！我是 ${aiSenderName}，欢迎来到直播间~ 刚才看到你说：${lastUserMsg ? lastUserMsg.text : '...'}`;
-            } else if (accountRole.includes('主号')) {
-                reply = `你好，我是 ${characterRealName}。刚才的消息我看到了。`;
-            }
-
-            const aiMsgId = 'msg_' + Date.now();
-            const aiMsg = { 
-                id: aiMsgId,
-                type: 'ai', 
-                senderId: aiSenderId,
-                time: new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0'),
-                text: reply 
-            };
-
-            // 角色回复时引用用户的话 (30% 概率)
-            if (lastUserMsg && Math.random() < 0.3) {
-                aiMsg.quotedMsg = {
-                    id: lastUserMsg.id,
-                    text: lastUserMsg.msgType === 'photo' ? '[图片]' : (lastUserMsg.msgType === 'sticker' ? '[表情]' : lastUserMsg.text),
-                    senderName: '你'
-                };
-            }
-
-            // 模拟大模型自主决定转账/发红包
-            // 从聊天数据中获取好感度，如果没有则初始化为 50 (满分 100)
-            if (!state.chatData) state.chatData = {};
-            if (!state.chatData[chatId]) state.chatData[chatId] = {};
-            if (!state.chatData[chatId].affectionScore) {
-                state.chatData[chatId].affectionScore = 50;
-            }
-            
-            if (lastUserMsg && lastUserMsg.text) {
-                const text = lastUserMsg.text;
-                const positiveKeywords = /(喜欢|爱|想你|开心|好棒|谢谢|晚安|早安|亲亲|抱抱)/;
-                const negativeKeywords = /(讨厌|烦|滚|无聊|傻|笨|生气)/;
-                const playfulKeywords = /(哼|呀|呢|~|～|哈哈|嘿嘿|略略略)/;
-                
-                if (positiveKeywords.test(text)) {
-                    state.chatData[chatId].affectionScore = Math.min(100, state.chatData[chatId].affectionScore + Math.random() * 5);
-                } else if (negativeKeywords.test(text)) {
-                    // 判断是否是打情骂俏
-                    if (playfulKeywords.test(text)) {
-                        // 打情骂俏，反而增加好感度
-                        state.chatData[chatId].affectionScore = Math.min(100, state.chatData[chatId].affectionScore + Math.random() * 3);
-                    } else {
-                        // 真正的负面情绪
-                        state.chatData[chatId].affectionScore = Math.max(0, state.chatData[chatId].affectionScore - Math.random() * 5);
-                    }
-                } else {
-                    state.chatData[chatId].affectionScore = Math.min(100, state.chatData[chatId].affectionScore + 0.5);
-                }
-                localStorage.setItem('phone-state-chatdata', JSON.stringify(state.chatData));
-            }
-
-            const affectionScore = state.chatData[chatId].affectionScore;
-            const isMoneyTopic = lastUserMsg && lastUserMsg.text && /(钱|穷|买|吃|喝|奶茶|外卖|红包|转账|辛苦|累)/.test(lastUserMsg.text);
-            
-            const surpriseThreshold = 0.98 - (affectionScore / 100) * 0.05;
-            const topicThreshold = 0.8 - (affectionScore / 100) * 0.3;
-            
-            if (!customPrompt && ((isMoneyTopic && Math.random() > topicThreshold) || Math.random() > surpriseThreshold)) {
-                const baseAmount = affectionScore > 80 ? 50 : (affectionScore > 50 ? 20 : 5);
-                const amount = (Math.random() * baseAmount + 5).toFixed(2);
-                if (state.currentChat.isGroup) {
-                    reply += ` [REDPACKET:${amount}]`;
-                } else {
-                    const isTransfer = Math.random() > 0.5;
-                    if (isTransfer) {
-                        reply += ` [TRANSFER:${amount}]`;
-                    } else {
-                        reply += ` [REDPACKET:${amount}]`;
-                    }
-                }
-            }
-
-            // 模拟 AI 偶尔“退群” (2% 概率，或者当用户说了一些负面词汇时)
-            if (state.currentChat.isGroup && !customPrompt) {
-                const leaveTrigger = lastUserMsg && lastUserMsg.text && /(讨厌|烦|滚|笨|傻|生气|不理)/.test(lastUserMsg.text);
-                if (leaveTrigger && Math.random() < 0.3) {
-                    const leaveReplies = [
-                        "哼，不理你们了！我走了！",
-                        "你们太欺负人了，退群了！",
-                        "没意思，我先撤了，你们慢慢聊。",
-                        "气死我了，我要退群冷静一下！"
-                    ];
-                    reply = leaveReplies[Math.floor(Math.random() * leaveReplies.length)] + " [ACTION:LEAVE]";
-                } else if (Math.random() < 0.02) {
-                    reply = "突然觉得有点无聊，我先退群去刷会儿视频，拜拜~ [ACTION:LEAVE]";
-                }
-            }
-
-            // 处理用户发来的红包/转账/拍一拍等
-            if (customPrompt) {
-                if (customPrompt.includes('拍了拍你')) {
-                    const nudgeReplies = ["拍我干嘛", "怎么啦？", "在呢", "🤔", "有什么事吗？"];
-                    reply = nudgeReplies[Math.floor(Math.random() * nudgeReplies.length)];
-                } else {
-                    reply = `[收到系统提示] 好的，我知道了。`;
-                }
-            } else {
-                // 检查是否有未领取的红包或转账
-                const unreceivedMsg = [...msgs].reverse().find(m => m.type === 'user' && (m.msgType === 'transfer' || m.msgType === 'red-packet') && m.status === 'unreceived');
-                
-                if (unreceivedMsg) {
-                    if (unreceivedMsg.msgType === 'red-packet' && state.currentChat.isGroup && (!unreceivedMsg.targetId || unreceivedMsg.targetId === 'all')) {
-                        // 群聊拼手气红包，AI 随机抢
-                        const aiMembers = state.currentChat.members ? state.currentChat.members.filter(m => m.id !== 'user') : [];
-                        if (aiMembers.length > 0) {
-                            // 随机让几个 AI 去抢
-                            const grabbers = aiMembers.sort(() => 0.5 - Math.random()).slice(0, Math.floor(Math.random() * aiMembers.length) + 1);
-                            grabbers.forEach((grabber, index) => {
-                                setTimeout(() => {
-                                    grabRedPacket(unreceivedMsg, chatId, grabber.id);
-                                }, 1000 + index * 1500 + Math.random() * 1000);
-                            });
-                        }
-                        reply = "哇，谢谢老板的红包！";
-                    } else if (unreceivedMsg.msgType === 'transfer' || (unreceivedMsg.msgType === 'red-packet' && (!state.currentChat.isGroup || (unreceivedMsg.targetId && unreceivedMsg.targetId !== 'all')))) {
-                        // 专属红包或私聊转账/红包
-                        // 模拟大模型决定是否收下
-                        const accept = Math.random() < 0.8; // 80% 概率收下
-                        if (accept) {
-                            reply += " [ACCEPT_TRANSFER]";
-                        } else {
-                            reply += " [RETURN_TRANSFER]";
-                        }
-                    }
-                }
-            }
-
-            // 解析大模型回复中的隐藏指令
-            const transferMatch = reply.match(/\[TRANSFER:([\d.]+)\]/);
-            const redPacketMatch = reply.match(/\[REDPACKET:([\d.]+)\]/);
-            const acceptMatch = reply.match(/\[ACCEPT_TRANSFER\]/);
-            const returnMatch = reply.match(/\[RETURN_TRANSFER\]/);
-            const leaveMatch = reply.match(/\[ACTION:LEAVE\]/);
-
-            // 清理隐藏指令，不显示给用户
-            reply = reply.replace(/\[TRANSFER:[\d.]+\]/g, '')
-                         .replace(/\[REDPACKET:[\d.]+\]/g, '')
-                         .replace(/\[ACCEPT_TRANSFER\]/g, '')
-                         .replace(/\[RETURN_TRANSFER\]/g, '')
-                         .replace(/\[ACTION:LEAVE\]/g, '')
-                         .trim();
-
-            aiMsg.text = reply;
-
-            // 解析 AI 回复中的表情包标记
-            const stickerMatch = reply.match(/\[表情包: (.*?)\]/);
-            if (stickerMatch) {
-                const label = stickerMatch[1];
-                let stickerUrl = null;
-                Object.values(state.stickers).forEach(cat => {
-                    if (cat.roles && cat.roles.includes(chatName)) {
-                        const s = cat.items.find(i => i.label === label);
-                        if (s) stickerUrl = s.url;
-                    }
-                });
-
-                if (stickerUrl) {
-                    aiMsg.msgType = 'sticker';
-                    aiMsg.url = stickerUrl;
-                    aiMsg.label = label;
-                }
-            }
-
-            if (reply || aiMsg.msgType === 'sticker') {
-                // 如果在通话中，AI 的回复直接进入通话记录
-                if (state.call.active) {
-                    addCallTranscript(aiSenderName, reply);
-                    setIslandState('default');
-                    return;
-                }
-                state.messages[chatId].push(aiMsg);
-            }
-
-            // 处理退群逻辑
-            if (leaveMatch && state.currentChat.isGroup) {
-                handleAILeaveAction(chatId, aiSenderId);
-            }
-
-            // 处理收款/退还逻辑
-            if (acceptMatch || returnMatch) {
-                if (!reply && !aiMsg.msgType) {
-                    aiMsg.text = acceptMatch ? "谢谢老板！破费啦~" : "心意领了，钱你留着自己花吧。";
-                    state.messages[chatId].push(aiMsg);
-                }
-
-                // 找到最近的一条未领取的转账或专属红包
-                const targetMsg = [...state.messages[chatId]].reverse().find(m => (m.msgType === 'transfer' || m.msgType === 'red-packet') && m.status === 'unreceived');
-                
-                if (targetMsg) {
-                    setTimeout(() => {
-                        if (acceptMatch) {
-                            if (targetMsg.msgType === 'transfer') {
-                                targetMsg.status = 'received';
-                                const sysMsg = {
-                                    id: 'msg_' + Date.now(),
-                                    type: 'system',
-                                    text: `对方已收款`,
-                                    time: new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0')
-                                };
-                                state.messages[chatId].push(sysMsg);
-                            } else {
-                                const targetId = targetMsg.targetId || (state.currentChat.isGroup ? state.currentChat.members[0].id : state.currentChat.id);
-                                grabRedPacket(targetMsg, chatId, targetId);
-                            }
-                        } else if (returnMatch) {
-                            targetMsg.status = 'returned';
-                            const sysMsg = {
-                                id: 'msg_' + Date.now(),
-                                type: 'system',
-                                text: `对方已退还`,
-                                time: new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0')
-                            };
-                            state.messages[chatId].push(sysMsg);
-                        }
-                        saveMessagesToLocalStorage();
-                        if (state.currentChat && state.currentChat.id === chatId) {
-                            renderMessages(chatId);
-                        }
-                    }, 2000);
-                }
-            }
-
-            // 如果有转账或红包指令，额外生成一条消息
-            if (transferMatch || redPacketMatch) {
-                const moneyMsg = {
-                    id: 'msg_' + Date.now() + '_money',
-                    type: 'ai',
-                    senderId: aiSenderId,
-                    time: new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0'),
-                    msgType: transferMatch ? 'transfer' : 'red-packet',
-                    amount: parseFloat((transferMatch || redPacketMatch)[1]).toFixed(2),
-                    status: 'unreceived'
-                };
-                
-                if (transferMatch) {
-                    moneyMsg.remark = affectionLevel > 0.8 ? '给你的小惊喜' : '给你的零花钱';
-                } else {
-                    moneyMsg.remark = state.currentChat.isGroup ? '大家拿去花' : '给你的专属红包';
-                    if (state.currentChat.isGroup) {
-                        moneyMsg.count = Math.floor(Math.random() * 3) + 3; // 3-5个
-                        if (Math.random() < 0.3) {
-                            moneyMsg.targetId = 'user'; // 有时发专属红包给用户
-                            moneyMsg.remark = '给你的专属红包';
-                            moneyMsg.count = 1;
-                        }
-                    }
-                }
-                state.messages[chatId].push(moneyMsg);
-                
-                // 如果 AI 发了红包，其他 AI 可能会抢
-                if (moneyMsg.msgType === 'red-packet' && (!moneyMsg.targetId || moneyMsg.targetId === 'all')) {
-                    const aiMembers = state.currentChat.members.filter(m => m.id !== 'user' && m.id !== moneyMsg.senderId);
-                    if (aiMembers.length > 0) {
-                        // 随机让几个 AI 去抢
-                        const grabbers = aiMembers.sort(() => 0.5 - Math.random()).slice(0, Math.floor(Math.random() * aiMembers.length) + 1);
-                        grabbers.forEach((grabber, index) => {
-                            setTimeout(() => {
-                                const msgToUpdate = state.messages[chatId].find(m => m.id === moneyMsg.id);
-                                if (msgToUpdate && msgToUpdate.status === 'unreceived') {
-                                    grabRedPacket(msgToUpdate, chatId, grabber.id);
-                                }
-                            }, 3000 + index * 1500 + Math.random() * 2000);
-                        });
-                    }
-                }
-            }
-
-            // 角色撤回消息 (5% 概率，模拟手滑)
-            if (Math.random() < 0.05) {
-                setTimeout(() => {
-                    const msgToRecall = state.messages[chatId].find(m => m.id === aiMsgId);
-                    if (msgToRecall) {
-                        msgToRecall.isRecalled = true;
-                        saveMessagesToLocalStorage();
-                        if (state.currentChat && state.currentChat.id === chatId) {
-                            renderMessages(chatId);
-                        }
-                    }
-                }, 3000);
-            }
-
-            saveMessagesToLocalStorage();
-
-            if (state.currentChat && state.currentChat.id === chatId) {
-                renderMessages(chatId);
-            }
             setIslandState('default');
-        }, 2000);
+        }
     }
 
     let selectedStickers = new Set();
@@ -8537,96 +8387,11 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('save-edit-message').onclick = saveEditMessage;
 
     function handleAIMomentsAction(prompt) {
-        // 模拟 AI 在朋友圈的动作
-        if (prompt && (prompt.includes('互动按钮') || prompt.includes('互动这条动态'))) {
-            // 提取动态作者
-            const authorMatch = prompt.match(/动态作者: (.*?),/);
-            const authorName = authorMatch ? authorMatch[1] : 'AI好友';
-            
-            // 找到对应的动态
-            const momentIdMatch = prompt.match(/动态ID: (.*?),/);
-            const momentId = momentIdMatch ? momentIdMatch[1] : null;
-            const moment = state.moments.find(m => m.id === momentId) || state.moments[0];
-
-            if (moment) {
-                // 统一互动逻辑：识别圈子并挑选 1-3 个角色
-                const authorCircle = moment.authorCircle || (state.contacts.find(c => c.name === moment.authorName)?.circle);
-                const candidates = [
-                    ...state.contacts.filter(c => c.status === 'added'),
-                    ...state.worldBook
-                ].filter(c => c.name !== '我' && c.name !== moment.authorName && c.circle === authorCircle);
-
-                if (candidates.length > 0) {
-                    const count = Math.min(candidates.length, Math.floor(Math.random() * 3) + 1);
-                    const selected = [];
-                    const tempCandidates = [...candidates];
-                    for (let i = 0; i < count; i++) {
-                        const idx = Math.floor(Math.random() * tempCandidates.length);
-                        selected.push(tempCandidates.splice(idx, 1)[0]);
-                    }
-
-                    selected.forEach(char => {
-                        moment.comments.push({
-                            id: Date.now().toString() + Math.random(),
-                            authorId: 'ai-bot',
-                            authorName: char.name,
-                            authorAvatar: char.avatar,
-                            replyToName: null,
-                            text: `看到你的动态了，我也觉得很赞！✨`,
-                            time: '刚刚'
-                        });
-                    });
-                } else {
-                    // 如果没有同圈子的人，退而求其次找所有好友
-                    const fallbackCandidates = [
-                        ...state.contacts.filter(c => c.status === 'added'),
-                        ...state.worldBook
-                    ].filter(c => c.name !== '我' && c.name !== moment.authorName);
-                    
-                    if (fallbackCandidates.length > 0) {
-                        const char = fallbackCandidates[Math.floor(Math.random() * fallbackCandidates.length)];
-                        moment.comments.push({
-                            id: Date.now().toString(),
-                            authorId: 'ai-bot',
-                            authorName: char.name,
-                            authorAvatar: char.avatar,
-                            replyToName: null,
-                            text: `看到你的动态了，我也觉得很赞！✨`,
-                            time: '刚刚'
-                        });
-                    }
-                }
-            }
-        } else {
-            // 发布新动态
-            const newMoment = {
-                id: Date.now().toString(),
-                authorId: 'ai-bot',
-                authorName: '助手',
-                authorAvatar: 'https://files.catbox.moe/blaehb.jpg',
-                content: '刚刚在灵动岛里转了一圈，发现大家都很活跃呢！(IMG:灵动岛的奇幻之旅)',
-                time: '刚刚',
-                images: [], // 修复：不再同时发送 URL 图片，只保留文字意境图
-                comments: []
-            };
-            state.moments.unshift(newMoment);
-            showToast('发布了新动态', 'image');
-        }
-        renderMomentsList();
+        triggerAIResponse(prompt);
     }
 
     function handleAIChatReply(prompt) {
-        if (!state.currentChat) return;
-        const chatId = state.currentChat.id;
-        const aiMsg = {
-            type: 'ai',
-            senderId: state.currentChat.id,
-            text: "收到你的指令了，我会按照你的要求进行响应。 (这是一个模拟回复)",
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        };
-        state.messages[chatId].push(aiMsg);
-        saveMessagesToLocalStorage();
-        renderMessages(chatId);
+        triggerAIResponse(prompt);
     }
 
     loadUserStickers();
@@ -8635,32 +8400,10 @@ document.addEventListener('DOMContentLoaded', () => {
     renderChatList();
 });
 
-    </script>
+</script>
     <script>
-        (function() {
-            function initIcons() {
-                try {
-                    if (window.lucide && typeof window.lucide.createIcons === 'function') {
-                        window.lucide.createIcons();
-                    }
-                } catch (e) {
-                    console.warn('Lucide init failed:', e);
-                }
-            }
-
-            if (window.lucide) {
-                initIcons();
-            } else {
-                var s = document.createElement('script');
-                s.src = 'https://unpkg.com/lucide@latest';
-                s.onload = initIcons;
-                s.onerror = function() {
-                    console.warn('Lucide CDN failed to load. The UI can still work without icons.');
-                };
-                document.head.appendChild(s);
-            }
-        })();
+        // 初始化 Lucide 图标
+        lucide.createIcons();
     </script>
-
 </body>
 </html>
