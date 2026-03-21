@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SillyPhone - Silver Mist</title>
+    <link rel="stylesheet" href="phone-ui.css">
+    <!-- 引入 Lucide 图标 -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <div class="screen">
+        <div class="screen-glass"></div>
+        <!-- 灵动岛 (奶灰雾面) -->
+        <div class="island-wrapper">
+            <div id="dynamic-island" class="dynamic-island">
+                <div class="island-content">
+                    <span class="island-dot"></span>
+                    <span id="island-text"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast 容器 -->
+        <div id="toast-container" class="toast-container"></div>
+
+        <!-- 页面容器 -->
+        <div id="main-content" class="has-bottom-nav">
+            <!-- 聊天列表 -->
+            <div id="page-chat-list" class="page active">
+                <div class="header">
+                    <h2>消息</h2>
+                    <div class="header-btns">
+                        <button class="circle-btn"><i data-lucide="search" size="18"></i></button>
+                    </div>
+                </div>
+                <div class="list-container" id="chat-list">
+                    <!-- 动态加载 -->
+                </div>
+            </div>
+
+            <!-- 聊天窗口 -->
+            <div id="page-chat-window" class="page">
+                <div id="chat-bg-layer"></div>
+                <div class="chat-nav">
+                    <button id="back-btn"><i data-lucide="chevron-left" size="24"></i></button>
+                    <div class="chat-title">
+                        <span id="chat-name">联系人</span>
+                    </div>
+                    <div class="header-btns">
+                        <button class="circle-btn" id="chat-call-btn" style="display: none;"><i data-lucide="phone" size="18"></i></button>
+                        <button class="circle-btn" id="chat-info-btn"><i data-lucide="more-vertical" size="18"></i></button>
+                    </div>
+                </div>
+                <div class="messages-container" id="messages">
+                    <!-- 消息记录 -->
+                </div>
+
+                <!-- 扩展面板容器 -->
+                <div id="chat-panels">
+                    <!-- 功能面板 -->
+                    <div id="panel-functions" class="chat-panel">
+                        <div class="panel-header" style="justify-content: flex-end; padding-bottom: 0;">
+                            <button class="close-panel"><i data-lucide="x" size="16"></i></button>
+                        </div>
+                        <div class="panel-grid">
+                            <div class="panel-item" id="btn-photo">
+                                <div class="panel-icon"><i data-lucide="image" size="24"></i></div>
+                                <span>照片</span>
+                            </div>
+                            <div class="panel-item" id="btn-sticker">
+                                <div class="panel-icon"><i data-lucide="smile" size="24"></i></div>
+                                <span>表情包</span>
+                            </div>
+                            <div class="panel-item" id="btn-transfer">
+                                <div class="panel-icon"><i data-lucide="banknote" size="24"></i></div>
+                                <span id="btn-transfer-label">转账</span>
+                            </div>
+                            <div class="panel-item" id="btn-voice-call">
+                                <div class="panel-icon"><i data-lucide="phone" size="24"></i></div>
+                                <span>语音通话</span>
+                            </div>
+                            <div class="panel-item" id="btn-video-call">
+                                <div class="panel-icon"><i data-lucide="video" size="24"></i></div>
+                                <span>视频</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 照片描述面板 -->
+                    <div id="panel-photo" class="chat-panel">
+                        <div class="panel-header">
+                            <span>照片描述</span>
+                            <button class="close-panel"><i data-lucide="x" size="16"></i></button>
+                        </div>
+                        <div class="panel-body">
+                            <textarea id="photo-desc-input" placeholder="例如：窗边夜景自拍，暖灯光..."></textarea>
+                            <button id="send-photo-btn" class="panel-action-btn">发送照片</button>
+                        </div>
+                    </div>
+
+                    <!-- 表情包面板 -->
+                    <div id="panel-sticker" class="chat-panel">
+                        <div class="panel-header">
+                            <div class="sticker-tabs" id="sticker-tabs">
+                                <!-- 动态加载分类 -->
+                            </div>
+                            <div class="header-actions">
+                                <button id="add-sticker-trigger" class="icon-btn"><i data-lucide="plus-circle" size="18"></i></button>
+                                <button class="close-panel"><i data-lucide="x" size="16"></i></button>
+                            </div>
+                        </div>
+                        
+                        <!-- 批量删除操作栏 -->
+                        <div id="sticker-batch-actions" class="batch-actions" style="display: none;">
+                            <span id="selected-count">已选择 0 项</span>
+                            <div class="batch-btns">
+                                <button id="cancel-batch-delete" class="text-btn">取消</button>
+                                <button id="confirm-batch-delete" class="danger-btn">删除</button>
+                            </div>
+                        </div>
+                        
+                        <!-- 添加表情包表单 (默认隐藏) -->
+                        <div id="add-sticker-form" class="add-form" style="display: none;">
+                            <div class="form-row">
+                                <select id="sticker-category-select">
+                                    <option value="收藏">收藏</option>
+                                    <option value="new">+ 新分类</option>
+                                </select>
+                                <input type="text" id="new-category-name" placeholder="新分类名称" style="display: none;">
+                            </div>
+                            <textarea id="new-sticker-input" placeholder="格式: 语义:URL (支持空格分隔批量添加)"></textarea>
+                            <button id="confirm-add-sticker">添加</button>
+                        </div>
+
+                        <div class="sticker-grid" id="sticker-grid">
+                            <!-- 动态加载表情包 -->
+                        </div>
+                    </div>
+
+                    <!-- 语音面板 -->
+                    <div id="panel-voice" class="chat-panel">
+                        <div class="panel-header">
+                            <span>语音消息</span>
+                            <button class="close-panel"><i data-lucide="x" size="16"></i></button>
+                        </div>
+                        <div class="panel-body">
+                            <textarea id="voice-text-input" placeholder="输入语音文字内容..."></textarea>
+                            <button id="send-voice-btn" class="panel-action-btn">发送语音</button>
+                        </div>
+                    </div>
+
+                    <!-- 转账/红包面板 -->
+                    <div id="panel-transfer" class="chat-panel">
+                        <div class="panel-header">
+                            <span id="transfer-panel-title">转账</span>
+                            <button class="close-panel"><i data-lucide="x" size="16"></i></button>
+                        </div>
+                        <div class="panel-body">
+                            <div class="transfer-form">
+                                <div class="transfer-amount-container" style="display: flex; align-items: center; background: rgba(255,255,255,0.1); border-radius: 8px; padding: 10px; margin-bottom: 10px;">
+                                    <span class="currency-symbol" style="font-size: 24px; font-weight: bold; margin-right: 10px; color: white;">¥</span>
+                                    <input type="number" id="transfer-amount-input" placeholder="0.00" step="0.01" min="0.01" style="flex: 1; background: transparent; border: none; color: white; font-size: 24px; outline: none;">
+                                </div>
+                                <input type="text" id="transfer-remark-input" placeholder="转账说明 (选填)" style="width: 100%; padding: 10px; border-radius: 8px; background: rgba(255,255,255,0.1); color: white; border: none; outline: none;">
+                                
+                                <!-- 群聊专属：指定领取人 -->
+                                <div id="red-packet-target-container" style="display: none; margin-top: 10px;">
+                                    <select id="red-packet-target-select" style="width: 100%; padding: 10px; border-radius: 8px; background: rgba(255,255,255,0.1); color: white; border: none; outline: none;">
+                                        <option value="all" style="background: #333; color: white;">所有人可领</option>
+                                        <!-- 动态加载群成员 -->
+                                    </select>
+                                </div>
+                                
+                                <!-- 群聊专属：红包个数 -->
+                                <div id="red-packet-count-container" style="display: none; margin-top: 10px; align-items: center; background: rgba(255,255,255,0.1); border-radius: 8px; padding: 10px;">
+                                    <span style="color: white; margin-right: 10px;">红包个数</span>
+                                    <input type="number" id="red-packet-count-input" placeholder="填写个数" step="1" min="1" style="flex: 1; background: transparent; border: none; color: white; outline: none; text-align: right;">
+                                    <span style="color: white; margin-left: 5px;">个</span>
+                                </div>
+                                
+                                <button id="send-transfer-btn" class="panel-action-btn" style="margin-top: 15px; background: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.3); color: white; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);">转账</button>
+                            </div>
+                        </div>
+                    </div>
+
+
+                </div>
+
+                <div id="chat-quote-preview" class="quote-preview" style="display: none;">
+                    <div class="quote-content">
+                        <span id="quote-text">引用内容...</span>
+                    </div>
+                    <button id="cancel-quote"><i data-lucide="x" size="14"></i></button>
+                </div>
+
+                <div id="chat-multi-select-toolbar" class="batch-actions" style="display: none;">
+                    <span id="chat-selected-count">已选择 0 项</span>
+                    <div class="batch-btns">
+                        <button id="cancel-chat-multi-select" class="text-btn">取消</button>
+                        <button id="confirm-chat-multi-delete" class="danger-btn">删除</button>
+                    </div>
+                </div>
+
+                <div class="input-bar">
+                    <button class="circle-btn" id="toggle-functions"><i data-lucide="plus" size="20"></i></button>
+                    <input type="text" id="msg-input" placeholder="输入消息...">
+                    <button class="circle-btn" id="toggle-voice"><i data-lucide="mic" size="20"></i></button>
+                    <button id="send-btn"><i data-lucide="send-horizontal" size="18"></i></button>
+                </div>
+            </div>
+
+            <!-- 聊天详情 (Chat Info) -->
+            <div id="page-chat-info" class="page">
+                <div class="chat-nav">
+                    <button id="back-from-chat-info"><i data-lucide="chevron-left" size="24"></i></button>
+                    <div class="chat-title">聊天详情</div>
+                </div>
+                <div class="chat-info-container">
+                    <!-- 群成员网格 (仅群聊显示) -->
+                    <div id="group-member-section" class="info-group" style="display: none;">
+                        <div class="member-grid" id="chat-info-member-grid">
+                            <!-- 动态加载成员 -->
+                        </div>
+                    </div>
+
+                    <div class="info-group">
+                        <div class="info-item avatar-item" id="change-chat-avatar">
+                            <span class="info-label" id="avatar-label">头像</span>
+                            <div class="info-value">
+                                <img id="chat-info-avatar" src="https://files.catbox.moe/blaehb.jpg" referrerpolicy="no-referrer">
+                                <i data-lucide="chevron-right" size="16"></i>
+                            </div>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label" id="remark-label">备注名</span>
+                            <div class="info-value">
+                                <input type="text" id="chat-info-remark" placeholder="设置备注名">
+                            </div>
+                        </div>
+                        <!-- 群公告 (仅群聊显示) -->
+                        <div id="group-announcement-item" class="info-item vertical" style="display: none;">
+                            <span class="info-label">群公告</span>
+                            <textarea id="chat-info-announcement" placeholder="未设置群公告" style="width: 100%; min-height: 60px; background: transparent; border: none; color: white; font-size: 13px; resize: none; outline: none; margin-top: 5px;"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="info-group">
+                        <!-- 我在本群的昵称 (仅群聊显示，且非上帝视角) -->
+                        <div id="my-group-nickname-item" class="info-item" style="display: none;">
+                            <span class="info-label">我在本群的昵称</span>
+                            <div class="info-value">
+                                <input type="text" id="chat-info-my-nickname" placeholder="设置昵称">
+                            </div>
+                        </div>
+                        <div class="info-item vertical">
+                            <span class="info-label">聊天背景 (URL)</span>
+                            <input type="text" id="chat-info-bg" placeholder="输入背景图片 URL">
+                        </div>
+                        <div class="info-item vertical">
+                            <div class="info-label-row">
+                                <span class="info-label">背景模糊度</span>
+                                <span id="chat-info-blur-value" class="info-sub-label">0px</span>
+                            </div>
+                            <input type="range" id="chat-info-blur" min="0" max="40" value="0">
+                        </div>
+                    </div>
+
+                    <div class="info-group">
+                        <button id="save-chat-info-btn" class="primary-btn" style="width: 100%; height: 48px; border-radius: 14px;">保存设置</button>
+                    </div>
+
+                    <!-- 危险区域 (Danger Zone) -->
+                    <div id="danger-zone" class="info-group danger-zone" style="background: transparent; border: none;">
+                        <button id="clear-chat-history-btn" class="danger-text-btn">清空聊天记录</button>
+                        <button id="delete-and-exit-btn" class="danger-full-btn" style="display: none;">删除并退出</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 角色 (原联系人) -->
+            <div id="page-contacts" class="page">
+                <div class="header">
+                    <h2 style="color: white;">功能</h2>
+                    <div class="header-btns" style="display: flex; gap: 10px;">
+                        <button class="circle-btn" id="create-group-btn"><i data-lucide="search" size="18"></i></button>
+                        <button class="circle-btn" id="add-friend-btn"><i data-lucide="user-plus" size="18"></i></button>
+                    </div>
+                </div>
+                <div class="list-container" id="contacts-list" style="padding-left: 0; padding-right: 0;">
+                    <!-- 功能列表 -->
+                </div>
+            </div>
+
+            <!-- 我的好友列表页 -->
+            <div id="page-my-friends" class="page">
+                <div class="chat-nav">
+                    <button id="back-from-my-friends"><i data-lucide="chevron-left" size="24"></i></button>
+                    <div class="chat-title">我的好友</div>
+                </div>
+                <div class="list-container" id="my-friends-list" style="padding-top: 10px;">
+                    <!-- 动态加载好友 -->
+                </div>
+            </div>
+
+            <!-- 朋友圈 -->
+            <div id="page-moments" class="page">
+                <div class="header moments-header-overlay">
+                    <button class="circle-btn" id="back-from-moments"><i data-lucide="chevron-left" size="20"></i></button>
+                    <div class="header-btns">
+                        <button class="circle-btn" id="post-moment-btn"><i data-lucide="camera" size="18"></i></button>
+                    </div>
+                </div>
+                <div class="moments-container">
+                    <div class="moments-header">
+                        <img id="moments-user-bg" src="https://files.catbox.moe/smqrt7.jpg" class="moments-bg" referrerpolicy="no-referrer">
+                        <div class="moments-user-info">
+                            <span id="moments-user-name">我</span>
+                            <img id="moments-user-avatar" src="https://files.catbox.moe/blaehb.jpg" class="moments-avatar" referrerpolicy="no-referrer" style="cursor: pointer; user-select: none;">
+                        </div>
+                    </div>
+                    <div id="moments-list">
+                        <!-- 朋友圈内容动态加载 -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- 角色选择弹窗 (方案A) -->
+            <div id="character-select-modal" class="modal-overlay" style="display: none; z-index: 3000;">
+                <div class="modal-content" style="background: rgba(30, 30, 30, 0.98); backdrop-filter: blur(30px); border-radius: 16px; width: 85%; max-width: 320px; max-height: 70vh; display: flex; flex-direction: column; padding: 0; overflow: hidden; border: 1px solid rgba(255,255,255,0.1);">
+                    <div class="modal-header" style="padding: 15px 20px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center;">
+                        <h3 id="char-select-title" style="margin: 0; font-size: 16px; color: white;">选择角色</h3>
+                        <span class="close-btn" id="close-char-select" style="cursor: pointer; color: rgba(255,255,255,0.5);"><i data-lucide="x" size="20"></i></span>
+                    </div>
+                    <div style="padding: 10px 20px; background: rgba(255,255,255,0.02); display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <input type="checkbox" id="char-select-all" style="width: 16px; height: 16px; cursor: pointer;">
+                        <label for="char-select-all" style="color: rgba(255,255,255,0.8); font-size: 13px; cursor: pointer;">全选所有角色</label>
+                    </div>
+                    <div id="char-select-list" style="flex: 1; overflow-y: auto; padding: 10px 0;">
+                        <!-- 动态加载角色列表 -->
+                    </div>
+                    <div class="modal-footer" style="padding: 15px 20px; border-top: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.2);">
+                        <span id="char-select-hint" style="font-size: 11px; color: rgba(255,255,255,0.4);">未选则随机抽取</span>
+                        <button id="confirm-char-select" style="background: #07c160; color: white; border: none; padding: 8px 24px; border-radius: 8px; font-size: 14px; cursor: pointer; font-weight: 600; transition: all 0.2s;">确定</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 自定义输入弹窗 -->
+            <div id="custom-prompt-modal" class="modal-overlay" style="display: none; z-index: 3000;">
+                <div class="modal-content" style="background: rgba(30, 30, 30, 0.95); backdrop-filter: blur(20px); border-radius: 12px; width: 80%; max-width: 300px; padding: 20px;">
+                    <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h3 id="custom-prompt-title" style="margin: 0; font-size: 16px; color: white;">请输入</h3>
+                        <span class="close-btn" id="close-custom-prompt" style="cursor: pointer; color: rgba(255,255,255,0.6);"><i data-lucide="x" size="18"></i></span>
+                    </div>
+                    <div class="modal-body" style="margin-bottom: 20px;">
+                        <input type="text" id="custom-prompt-input" placeholder="留空则随机抽取" style="width: 100%; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: white; padding: 10px; outline: none; box-sizing: border-box;">
+                    </div>
+                    <div class="modal-footer" style="display: flex; justify-content: flex-end;">
+                        <button id="confirm-custom-prompt" style="background: #07c160; color: white; border: none; padding: 8px 20px; border-radius: 6px; font-size: 14px; cursor: pointer; font-weight: 500;">确定</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 发布朋友圈弹窗 -->
+            <div id="post-moment-modal" class="modal-overlay" style="display: none; z-index: 2000;">
+                <div class="modal-content" style="background: rgba(25, 25, 25, 0.98); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); width: 100%; height: 100%; border-radius: 0; display: flex; flex-direction: column;">
+                    <div class="modal-header" style="border-bottom: 1px solid rgba(255,255,255,0.05); padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; margin-top: 40px;">
+                        <span class="close-btn" id="cancel-post-moment" style="color: var(--c-text); cursor: pointer; font-size: 16px;">取消</span>
+                        <button id="confirm-post-moment" style="background: #07c160; color: white; border: none; padding: 6px 16px; border-radius: 4px; font-size: 14px; font-weight: 500; cursor: pointer;">发表</button>
+                    </div>
+                    <div class="modal-body" style="padding: 20px; flex: 1; overflow-y: auto;">
+                        <textarea id="post-moment-text" placeholder="这一刻的想法..." style="width: 100%; height: 120px; background: transparent; border: none; color: white; font-size: 16px; resize: none; outline: none; margin-bottom: 20px;"></textarea>
+                        
+                        <div id="post-moment-settings" style="margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 12px; cursor: pointer;" id="btn-visibility-settings">
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <i data-lucide="eye" size="18" style="color: rgba(255,255,255,0.6);"></i>
+                                    <span style="color: white; font-size: 14px;">谁可以看</span>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 4px;">
+                                    <span id="visibility-status" style="color: rgba(255,255,255,0.4); font-size: 13px;">全部可见</span>
+                                    <i data-lucide="chevron-right" size="16" style="color: rgba(255,255,255,0.2);"></i>
+                                </div>
+                            </div>
+
+                            <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 12px; cursor: pointer;" id="btn-mention-friends">
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <i data-lucide="at-sign" size="18" style="color: rgba(255,255,255,0.6);"></i>
+                                    <span style="color: white; font-size: 14px;">提醒谁看</span>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 4px;">
+                                    <span id="mention-status" style="color: rgba(255,255,255,0.4); font-size: 13px;">不提醒</span>
+                                    <i data-lucide="chevron-right" size="16" style="color: rgba(255,255,255,0.2);"></i>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="post-moment-images-container" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 20px;">
+                            <!-- 预览图片将在这里显示 -->
+                            <div id="add-moment-image-btn" style="aspect-ratio: 1; background: rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: center; border-radius: 8px; cursor: pointer;">
+                                <i data-lucide="image" size="30" style="color: rgba(255,255,255,0.4);"></i>
+                            </div>
+                        </div>
+                        <input type="file" id="moment-image-input" accept="image/*" multiple style="display: none;">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 创建群聊弹窗 -->
+            <div id="create-group-modal" class="modal-overlay" style="display: none;">
+                <div class="modal-content" style="background: rgba(25, 25, 25, 0.95); backdrop-blur: 30px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 20px 40px rgba(0,0,0,0.4); width: 300px;">
+                    <div class="modal-header" style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 15px;">
+                        <span class="modal-title" style="color: white; font-weight: 600; font-size: 16px; letter-spacing: 1px;">创建群聊</span>
+                        <span class="close-btn" id="close-create-group-modal" style="color: var(--c-text-sec); cursor: pointer; font-size: 14px; font-weight: 500;">取消</span>
+                    </div>
+                    <div class="modal-body" style="padding-top: 20px;">
+                        <div style="display: flex; flex-direction: column; gap: 15px;">
+                            <div style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.08);">
+                                <input id="group-name-input" placeholder="群聊名称" type="text" style="border: none; background: none; width: 100%; outline: none; font-size: 14px; color: white; letter-spacing: 0.5px;">
+                            </div>
+                            
+                            <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.08);">
+                                <span style="color: white; font-size: 13px;">上帝视角 (God Mode)</span>
+                                <label class="switch">
+                                    <input type="checkbox" id="god-mode-toggle">
+                                    <span class="slider round"></span>
+                                </label>
+                            </div>
+
+                            <p style="font-size: 11px; color: var(--c-text-sec); margin-bottom: 5px;">选择群成员:</p>
+                            <div id="group-member-select-list" style="max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+                                <!-- 动态加载好友列表 -->
+                            </div>
+
+                            <button id="confirm-create-group-btn" class="primary-btn" style="width: 100%; height: 44px; border-radius: 14px; margin-top: 5px; background: rgba(255,255,255,0.9); border: none; color: #1a1a1a; font-weight: 700; font-size: 14px;">立即创建</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 角色绑定弹窗 (分类管理) -->
+            <div id="role-binding-modal" class="modal-overlay" style="display: none;">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>分类管理</h3>
+                        <button id="close-role-modal"><i data-lucide="x" size="18"></i></button>
+                    </div>
+                    
+                    <div class="setting-item" style="margin-bottom: 20px;">
+                        <label>分类名称</label>
+                        <input type="text" id="edit-category-name" placeholder="输入新名称" style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: white; padding: 8px; margin-top: 5px;">
+                    </div>
+
+                    <p class="modal-tip">选择可见此分类的角色 (可多选)</p>
+                    <div id="role-list" class="role-checkbox-list">
+                        <!-- 动态加载角色列表 -->
+                    </div>
+                    
+                    <div class="modal-footer-btns" style="display: flex; gap: 10px; margin-top: 20px;">
+                        <button id="delete-category-btn" class="danger-btn" style="flex: 1;">删除分类</button>
+                        <button id="save-role-binding" class="primary-btn" style="flex: 2;">保存设置</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 消息编辑弹窗 -->
+            <div id="edit-message-modal" class="modal-overlay" style="display: none;">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>编辑消息</h3>
+                        <button id="close-edit-modal"><i data-lucide="x" size="18"></i></button>
+                    </div>
+                    <textarea id="edit-message-input" style="width: 100%; height: 100px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; color: white; padding: 10px; margin-bottom: 15px; resize: none;"></textarea>
+                    <button id="save-edit-message" class="primary-btn">保存修改</button>
+                </div>
+            </div>
+
+            <!-- 添加好友弹窗 -->
+            <div id="add-friend-modal" class="modal-overlay" style="display: none;">
+                <div class="modal-content" style="background: rgba(25, 25, 25, 0.95); backdrop-blur: 30px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 20px 40px rgba(0,0,0,0.4);">
+                    <div class="modal-header" style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 15px;">
+                        <span class="modal-title" style="color: white; font-weight: 600; font-size: 16px; letter-spacing: 1px;">添加好友</span>
+                        <span class="close-btn" id="close-add-friend-modal" style="color: var(--c-text-sec); cursor: pointer; font-size: 14px; font-weight: 500;">完成</span>
+                    </div>
+                    <div class="modal-body" style="padding-top: 20px;">
+                        <div style="display: flex; flex-direction: column; gap: 18px;">
+                            <div style="display: flex; gap: 12px; margin-bottom: 5px;">
+                                <button id="tab-direct-add" style="flex: 1; padding: 12px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.9); color: #1a1a1a; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.3s ease;">直接添加</button>
+                                <button id="tab-id-add" style="flex: 1; padding: 12px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: white; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.3s ease;">ID添加</button>
+                            </div>
+                            <div style="background: rgba(255,255,255,0.03); padding: 14px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.08); transition: border-color 0.3s;">
+                                <input id="friend-search-input" placeholder="输入角色姓名/账号名" type="text" style="border: none; background: none; width: 100%; outline: none; font-size: 14px; color: white; letter-spacing: 0.5px;">
+                            </div>
+                            <p id="add-friend-tip" style="font-size: 11px; color: var(--c-text-sec); line-height: 1.5; padding: 0 5px;">提示：适用于开场即认识的角色，添加后直接出现在列表。</p>
+                            
+                            <div id="search-result-container" style="max-height: 180px; overflow-y: auto; padding-right: 5px;">
+                                <!-- 搜索结果 -->
+                            </div>
+
+                            <button id="confirm-add-friend-btn" class="primary-btn" style="width: 100%; height: 48px; border-radius: 16px; margin-top: 5px; background: rgba(255,255,255,0.9); border: none; color: #1a1a1a; font-weight: 700; font-size: 15px; box-shadow: 0 10px 20px rgba(0,0,0,0.2);">立即添加</button>
+                        </div>
+                        <div style="height: 30px;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 群聊列表页面 -->
+            <div id="page-groups" class="page">
+                <div class="chat-nav">
+                    <button id="groups-back-btn"><i data-lucide="chevron-left" size="24"></i></button>
+                    <div class="chat-title">群聊</div>
+                </div>
+                <div class="list-container" id="groups-list" style="padding-top: 10px;">
+                    <!-- 群聊列表 -->
+                </div>
+            </div>
+
+            <!-- 设置 -->
+            <div id="page-settings" class="page">
+                <div class="header">
+                    <h2>设置</h2>
+                </div>
+                <div class="settings-list">
+                    <!-- 个人资料区 (仿微信) -->
+                    <div class="settings-profile">
+                        <div class="profile-avatar-wrapper" id="change-avatar-btn" style="cursor: pointer;">
+                            <img id="settings-user-avatar" src="https://files.catbox.moe/blaehb.jpg" alt="头像" referrerPolicy="no-referrer" style="pointer-events: none;">
+                        </div>
+                        <div class="profile-info">
+                            <div class="profile-name-row">
+                                <input type="text" id="settings-user-name" value="我" class="profile-name-input">
+                                <button id="switch-account-btn" class="icon-btn" title="切换账号" style="background: none; border: none; padding: 0; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                                    <i data-lucide="refresh-cw" size="14" style="color: white; opacity: 0.8;"></i>
+                                </button>
+                            </div>
+                            <div class="profile-wechat-row">
+                                <span style="white-space: nowrap;">微信号：</span>
+                                <input type="text" id="settings-wechat-id" value="wxid_sillyphone" class="profile-wechat-input">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="setting-item">
+                        <label>全局背景图 URL</label>
+                        <input type="text" id="global-bg-url" placeholder="https://example.com/bg.jpg">
+                    </div>
+                    <div class="setting-item">
+                        <label>聊天背景图 URL</label>
+                        <input type="text" id="chat-bg-url" placeholder="https://example.com/chat-bg.jpg">
+                    </div>
+                    <div class="setting-item">
+                        <label>朋友圈背景图 URL</label>
+                        <input type="text" id="moments-bg-url" placeholder="https://example.com/moments-bg.jpg">
+                    </div>
+                    <div class="setting-item">
+                        <label>全局模糊度: <span id="blur-value">12</span>px</label>
+                        <input type="range" id="blur-intensity" min="0" max="40" value="12">
+                    </div>
+                    <div class="setting-item">
+                        <label>消息气泡模糊度: <span id="bubble-blur-value">12</span>px</label>
+                        <input type="range" id="bubble-blur-intensity" min="0" max="40" value="12">
+                    </div>
+                    <div class="setting-item">
+                        <label>底栏模糊度: <span id="nav-blur-value">15</span>px</label>
+                        <input type="range" id="nav-blur-intensity" min="0" max="40" value="15">
+                    </div>
+                    <div class="setting-item">
+                        <label>玻璃遮罩透明度: <span id="glass-opacity-value">0.05</span></label>
+                        <input type="range" id="glass-opacity-intensity" min="0" max="100" value="5">
+                    </div>
+                    <button id="save-settings-btn" class="save-btn">
+                        <i data-lucide="save" size="16"></i>
+                        <span>保存设置</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 切换账号加载动画 -->
+        <div id="account-switch-loading" class="modal-overlay" style="display: none; z-index: 9999; background: rgba(0,0,0,0.8);">
+            <div class="loading-content" style="text-align: center; color: white;">
+                <div class="loading-spinner"></div>
+                <div style="font-size: 14px; letter-spacing: 1px;">正在切换身份...</div>
+            </div>
+        </div>
+
+        <!-- 图片预览弹窗 -->
+        <div id="image-preview-modal" class="modal-overlay" style="display: none; z-index: 3000;">
+            <div class="preview-content">
+                <img id="preview-img" src="" alt="预览图">
+            </div>
+        </div>
+
+        <!-- 朋友圈评论输入弹窗 -->
+        <div id="moment-comment-modal" class="modal-overlay" style="display: none;">
+            <div class="modal-content" style="background: rgba(25, 25, 25, 0.95); border: 1px solid rgba(255,255,255,0.1); width: 300px;">
+                <div class="modal-header">
+                    <span class="modal-title" style="color: white;">发表评论</span>
+                    <span class="close-btn" id="close-comment-modal" style="color: white; cursor: pointer; font-size: 14px; font-weight: 500;">取消</span>
+                </div>
+                <div class="modal-body">
+                    <textarea id="moment-comment-input" placeholder="评论内容..." style="width: 100%; height: 80px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; color: white; padding: 10px; margin-bottom: 15px; resize: none;"></textarea>
+                    <button id="confirm-comment-btn" class="primary-btn" style="width: 100%;">发送</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 头像修改弹窗 -->
+        <div id="avatar-modal" class="modal-overlay" style="display: none; z-index: 3200;">
+            <div class="modal-content" style="background: rgba(25, 25, 25, 0.95); border: 1px solid rgba(255,255,255,0.1); width: 300px;">
+                <div class="modal-header">
+                    <span class="modal-title" style="color: white;">修改头像</span>
+                    <span class="close-btn" id="close-avatar-modal" style="color: white; cursor: pointer;"><i data-lucide="x" size="18"></i></span>
+                </div>
+                <div class="modal-body">
+                    <p style="font-size: 12px; color: rgba(255,255,255,0.5); margin-bottom: 10px;">请输入新的头像图片 URL：</p>
+                    <input type="text" id="new-avatar-url-input" placeholder="https://..." style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; color: white; padding: 10px; margin-bottom: 15px; outline: none;">
+                    <div style="display: flex; gap: 10px;">
+                        <button id="cancel-avatar-change" class="secondary-btn" style="flex: 1; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 10px; padding: 10px; cursor: pointer;">取消</button>
+                        <button id="confirm-avatar-change" class="primary-btn" style="flex: 1; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 10px; padding: 10px; cursor: pointer;">确定</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 文字意境图详情弹窗 -->
+        <div id="text-img-detail-modal" class="modal-overlay" style="display: none; z-index: 3100;">
+            <div class="modal-content" style="background: rgba(25, 25, 25, 0.95); border: 1px solid rgba(255,255,255,0.1); width: 320px; max-height: 80vh; overflow-y: auto;">
+                <div class="modal-header">
+                    <span class="modal-title" style="color: rgba(255,255,255,0.4); font-size: 10px; letter-spacing: 2px;">IMAGE FULL DESCRIPTION</span>
+                    <span class="close-btn" id="close-text-img-modal" style="color: white; cursor: pointer;"><i data-lucide="x" size="18"></i></span>
+                </div>
+                <div class="modal-body" style="padding: 10px 0;">
+                    <div id="text-img-full-content" style="color: rgba(255,255,255,0.9); font-size: 14px; line-height: 1.8; font-style: italic; white-space: pre-wrap;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 底部导航 -->
+        <nav class="bottom-nav">
+            <div class="nav-item active" data-page="chat-list">
+                <div class="nav-icon"><i data-lucide="message-circle" size="22"></i></div>
+            </div>
+            <div class="nav-item" data-page="contacts">
+                <div class="nav-icon"><i data-lucide="users" size="22"></i></div>
+            </div>
+            <div class="nav-item" data-page="moments">
+                <div class="nav-icon"><i data-lucide="aperture" size="22"></i></div>
+            </div>
+            <div class="nav-item" data-page="settings">
+                <div class="nav-icon"><i data-lucide="settings" size="22"></i></div>
+            </div>
+        </nav>
+
+        <!-- 通用操作菜单 (Action Sheet) -->
+        <div id="action-sheet-modal" class="modal-overlay" style="display: none; z-index: 4000;">
+            <div class="action-sheet" id="action-sheet-content">
+                <!-- 动态加载选项 -->
+            </div>
+        </div>
+
+        <!-- 语音通话全屏界面 -->
+        <div id="call-overlay" class="call-overlay" style="display: none;">
+            <div class="call-bg"></div>
+            <div class="call-content">
+                <div class="call-header">
+                    <img id="call-avatar" src="" alt="avatar" class="call-avatar">
+                    <h2 id="call-name">联系人</h2>
+                    <p id="call-status">正在呼叫...</p>
+                    <p id="call-timer" style="display: none;">00:00</p>
+                </div>
+                
+                <div id="call-text-display" class="call-text-display">
+                    <!-- 通话中的文字记录 -->
+                </div>
+
+                <div id="call-input-container" class="call-input-container" style="display: none;">
+                    <input type="text" id="call-msg-input" placeholder="输入文字进行语音回复...">
+                    <button id="call-send-btn"><i data-lucide="send" size="18"></i></button>
+                </div>
+
+                <div class="call-actions">
+                    <div class="call-action-item" id="call-mute-btn">
+                        <div class="call-icon-btn"><i data-lucide="mic-off" size="24"></i></div>
+                        <span>静音</span>
+                    </div>
+                    <div class="call-action-item" id="call-hangup-btn">
+                        <div class="call-icon-btn hangup"><i data-lucide="phone-off" size="24"></i></div>
+                        <span>挂断</span>
+                    </div>
+                    <div class="call-action-item" id="call-speaker-btn">
+                        <div class="call-icon-btn"><i data-lucide="volume-2" size="24"></i></div>
+                        <span>免提</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 通话记录弹窗 -->
+        <div id="transcript-modal" class="modal-overlay" style="display: none; z-index: 5100;">
+            <div class="modal-content" style="background: rgba(25, 25, 25, 0.95); border: 1px solid rgba(255,255,255,0.1); width: 320px; max-height: 80vh; display: flex; flex-direction: column;">
+                <div class="modal-header">
+                    <span class="modal-title" style="color: white; font-size: 14px; font-weight: 600;">通话记录详情</span>
+                    <span class="close-btn" id="close-transcript-modal" style="color: white; cursor: pointer;"><i data-lucide="x" size="18"></i></span>
+                </div>
+                <div id="transcript-content" class="modal-body" style="flex: 1; overflow-y: auto; padding: 15px; font-size: 13px; line-height: 1.6; color: rgba(255,255,255,0.8);">
+                    <!-- 动态加载通话记录 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 转账操作弹窗 -->
+        <div id="modal-transfer-action" class="modal-overlay" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 5000; justify-content: center; align-items: center; background: rgba(0,0,0,0.5); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);">
+            <div class="modal-content" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 16px; width: 80%; padding: 20px; text-align: center; color: white; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);">
+                <div style="margin-bottom: 15px;">
+                    <i data-lucide="arrow-right-left" size="48" style="color: rgba(255, 180, 60, 0.8);"></i>
+                </div>
+                <h3 id="transfer-action-title" style="margin: 0 0 10px 0; font-size: 18px;">收到转账</h3>
+                <p id="transfer-action-amount" style="font-size: 32px; font-weight: bold; margin: 0 0 5px 0;">¥0.00</p>
+                <p id="transfer-action-remark" style="font-size: 14px; color: rgba(255,255,255,0.6); margin: 0 0 20px 0;">转账说明</p>
+                
+                <div style="display: flex; gap: 10px;">
+                    <button id="btn-return-transfer" style="flex: 1; padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); color: white; cursor: pointer;">退回</button>
+                    <button id="btn-accept-transfer" style="flex: 1; padding: 12px; border-radius: 8px; border: none; background: rgba(255, 180, 60, 0.8); color: white; cursor: pointer;">确认收钱</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 红包详情页弹窗 -->
+        <div id="modal-redpacket-details" class="modal-overlay" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 5000; flex-direction: column; background: rgba(0,0,0,0.6); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);">
+            <div style="padding: 20px; text-align: right;">
+                <button id="btn-close-redpacket" style="background: none; border: none; color: white; cursor: pointer;"><i data-lucide="x" size="24"></i></button>
+            </div>
+            <div style="flex: 1; display: flex; flex-direction: column; align-items: center; padding: 0 20px;">
+                <img id="rp-detail-avatar" src="" alt="avatar" style="width: 60px; height: 60px; border-radius: 50%; margin-bottom: 10px; border: 2px solid rgba(255,255,255,0.2);">
+                <h3 id="rp-detail-sender" style="color: white; margin: 0 0 5px 0; font-size: 18px;">发送人的红包</h3>
+                <p id="rp-detail-remark" style="color: rgba(255,255,255,0.7); margin: 0 0 20px 0; font-size: 14px;">恭喜发财，大吉大利</p>
+                
+                <div id="rp-detail-my-amount-container" style="display: none; text-align: center; margin-bottom: 30px;">
+                    <span style="font-size: 48px; font-weight: bold; color: rgba(255, 180, 60, 1);">¥<span id="rp-detail-my-amount">0.00</span></span>
+                </div>
+                
+                <div id="rp-detail-grab-btn-container" style="display: none; text-align: center; margin-bottom: 30px;">
+                    <button id="rp-detail-grab-btn" style="background: linear-gradient(135deg, #ffb43c, #ff6b00); color: white; border: none; padding: 12px 30px; border-radius: 25px; font-size: 16px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 15px rgba(255, 107, 0, 0.3);">抢红包</button>
+                </div>
+                
+                <div style="width: 100%; background: rgba(255,255,255,0.05); border-radius: 12px; padding: 15px; border: 1px solid rgba(255,255,255,0.1);">
+                    <div style="color: rgba(255,255,255,0.6); font-size: 12px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                        <span id="rp-detail-status">已领取 0/0 个</span>
+                    </div>
+                    <div id="rp-detail-list" style="display: flex; flex-direction: column; gap: 15px; max-height: 300px; overflow-y: auto;">
+                        <!-- 领取记录列表 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+    <script src="phone-ui.js"></script>
+    <script>
+        // 初始化 Lucide 图标
+        lucide.createIcons();
+    </script>
+</body>
+</html>
