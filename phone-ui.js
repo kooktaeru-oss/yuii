@@ -71,6 +71,8 @@ document.addEventListener('DOMContentLoaded', () => {
             getCurrentMessageId: () => target.getCurrentMessageId ? target.getCurrentMessageId() : null,
             getChatMessages: (id) => target.getChatMessages ? target.getChatMessages(id) : [],
             setChatMessages: (msgs, opts) => target.setChatMessages ? target.setChatMessages(msgs, opts) : null,
+            generateRaw: target.generateRaw ? target.generateRaw.bind(target) : null,
+            executeSlashCommands: target.executeSlashCommands ? target.executeSlashCommands.bind(target) : null
         };
     }
 
@@ -1309,6 +1311,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function saveMoments() {
         localStorage.setItem('moments', JSON.stringify(state.moments));
+        deferredSync(); // 同步到同层
     }
 
     function switchPage(pageId) {
@@ -3725,7 +3728,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function triggerAIResponse(customPrompt = null, targetId = null, chatId = null) {
+    async function triggerAIResponse(customPrompt = null, targetId = null, chatId = null) {
         if (island.classList.contains('active')) return;
         
         setIslandState('loading');
@@ -3751,6 +3754,61 @@ document.addEventListener('DOMContentLoaded', () => {
         lastAIRequest = requestData;
         
         console.log('[SillyPhone] 发送 AI 请求:', requestData);
+
+        const st = getSTInterface();
+        
+        // 尝试使用同层原生 API 进行生成
+        if (st.generateRaw) {
+            try {
+                // 确保在生成前同步最新状态到聊天记录
+                syncToSillyTavern();
+                
+                const rawRequestData = {
+                    ordered_prompts: [
+                        'world_info_before',
+                        'persona_description',
+                        'char_description',
+                        'char_personality',
+                        'scenario',
+                        'world_info_after',
+                        'dialogue_examples',
+                        'chat_history',
+                        'user_input',
+                    ],
+                    user_input: customPrompt || (mode === 'moments' ? '请回复朋友圈...' : '请回复...'),
+                    should_silence: true,
+                };
+                
+                const replyText = String(await st.generateRaw(rawRequestData) || '').trim();
+                
+                setIslandState('default');
+                if (replyText) {
+                    processAIReply(replyText, activeChatId, mode, targetId || activeChatId);
+                } else {
+                    showToast('生成返回为空', 'x-circle');
+                }
+            } catch (error) {
+                console.error('[SillyPhone] 同层生成失败:', error);
+                setIslandState('default');
+                showToast('生成失败: ' + error.message, 'x-circle');
+            }
+            return;
+        } else if (st.executeSlashCommands) {
+            try {
+                syncToSillyTavern();
+                if (customPrompt && String(customPrompt).trim()) {
+                    await st.executeSlashCommands(`/gen ${String(customPrompt).replace(/\n/g, " ")}`);
+                } else {
+                    await st.executeSlashCommands(`/generate`);
+                }
+                // Slash 命令生成后，通常会通过其他机制（如监听 DOM 或轮询）获取结果
+                // 这里为了兼容性，我们仍然发送 postMessage 兜底
+            } catch (error) {
+                console.error('[SillyPhone] Slash 命令执行失败:', error);
+            }
+        }
+
+        // 兜底：如果没有同层 API，则发送 postMessage 给桥接脚本
         window.parent.postMessage(requestData, '*');
 
         if (aiResponseTimer) clearTimeout(aiResponseTimer);
@@ -4668,6 +4726,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function saveMessagesToLocalStorage() {
         const key = `all-messages-${state.activeAccountId}`;
         localStorage.setItem(key, JSON.stringify(state.messages));
+        deferredSync(); // 同步到同层
     }
 
     function saveStateToLocalStorage() {
