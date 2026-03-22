@@ -4222,6 +4222,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const island = document.getElementById('dynamic-island');
     const islandText = document.getElementById('island-text');
     let aiResponseTimer = null;
+    let lastAIRequest = null;
     const msgInput = document.getElementById('msg-input');
     const screen = document.querySelector('.screen');
 
@@ -4647,7 +4648,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return `<div class="text-img-card" data-full-text="${safeDesc}" onclick="window.openTextImgDetail(this)">
                     <div class="text-img-header">
                         <i data-lucide="image" size="10"></i>
-                        <span>意境图</span>
+                        <span>IMAGE DESCRIPTION</span>
                     </div>
                     <div class="text-img-body">${desc}</div>
                 </div>`;
@@ -6330,7 +6331,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (status === 'loading') {
             island.classList.add('active');
-            islandText.textContent = '正在思考';
+            islandText.textContent = '...';
             if (callAvatar) callAvatar.classList.add('responding');
             if (state.currentChat) {
                 chatName.textContent = '对方正在输入...';
@@ -6822,7 +6823,6 @@ document.addEventListener('DOMContentLoaded', () => {
             
             const wrapper = document.createElement('div');
             const isUser = m.type === 'user';
-            const isFirstInGroup = m.senderId !== lastSenderId;
 
             // 处理撤回消息：显示为居中的系统消息
             if (m.isRecalled) {
@@ -6884,31 +6884,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            wrapper.className = `message-wrapper ${isUser ? 'user' : 'ai'} ${isFirstInGroup ? 'first-in-group' : 'consecutive'}`;
+            wrapper.className = `message-wrapper ${isUser ? 'user' : 'ai'}`;
             
-            if (isFirstInGroup) {
-                const avatar = document.createElement('img');
-                avatar.className = 'msg-avatar';
-                avatar.referrerPolicy = 'no-referrer';
-                
-                if (isUser) {
-                    avatar.src = m.senderAvatar || state.userAvatar;
-                } else if (state.currentChat.isGroup) {
-                    // 群聊中根据 senderId 找头像
-                    const member = state.currentChat.members.find(mem => mem.id === m.senderId);
-                    avatar.src = member ? member.avatar : state.currentChat.avatar;
-                } else {
-                    // 使用当前聊天的头像 (可能已被修改)
-                    avatar.src = state.currentChat.avatar;
-                }
-                wrapper.appendChild(avatar);
+            const avatar = document.createElement('img');
+            avatar.className = 'msg-avatar';
+            avatar.referrerPolicy = 'no-referrer';
+            
+            if (isUser) {
+                avatar.src = m.senderAvatar || state.userAvatar;
+            } else if (state.currentChat.isGroup) {
+                // 群聊中根据 senderId 找头像
+                const member = state.currentChat.members.find(mem => mem.id === m.senderId);
+                avatar.src = member ? member.avatar : state.currentChat.avatar;
             } else {
-                const spacer = document.createElement('div');
-                spacer.className = 'msg-avatar-spacer';
-                wrapper.appendChild(spacer);
+                // 使用当前聊天的头像 (可能已被修改)
+                avatar.src = state.currentChat.avatar;
             }
-
-            lastSenderId = m.senderId;
+            wrapper.appendChild(avatar);
 
             const bubbleContainer = document.createElement('div');
             bubbleContainer.className = 'bubble-container';
@@ -7272,6 +7264,8 @@ document.addEventListener('DOMContentLoaded', () => {
             context: lastMessages,
             chatId: activeChatId
         };
+        
+        lastAIRequest = requestData;
         
         console.log('[SillyPhone] 发送 AI 请求:', requestData);
         window.parent.postMessage(requestData, '*');
@@ -8307,7 +8301,11 @@ document.addEventListener('DOMContentLoaded', () => {
             setIslandState('default');
 
             if (data.replyText) {
-                processAIReply(data.replyText, data.chatId, data.mode, data.targetId);
+                const mode = data.mode || (lastAIRequest ? lastAIRequest.mode : null);
+                const targetId = data.targetId || (lastAIRequest ? lastAIRequest.targetId : null);
+                const chatId = data.chatId || (lastAIRequest ? lastAIRequest.chatId : null);
+                
+                processAIReply(data.replyText, chatId, mode, targetId);
             }
             
             loadFromSillyTavern();
@@ -8321,6 +8319,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function processAIReply(text, chatId, mode, targetId) {
+        // 兜底逻辑：如果缺少上下文，尝试从当前状态获取
+        mode = mode || (state.currentPage === 'moments' ? 'moments' : 'chat');
+        chatId = chatId || (state.currentChat ? state.currentChat.id : null);
+        targetId = targetId || chatId;
+
         if (mode === 'moments') {
             const moment = state.moments.find(m => m.id === targetId);
             if (moment) {
@@ -8348,6 +8351,47 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             if (!chatId || !state.messages[chatId]) return;
 
+            // 检查是否是上帝模式或群聊，尝试解析多行对话
+            const isGroup = state.currentChat && state.currentChat.isGroup;
+            const isGodMode = state.currentChat && state.currentChat.godMode;
+
+            if (isGroup || isGodMode) {
+                const lines = text.split('\n').filter(l => l.trim());
+                let processedAny = false;
+
+                lines.forEach(line => {
+                    // 匹配 "角色名: 内容" 或 "角色名：内容"
+                    const match = line.match(/^([^：:]+)[：:]\s*(.*)/);
+                    if (match) {
+                        const senderName = match[1].trim();
+                        const content = match[2].trim();
+                        
+                        // 查找对应的联系人 ID
+                        const contact = state.contacts.find(c => c.name === senderName);
+                        const senderId = contact ? contact.id : chatId;
+
+                        const time = new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0');
+                        state.messages[chatId].push({
+                            id: 'msg_' + Date.now() + Math.random().toString(36).substr(2, 5),
+                            type: 'ai',
+                            senderId: senderId,
+                            senderName: senderName,
+                            time: time,
+                            text: content
+                        });
+                        processedAny = true;
+                    }
+                });
+
+                if (processedAny) {
+                    saveMessagesToLocalStorage();
+                    renderMessages(chatId);
+                    showToast('收到新消息', 'message-square');
+                    return;
+                }
+            }
+
+            // 普通单人聊天或解析失败的兜底
             const time = new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0');
             
             const newMessage = {
