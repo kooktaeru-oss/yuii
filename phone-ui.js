@@ -78,40 +78,73 @@ function initSillyPhoneUI() {
 
     function serializeMessagesToText(messages) {
         let text = '';
-        for (const chatName in messages) {
-            if (!messages[chatName] || messages[chatName].length === 0) continue;
+        
+        // 辅助函数：通过ID查找联系人名字
+        const getContactNameById = (id) => {
+            if (state.contacts) {
+                const contact = state.contacts.find(c => c.id === id);
+                if (contact) return contact.name;
+            }
+            if (state.groups) {
+                const group = state.groups.find(g => g.id === id);
+                if (group) return group.name;
+            }
+            return id; // 找不到则返回原ID
+        };
+
+        for (const chatId in messages) {
+            if (!messages[chatId] || messages[chatId].length === 0) continue;
             
             // 仅序列化非历史消息（当前会话的消息）
-            const currentMessages = messages[chatName].filter(msg => !msg.isHistory);
+            const currentMessages = messages[chatId].filter(msg => !msg.isHistory);
             if (currentMessages.length === 0) continue;
 
-            text += `<private>\n【和${chatName}的聊天】\n`;
+            const chatName = getContactNameById(chatId);
+            const isGroup = state.groups && state.groups.some(g => g.id === chatId || g.name === chatId);
+            
+            if (isGroup) {
+                text += `<multi>\n【和 ${chatName}的聊天】\n`;
+            } else {
+                text += `<private>\n【和${chatName}的聊天】\n`;
+            }
+
             currentMessages.forEach(msg => {
-                if (msg.type === 'text') {
-                    text += `[${msg.sender}|${msg.avatar || ''}|${msg.content}|${msg.time}]\n`;
-                } else if (msg.type === 'image') {
-                    text += `[${msg.sender}|${msg.avatar || ''}|图片|${msg.content}|${msg.time}]\n`;
-                } else if (msg.type === 'sticker') {
-                    text += `[${msg.sender}|${msg.avatar || ''}|表情包|${msg.content}|${msg.time}]\n`;
-                } else if (msg.type === 'voice') {
+                const sender = msg.senderName || msg.senderId || msg.sender || '未知';
+                const avatar = msg.senderAvatar || msg.avatar || '';
+                const content = msg.text || msg.content || '';
+                const time = msg.time || '';
+                const msgType = msg.msgType || (msg.type === 'system' ? 'system' : 'text');
+
+                if (msgType === 'text') {
+                    text += `[${sender}|${avatar}|${content}|${time}]\n`;
+                } else if (msgType === 'image' || msgType === 'photo') {
+                    text += `[${sender}|${avatar}|图片|${content}|${time}]\n`;
+                } else if (msgType === 'sticker') {
+                    text += `[${sender}|${avatar}|表情包|${content}|${time}]\n`;
+                } else if (msgType === 'voice') {
                     if (msg.effect) {
-                        text += `[${msg.sender}|${msg.avatar || ''}|变音特效|${msg.effect}|${msg.content}|${msg.time}]\n`;
+                        text += `[${sender}|${avatar}|变音特效|${msg.effect}|${content}|${time}]\n`;
                     } else {
-                        text += `[${msg.sender}|${msg.avatar || ''}|语音消息|${msg.content}|${msg.time}]\n`;
+                        text += `[${sender}|${avatar}|语音消息|${content}|${time}]\n`;
                     }
-                } else if (msg.type === 'transfer' || msg.type === 'redpacket') {
-                    text += `[${msg.sender}|${msg.avatar || ''}|${msg.content}|${msg.time}]\n`;
-                } else if (msg.type === 'call') {
-                    text += `[${msg.sender}|${msg.avatar || ''}|语音通话|${msg.content}|${msg.time}]\n`;
-                } else if (msg.type === 'call-end') {
-                    text += `[${msg.sender}|${msg.avatar || ''}|语音通话已挂断|${msg.duration || '00:00'}|[]|${msg.time}]\n`;
-                } else if (msg.type === 'recall') {
-                    text += `[${msg.sender}|${msg.avatar || ''}|撤回消息|${msg.content}|${msg.time}]\n`;
-                } else if (msg.type === 'quote') {
-                    text += `<${msg.sender}|${msg.avatar || ''}|${msg.quote}|${msg.content}|${msg.time}>\n`;
+                } else if (msgType === 'transfer' || msgType === 'redpacket' || msgType === 'red-packet') {
+                    text += `[${sender}|${avatar}|${content}|${time}]\n`;
+                } else if (msgType === 'call') {
+                    text += `[${sender}|${avatar}|语音通话|${content}|${time}]\n`;
+                } else if (msgType === 'call-end') {
+                    text += `[${sender}|${avatar}|语音通话已挂断|${msg.duration || '00:00'}|${time}]\n`;
+                } else if (msgType === 'recall') {
+                    text += `[${sender}|${avatar}|撤回消息|${content}|${time}]\n`;
+                } else if (msgType === 'quote') {
+                    text += `<${sender}|${avatar}|${msg.quote || ''}|${content}|${time}>\n`;
                 }
             });
-            text += `</private>\n`;
+            
+            if (isGroup) {
+                text += `</multi>\n`;
+            } else {
+                text += `</private>\n`;
+            }
         }
         return text;
     }
@@ -125,7 +158,9 @@ function initSillyPhoneUI() {
             if (moment.comments && moment.comments.length > 0) {
                 text += `{{\n`;
                 moment.comments.forEach(comment => {
-                    text += `[评论|${comment.name}|${comment.text}|${comment.time}]\n`;
+                    const name = comment.name || comment.authorName || '未知';
+                    const time = comment.time || new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0');
+                    text += `[评论|${name}|${comment.text}|${time}]\n`;
                 });
                 text += `}}\n`;
             }
@@ -188,12 +223,12 @@ function initSillyPhoneUI() {
             textContent += serializeMomentsToText(activeAccount.moments);
         }
 
-        // 将 JSON 数据作为备份隐藏在注释中，以便恢复设置和多账号数据
-        const shoujiTag = `<shouji>\n${textContent}\n<!-- SILLYPHONE_DATA_START\n${JSON.stringify(shoujiData)}\nSILLYPHONE_DATA_END -->\n</shouji>`;
+        // 移除 JSON 备份，只保留纯文本格式，符合 A 老师的格式，避免思维链等额外标签被包裹进 JSON 导致冗余
+        const shoujiTag = `<shouji>\n${textContent.trim()}\n</shouji>`;
         
         let updatedMessage;
         if (raw.includes('<shouji>')) {
-            updatedMessage = raw.replace(/<shouji>[\s\S]*?<\/shouji>/, shoujiTag);
+            updatedMessage = raw.replace(/<shouji>[\s\S]*?(?:<\/shouji>|$)/, shoujiTag);
         } else {
             updatedMessage = raw + '\n' + shoujiTag;
         }
@@ -217,26 +252,29 @@ function initSillyPhoneUI() {
         return (state.messages[chatId] || []).filter(m => !m.isHistory);
     }
 
-    function parseAuthorFormat(rawText) {
+    function parseAuthorFormat(rawText, defaultChatName = "未知会话") {
         const data = {
             messages: {},
             moments: []
         };
 
+        let hasTags = false;
+
         // 1. 解析私聊 <private>
         const privateMatches = rawText.matchAll(/<private>([\s\S]*?)(?:<\/private>|$)/g);
         for (const pMatch of privateMatches) {
+            hasTags = true;
             const content = pMatch[1];
             const titleMatch = content.match(/【和(.*?)的聊天】/);
-            const chatName = titleMatch ? titleMatch[1].trim() : "未知会话";
+            const chatName = titleMatch ? titleMatch[1].trim() : defaultChatName;
             
             if (!data.messages[chatName]) data.messages[chatName] = [];
             
             // 匹配各种消息格式
             const msgLines = content.split('\n');
             msgLines.forEach(line => {
-                // 普通/图片/语音/转账等格式: [名字|头像|内容|时间] 或 [名字|头像|类型|内容|时间]
-                const m = line.match(/^\[(.*?)\|(.*?)\|(.*?)\|(.*?)\]$/) || line.match(/^\[(.*?)\|(.*?)\|(.*?)\|(.*?)\|(.*?)\]$/);
+                // 普通/图片/语音/转账等格式: [名字|头像|内容|时间] 或 [名字|头像|类型|内容|时间] 或 [名字|头像|类型|特效|内容|时间]
+                const m = line.match(/^\[(.*?)\|(.*?)\|(.*?)\|(.*?)\]$/) || line.match(/^\[(.*?)\|(.*?)\|(.*?)\|(.*?)\|(.*?)\]$/) || line.match(/^\[(.*?)\|(.*?)\|(.*?)\|(.*?)\|(.*?)\|(.*?)\]$/);
                 if (m) {
                     const msg = {
                         id: 'msg_' + Math.random().toString(36).substr(2, 9),
@@ -276,7 +314,7 @@ function initSillyPhoneUI() {
                         msg.type = 'recall';
                         msg.content = m[4];
                     } else {
-                        msg.content = body;
+                        msg.content = m.length >= 6 ? m[4] : m[3];
                     }
                     data.messages[chatName].push(msg);
                 }
@@ -297,23 +335,75 @@ function initSillyPhoneUI() {
             });
         }
 
-        // 2. 解析群聊 <qunliao>
+        // 2. 解析群聊 <multi>
         const qunMatches = rawText.matchAll(/<multi>([\s\S]*?)(?:<\/multi>|$)/g);
         for (const qMatch of qunMatches) {
+            hasTags = true;
             const content = qMatch[1];
             const titleMatch = content.match(/【和 (.*?)的聊天】/);
-            const groupName = titleMatch ? titleMatch[1].trim() : "未知群聊";
+            const groupName = titleMatch ? titleMatch[1].trim() : defaultChatName;
             
             if (!data.messages[groupName]) data.messages[groupName] = [];
             
             // 群聊逻辑与私聊类似，只是多了成员识别
             const msgLines = content.split('\n');
             msgLines.forEach(line => {
-                const m = line.match(/^\[(.*?)\|(.*?)\|(.*?)\|(.*?)\]$/) || line.match(/^\[(.*?)\|(.*?)\|(.*?)\|(.*?)\|(.*?)\]$/);
+                const m = line.match(/^\[(.*?)\|(.*?)\|(.*?)\|(.*?)\]$/) || line.match(/^\[(.*?)\|(.*?)\|(.*?)\|(.*?)\|(.*?)\]$/) || line.match(/^\[(.*?)\|(.*?)\|(.*?)\|(.*?)\|(.*?)\|(.*?)\]$/);
                 if (m && m[1] !== '群成员') {
-                    // ... 同样的解析逻辑 ...
-                    const msg = { sender: m[1], avatar: m[2], time: m[m.length - 1], content: m[3], type: 'text' };
+                    const msg = {
+                        id: 'msg_' + Math.random().toString(36).substr(2, 9),
+                        sender: m[1],
+                        avatar: m[2],
+                        time: m[m.length - 1],
+                        type: 'text'
+                    };
+
+                    const body = m[3];
+                    if (body === '图片') {
+                        msg.type = 'image';
+                        msg.content = m[4];
+                    } else if (body === '表情包') {
+                        msg.type = 'sticker';
+                        msg.content = m[4];
+                    } else if (body === '语音消息') {
+                        msg.type = 'voice';
+                        msg.content = m[4];
+                    } else if (body === '变音特效') {
+                        msg.type = 'voice';
+                        msg.effect = m[4];
+                        msg.content = m[5];
+                    } else if (body.includes('转账') || body.includes('收账')) {
+                        msg.type = 'transfer';
+                        msg.content = body;
+                    } else if (body.includes('红包')) {
+                        msg.type = 'redpacket';
+                        msg.content = body;
+                    } else if (body === '语音通话') {
+                        msg.type = 'call';
+                        msg.content = m[4];
+                    } else if (body === '语音通话已挂断') {
+                        msg.type = 'call-end';
+                        msg.duration = m[4];
+                    } else if (body === '撤回消息') {
+                        msg.type = 'recall';
+                        msg.content = m[4];
+                    } else {
+                        msg.content = m.length >= 6 ? m[4] : m[3];
+                    }
                     data.messages[groupName].push(msg);
+                }
+                
+                const q = line.match(/^<(.*?)\|(.*?)\|(.*?)\|(.*?)\|(.*?)>$/);
+                if (q && q[1] !== '群成员') {
+                    data.messages[groupName].push({
+                        id: 'msg_' + Math.random().toString(36).substr(2, 9),
+                        sender: q[1],
+                        avatar: q[2],
+                        quote: q[3],
+                        content: q[4],
+                        time: q[5],
+                        type: 'quote'
+                    });
                 }
             });
         }
@@ -321,6 +411,7 @@ function initSillyPhoneUI() {
         // 3. 解析朋友圈 <pyq>
         const pyqMatch = rawText.match(/<pyq>([\s\S]*?)(?:<\/pyq>|$)/);
         if (pyqMatch) {
+            hasTags = true;
             const posts = pyqMatch[1].matchAll(/<post:\d+>([\s\S]*?)(?:<\/post:\d+>|$)/g);
             for (const p of posts) {
                 const lines = p[1].trim().split('\n');
@@ -341,6 +432,80 @@ function initSillyPhoneUI() {
                     });
                     data.moments.push(moment);
                 }
+            }
+        }
+
+        // 4. 兜底：如果没有任何标签，但包含 [名字|头像|内容|时间] 格式，尝试直接解析
+        if (!hasTags) {
+            const lines = rawText.split('\n');
+            let hasParsedAny = false;
+            
+            if (!data.messages[defaultChatName]) data.messages[defaultChatName] = [];
+            
+            lines.forEach(line => {
+                const m = line.match(/^\[(.*?)\|(.*?)\|(.*?)\|(.*?)\]$/) || line.match(/^\[(.*?)\|(.*?)\|(.*?)\|(.*?)\|(.*?)\]$/) || line.match(/^\[(.*?)\|(.*?)\|(.*?)\|(.*?)\|(.*?)\|(.*?)\]$/);
+                if (m) {
+                    hasParsedAny = true;
+                    const msg = {
+                        id: 'msg_' + Math.random().toString(36).substr(2, 9),
+                        sender: m[1],
+                        avatar: m[2],
+                        time: m[m.length - 1],
+                        type: 'text'
+                    };
+
+                    const body = m[3];
+                    if (body === '图片') {
+                        msg.type = 'image';
+                        msg.content = m[4];
+                    } else if (body === '表情包') {
+                        msg.type = 'sticker';
+                        msg.content = m[4];
+                    } else if (body === '语音消息') {
+                        msg.type = 'voice';
+                        msg.content = m[4];
+                    } else if (body === '变音特效') {
+                        msg.type = 'voice';
+                        msg.effect = m[4];
+                        msg.content = m[5];
+                    } else if (body.includes('转账') || body.includes('收账')) {
+                        msg.type = 'transfer';
+                        msg.content = body;
+                    } else if (body.includes('红包')) {
+                        msg.type = 'redpacket';
+                        msg.content = body;
+                    } else if (body === '语音通话') {
+                        msg.type = 'call';
+                        msg.content = m[4];
+                    } else if (body === '语音通话已挂断') {
+                        msg.type = 'call-end';
+                        msg.duration = m[4];
+                    } else if (body === '撤回消息') {
+                        msg.type = 'recall';
+                        msg.content = m[4];
+                    } else {
+                        msg.content = m.length >= 6 ? m[4] : m[3];
+                    }
+                    data.messages[defaultChatName].push(msg);
+                }
+                
+                const q = line.match(/^<(.*?)\|(.*?)\|(.*?)\|(.*?)\|(.*?)>$/);
+                if (q) {
+                    hasParsedAny = true;
+                    data.messages[defaultChatName].push({
+                        id: 'msg_' + Math.random().toString(36).substr(2, 9),
+                        sender: q[1],
+                        avatar: q[2],
+                        quote: q[3],
+                        content: q[4],
+                        time: q[5],
+                        type: 'quote'
+                    });
+                }
+            });
+            
+            if (!hasParsedAny) {
+                delete data.messages[defaultChatName];
             }
         }
 
@@ -439,15 +604,87 @@ function initSillyPhoneUI() {
 
                 // 无论有没有 JSON 备份，都尝试解析文本格式的消息和朋友圈
                 const textData = parseAuthorFormat(shoujiContent);
+                
+                // 辅助函数：通过名字查找联系人ID
+                const getContactIdByName = (name) => {
+                    if (userAccounts) {
+                        const activeAcc = userAccounts.find(a => a.id === state.activeAccountId);
+                        if (activeAcc && activeAcc.contacts) {
+                            const contact = activeAcc.contacts.find(c => c.name === name);
+                            if (contact) return contact.id;
+                        }
+                    }
+                    if (state.contacts) {
+                        const contact = state.contacts.find(c => c.name === name);
+                        if (contact) return contact.id;
+                    }
+                    return name; // 找不到则返回原名
+                };
+
                 for (const cid in textData.messages) {
-                    if (!combinedMessages[cid]) {
-                        combinedMessages[cid] = textData.messages[cid].map(m => ({ ...m, isHistory: true }));
+                    const realCid = getContactIdByName(cid);
+                    const formattedMsgs = textData.messages[cid].map(m => {
+                        const senderName = m.sender || cid;
+                        const isUser = senderName === '我' || senderName === state.userName || senderName === 'user';
+                        return {
+                            id: m.id || 'msg_' + Math.random().toString(36).substr(2, 9),
+                            type: isUser ? 'user' : 'ai',
+                            senderId: isUser ? 'user' : (getContactIdByName(senderName) || senderName),
+                            senderName: senderName,
+                            avatar: m.avatar,
+                            time: m.time,
+                            text: m.content || m.text,
+                            msgType: m.type === 'image' ? 'photo' : (m.type === 'redpacket' ? 'red-packet' : m.type),
+                            url: m.type === 'sticker' ? m.content : m.url,
+                            description: m.type === 'image' ? m.content : undefined,
+                            effect: m.effect,
+                            duration: m.duration,
+                            amount: m.amount,
+                            quote: m.quote,
+                            isHistory: true
+                        };
+                    });
+
+                    if (!combinedMessages[realCid]) {
+                        combinedMessages[realCid] = formattedMsgs;
                     } else {
-                        const existingSignatures = new Set(combinedMessages[cid].map(m => `${m.sender || m.senderId}|${m.time}|${m.type}|${m.content || m.text || m.duration || ''}`));
-                        const historyToAdd = textData.messages[cid]
-                            .filter(m => !existingSignatures.has(`${m.sender || m.senderId}|${m.time}|${m.type}|${m.content || m.text || m.duration || ''}`))
-                            .map(m => ({ ...m, isHistory: true }));
-                        combinedMessages[cid] = [...historyToAdd, ...combinedMessages[cid]];
+                        const getNormalizedType = (m) => {
+                            let t = m.msgType || m.type;
+                            if (t === 'ai' || t === 'user') return 'text';
+                            if (t === 'image') return 'photo';
+                            if (t === 'redpacket') return 'red-packet';
+                            return t;
+                        };
+                        const existingSignatures = new Set(combinedMessages[realCid].map(m => `${m.sender || m.senderId}|${m.time}|${getNormalizedType(m)}|${m.content || m.text || m.duration || ''}`));
+                        const historyToAdd = formattedMsgs
+                            .filter(m => !existingSignatures.has(`${m.sender || m.senderId}|${m.time}|${getNormalizedType(m)}|${m.content || m.text || m.duration || ''}`));
+                        combinedMessages[realCid] = [...historyToAdd, ...combinedMessages[realCid]];
+                    }
+                    
+                    // 自动从解析的文本数据中恢复联系人和群组（如果本地没有）
+                    const isGroup = cid.includes('群聊') || textData.messages[cid].some(m => m.sender && m.sender !== cid && m.sender !== '我' && m.sender !== '我方消息' && m.sender !== '系统消息');
+                    if (isGroup) {
+                        if (!state.groups.find(g => g.name === cid || g.id === realCid)) {
+                            state.groups.push({
+                                id: realCid,
+                                name: cid,
+                                avatar: 'https://files.catbox.moe/blaehb.jpg',
+                                members: []
+                            });
+                        }
+                    } else {
+                        if (!state.contacts.find(c => c.name === cid || c.id === realCid)) {
+                            state.contacts.push({
+                                id: realCid,
+                                characterId: realCid,
+                                name: cid,
+                                avatar: 'https://files.catbox.moe/blaehb.jpg',
+                                status: 'added',
+                                type: 'main',
+                                time: '',
+                                lastMsg: ''
+                            });
+                        }
                     }
                 }
                 if (combinedMoments.length === 0 && textData.moments.length > 0) {
@@ -3395,14 +3632,14 @@ function initSillyPhoneUI() {
             avatar.referrerPolicy = 'no-referrer';
             
             if (isUser) {
-                avatar.src = m.senderAvatar || state.userAvatar;
+                avatar.src = m.senderAvatar || m.avatar || state.userAvatar;
             } else if (state.currentChat.isGroup) {
                 // 群聊中根据 senderId 找头像
-                const member = state.currentChat.members.find(mem => mem.id === m.senderId);
-                avatar.src = member ? member.avatar : state.currentChat.avatar;
+                const member = state.currentChat.members.find(mem => mem.id === (m.senderId || m.sender));
+                avatar.src = m.avatar || (member ? member.avatar : state.currentChat.avatar);
             } else {
                 // 使用当前聊天的头像 (可能已被修改)
-                avatar.src = state.currentChat.avatar;
+                avatar.src = m.avatar || state.currentChat.avatar;
             }
             wrapper.appendChild(avatar);
 
@@ -4748,11 +4985,36 @@ function initSillyPhoneUI() {
     }
 
     function saveStateToLocalStorage() {
+        const dataToSave = {
+            userAccounts: state.userAccounts,
+            activeAccountId: state.activeAccountId,
+            settings: state.settings,
+            stickers: state.stickers,
+            contacts: state.contacts,
+            groups: state.groups,
+            moments: state.moments
+        };
+        localStorage.setItem('sillyphone-state', JSON.stringify(dataToSave));
         deferredSync();
     }
 
     // 初始化时加载持久化数据
     function loadStateFromLocalStorage() {
+        try {
+            const saved = localStorage.getItem('sillyphone-state');
+            if (saved) {
+                const data = JSON.parse(saved);
+                if (data.userAccounts) state.userAccounts = data.userAccounts;
+                if (data.activeAccountId) state.activeAccountId = data.activeAccountId;
+                if (data.settings) state.settings = data.settings;
+                if (data.stickers) state.stickers = data.stickers;
+                if (data.contacts) state.contacts = data.contacts;
+                if (data.groups) state.groups = data.groups;
+                if (data.moments) state.moments = data.moments;
+            }
+        } catch (e) {
+            console.error("Failed to load state from localStorage", e);
+        }
         loadFromSillyTavern();
     }
 
@@ -4911,12 +5173,87 @@ function initSillyPhoneUI() {
         } else {
             if (!chatId || !state.messages[chatId]) return;
 
+            // 尝试解析 <shouji> 格式
+            const defaultChatName = state.currentChat ? state.currentChat.name : chatId;
+            const parsedData = parseAuthorFormat(text, defaultChatName);
+            let hasParsedMessages = false;
+            
+            // 辅助函数：通过名字查找联系人ID
+            const getContactIdByName = (name) => {
+                if (state.contacts) {
+                    const contact = state.contacts.find(c => c.name === name);
+                    if (contact) return contact.id;
+                }
+                if (state.groups) {
+                    const group = state.groups.find(g => g.name === name);
+                    if (group) return group.id;
+                }
+                return name; // 找不到则返回原名
+            };
+
+            for (const cid in parsedData.messages) {
+                if (parsedData.messages[cid].length > 0) {
+                    hasParsedMessages = true;
+                    const realCid = getContactIdByName(cid);
+                    
+                    if (!state.messages[realCid]) state.messages[realCid] = [];
+                    // 检查重复并添加
+                    const getNormalizedType = (m) => {
+                        let t = m.msgType || m.type;
+                        if (t === 'ai' || t === 'user') return 'text';
+                        if (t === 'image') return 'photo';
+                        if (t === 'redpacket') return 'red-packet';
+                        return t;
+                    };
+                    const existingSignatures = new Set(state.messages[realCid].map(m => `${m.sender || m.senderId}|${m.time}|${getNormalizedType(m)}|${m.content || m.text || m.duration || ''}`));
+                    const newMsgs = parsedData.messages[cid].filter(m => !existingSignatures.has(`${m.sender || m.senderId}|${m.time}|${getNormalizedType(m)}|${m.content || m.text || m.duration || ''}`));
+                    
+                    // 转换格式以匹配 state.messages 的结构
+                    const formattedMsgs = newMsgs.map(m => {
+                        const senderName = m.sender || cid;
+                        const isUser = senderName === '我' || senderName === state.userName || senderName === 'user';
+                        return {
+                            id: m.id || 'msg_' + Math.random().toString(36).substr(2, 9),
+                            type: isUser ? 'user' : 'ai',
+                            senderId: isUser ? 'user' : (getContactIdByName(senderName) || senderName),
+                            senderName: senderName,
+                            avatar: m.avatar,
+                            time: m.time,
+                            text: m.content || m.text,
+                            msgType: m.type === 'image' ? 'photo' : (m.type === 'redpacket' ? 'red-packet' : m.type),
+                            url: m.type === 'sticker' ? m.content : m.url,
+                            description: m.type === 'image' ? m.content : undefined,
+                            effect: m.effect,
+                            duration: m.duration,
+                            amount: m.amount,
+                            quote: m.quote
+                        };
+                    });
+                    
+                    state.messages[realCid].push(...formattedMsgs);
+                }
+            }
+
+            if (hasParsedMessages) {
+                saveMessagesToLocalStorage();
+                renderMessages(chatId);
+                showToast('收到新消息', 'message-square');
+                return;
+            }
+
             // 检查是否是上帝模式或群聊，尝试解析多行对话
             const isGroup = state.currentChat && state.currentChat.isGroup;
             const isGodMode = state.currentChat && state.currentChat.godMode;
+            
+            // 清理可能残留的标签
+            let cleanText = text.replace(/<shouji>[\s\S]*?(?:<\/shouji>|$)/g, '').replace(/<horae>[\s\S]*?(?:<\/horae>|$)/g, '').trim();
+            if (!cleanText) {
+                // 如果清理后为空，说明只有标签但没解析出内容，可能是格式错误，保留原文本以供调试
+                cleanText = text;
+            }
 
             if (isGroup || isGodMode) {
-                const lines = text.split('\n').filter(l => l.trim());
+                const lines = cleanText.split('\n').filter(l => l.trim());
                 let processedAny = false;
 
                 lines.forEach(line => {
@@ -4959,7 +5296,7 @@ function initSillyPhoneUI() {
                 type: 'ai',
                 senderId: chatId,
                 time: time,
-                text: text
+                text: cleanText
             };
 
             state.messages[chatId].push(newMessage);
