@@ -5,8 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SillyPhone - Silver Mist</title>
     <link rel="stylesheet" href="phone-ui.css">
-    <!-- 引入 Lucide 图标 -->
-    <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
     <div class="screen">
@@ -757,10 +755,19 @@
         </div>
 
     </div>
+    <!-- 引入 Lucide 图标 -->
+    <script src="https://unpkg.com/lucide@latest"></script>
     <script src="phone-ui.js"></script>
     <script>
-        // 初始化 Lucide 图标
-        lucide.createIcons();
+        // 等待 Lucide 图标库加载完成后再初始化
+        function initLucide() {
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            } else {
+                setTimeout(initLucide, 50);
+            }
+        }
+        initLucide();
     </script>
 </body>
 </html>
