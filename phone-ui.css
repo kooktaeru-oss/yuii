@@ -47,7 +47,9 @@ body {
     position: relative;
     overflow: hidden;
     /* 移除 transition: all，避免切换页面时触发不必要的全局重绘和滤镜延迟 */
-    background: transparent;
+    background: rgba(15, 15, 20, 0.6); /* 默认暗色背景，防止透明 */
+    border: 1px solid rgba(255, 255, 255, 0.1); /* 外边框 */
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2), 0 20px 40px rgba(0, 0, 0, 0.5); /* 手机外阴影 */
     border-radius: 37px;
     background-size: cover;
     background-position: center;
