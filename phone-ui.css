@@ -46,6 +46,7 @@ body {
     flex-direction: column;
     position: relative;
     overflow: hidden;
+    pointer-events: auto; /* 确保手机本身可点击，即使父容器设置了 pointer-events: none */
     /* 移除 transition: all，避免切换页面时触发不必要的全局重绘和滤镜延迟 */
     background: rgba(15, 15, 20, 0.6); /* 默认暗色背景，防止透明 */
     border: 1px solid rgba(255, 255, 255, 0.1); /* 外边框 */
