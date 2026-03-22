@@ -224,7 +224,7 @@ function initSillyPhoneUI() {
         };
 
         // 1. 解析私聊 <private>
-        const privateMatches = rawText.matchAll(/<private>([\s\S]*?)<\/private>/g);
+        const privateMatches = rawText.matchAll(/<private>([\s\S]*?)(?:<\/private>|$)/g);
         for (const pMatch of privateMatches) {
             const content = pMatch[1];
             const titleMatch = content.match(/【和(.*?)的聊天】/);
@@ -298,7 +298,7 @@ function initSillyPhoneUI() {
         }
 
         // 2. 解析群聊 <qunliao>
-        const qunMatches = rawText.matchAll(/<multi>([\s\S]*?)<\/multi>/g);
+        const qunMatches = rawText.matchAll(/<multi>([\s\S]*?)(?:<\/multi>|$)/g);
         for (const qMatch of qunMatches) {
             const content = qMatch[1];
             const titleMatch = content.match(/【和 (.*?)的聊天】/);
@@ -319,9 +319,9 @@ function initSillyPhoneUI() {
         }
 
         // 3. 解析朋友圈 <pyq>
-        const pyqMatch = rawText.match(/<pyq>([\s\S]*?)<\/pyq>/);
+        const pyqMatch = rawText.match(/<pyq>([\s\S]*?)(?:<\/pyq>|$)/);
         if (pyqMatch) {
-            const posts = pyqMatch[1].matchAll(/<post:\d+>([\s\S]*?)<\/post:\d+>/g);
+            const posts = pyqMatch[1].matchAll(/<post:\d+>([\s\S]*?)(?:<\/post:\d+>|$)/g);
             for (const p of posts) {
                 const lines = p[1].trim().split('\n');
                 const mainPost = lines[0].match(/^\[(.*?)\|(.*?)\|(.*?)\|(.*?)\]$/);
@@ -369,10 +369,16 @@ function initSillyPhoneUI() {
             if (!chat || !chat.message) continue;
 
             // 1. 检查是否有 <shouji> 标签
+            let shoujiContent = null;
             const jsonMatch = chat.message.match(/<shouji>([\s\S]*?)<\/shouji>/);
             if (jsonMatch && jsonMatch[1]) {
+                shoujiContent = jsonMatch[1];
+            } else if (chat.message.includes('<shouji>')) {
+                shoujiContent = chat.message.split('<shouji>')[1];
+            }
+
+            if (shoujiContent !== null) {
                 foundShouji = true;
-                const shoujiContent = jsonMatch[1];
                 
                 // 尝试提取隐藏的 JSON 备份
                 const backupMatch = shoujiContent.match(/<!-- SILLYPHONE_DATA_START\n([\s\S]*?)\nSILLYPHONE_DATA_END -->/);
@@ -413,14 +419,20 @@ function initSillyPhoneUI() {
 
                     // 如果是旧版本，里面可能包含 messages 和 moments
                     const active = data.userAccounts?.find(a => a.id === data.activeAccountId);
-                    if (active && active.messages && !backupMatch) {
+                    if (active && active.messages) {
                         for (const cid in active.messages) {
                             if (!combinedMessages[cid]) {
                                 combinedMessages[cid] = active.messages[cid].map(m => ({ ...m, isHistory: true }));
+                            } else {
+                                const existingSignatures = new Set(combinedMessages[cid].map(m => `${m.sender || m.senderId}|${m.time}|${m.type}|${m.content || m.text || m.duration || ''}`));
+                                const historyToAdd = active.messages[cid]
+                                    .filter(m => !existingSignatures.has(`${m.sender || m.senderId}|${m.time}|${m.type}|${m.content || m.text || m.duration || ''}`))
+                                    .map(m => ({ ...m, isHistory: true }));
+                                combinedMessages[cid] = [...historyToAdd, ...combinedMessages[cid]];
                             }
                         }
                     }
-                    if (active && active.moments && !backupMatch) {
+                    if (active && active.moments) {
                         if (combinedMoments.length === 0) combinedMoments = active.moments;
                     }
                 }
@@ -430,6 +442,12 @@ function initSillyPhoneUI() {
                 for (const cid in textData.messages) {
                     if (!combinedMessages[cid]) {
                         combinedMessages[cid] = textData.messages[cid].map(m => ({ ...m, isHistory: true }));
+                    } else {
+                        const existingSignatures = new Set(combinedMessages[cid].map(m => `${m.sender || m.senderId}|${m.time}|${m.type}|${m.content || m.text || m.duration || ''}`));
+                        const historyToAdd = textData.messages[cid]
+                            .filter(m => !existingSignatures.has(`${m.sender || m.senderId}|${m.time}|${m.type}|${m.content || m.text || m.duration || ''}`))
+                            .map(m => ({ ...m, isHistory: true }));
+                        combinedMessages[cid] = [...historyToAdd, ...combinedMessages[cid]];
                     }
                 }
                 if (combinedMoments.length === 0 && textData.moments.length > 0) {
