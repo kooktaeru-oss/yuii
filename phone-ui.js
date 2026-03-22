@@ -1,6 +1,7 @@
 /**
  * SillyPhone UI - Vanilla JS
  * Optimized for 360x600 layout
+ * Bridge Version - 2026-03-22
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -704,6 +705,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const island = document.getElementById('dynamic-island');
     const islandText = document.getElementById('island-text');
     let aiResponseTimer = null;
+    let lastAIRequest = null;
     const msgInput = document.getElementById('msg-input');
     const screen = document.querySelector('.screen');
 
@@ -1981,7 +1983,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     sendMessage({ 
                         text: promptText,
                         isSilent: true 
-                    });
+                    }, moment.id);
                 }, 1500);
             };
         });
@@ -2007,7 +2009,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         sendMessage({ 
                             text: promptText,
                             isSilent: true 
-                        });
+                        }, moment.id);
                     }, 1200);
                     return;
                 }
@@ -2023,7 +2025,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     sendMessage({ 
                         text: promptText,
                         isSilent: true 
-                    });
+                    }, moment.id);
                 }, 1500);
             };
         });
@@ -2634,7 +2636,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         callOverlay.style.display = 'flex';
         
-        // 模拟接听
+        // 自动接听
         setTimeout(() => {
             if (state.call.active) {
                 acceptCall();
@@ -2689,7 +2691,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!state.messages[chatId]) state.messages[chatId] = [];
             state.messages[chatId].push({
                 id: 'msg_' + Date.now(),
-                type: 'ai', // 模拟对方挂断或系统记录
+                type: 'ai', // 对方挂断或系统记录
                 senderId: chatId,
                 time: new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0'),
                 ...endMsg
@@ -2829,7 +2831,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function triggerFriendApprovalNotification(req) {
-        // 模拟 3-5 秒后的 AI 响应
+        // 3-5 秒后自动通过
         setTimeout(() => {
             // 角色自动通过验证
             req.status = 'added';
@@ -2884,7 +2886,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 上帝视角下的灵动岛交互：触发群内角色随机对话
         if (state.currentPage === 'chat-window' && state.currentChat && state.currentChat.isGroup && state.currentChat.godMode) {
-            triggerGroupRandomDialogue();
+            triggerAIResponse("[系统指令：请让群里的角色进行随机对话，模拟角色之间的互动。不要带括号，直接输出对话内容。]");
             return;
         }
 
@@ -2921,92 +2923,6 @@ document.addEventListener('DOMContentLoaded', () => {
             // 在其他页面点击：触发通用 AI 响应
             triggerAIResponse();
         }
-    }
-
-    function triggerGroupRandomDialogue() {
-        if (!state.currentChat || !state.currentChat.isGroup) return;
-        
-        // 如果正在加载中，点击则取消
-        if (island.classList.contains('active')) {
-            if (aiResponseTimer) {
-                clearTimeout(aiResponseTimer);
-                aiResponseTimer = null;
-                setIslandState('default');
-                showToast('已取消响应', 'x-circle');
-            }
-            return;
-        }
-
-        const members = state.currentChat.members;
-        if (members.length < 2) return;
-
-        // 10% 概率修改群信息 (仅上帝视角)
-        if (state.currentChat.godMode && Math.random() < 0.1) {
-            const changeType = Math.random() < 0.5 ? 'name' : 'announcement';
-            const sender = members[Math.floor(Math.random() * members.length)];
-            const chatId = state.currentChat.id;
-            
-            if (changeType === 'name') {
-                const newNames = ['绝密会议室', '闲聊灌水区', '技术交流群', '摸鱼小分队', '深夜食堂', '吃瓜群众聚集地'];
-                const newName = newNames[Math.floor(Math.random() * newNames.length)];
-                state.currentChat.name = newName;
-                if (chatName) chatName.textContent = newName; // 更新顶部标题
-                state.messages[chatId].push({
-                    type: 'system',
-                    text: `${sender.name} 修改群名为 "${newName}"`,
-                    time: new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0')
-                });
-            } else {
-                const newAnnouncements = ['本群严禁发广告', '欢迎新成员加入', '大家记得按时吃饭', '今天也要元气满满哦', '保持文明聊天', '有事请留言'];
-                const newAnnouncement = newAnnouncements[Math.floor(Math.random() * newAnnouncements.length)];
-                state.currentChat.announcement = newAnnouncement;
-                state.messages[chatId].push({
-                    type: 'system',
-                    text: `${sender.name} 修改了群公告`,
-                    time: new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0')
-                });
-            }
-            renderMessages(chatId);
-            renderChatList();
-            saveState();
-            return;
-        }
-
-        // 随机选两个角色
-        const sender = members[Math.floor(Math.random() * members.length)];
-        let receiver;
-        do {
-            receiver = members[Math.floor(Math.random() * members.length)];
-        } while (receiver.id === sender.id);
-
-        const dialogues = [
-            `嘿 ${receiver.name}，你觉得今天怎么样？`,
-            `${receiver.name}，你看到我刚才发的消息了吗？`,
-            `我觉得我们可以讨论一下接下来的计划。`,
-            `哈哈，刚才那个真的很有趣。`,
-            `你们在聊什么呢？带我一个。`,
-            `@${receiver.name} 出来聊天呀。`
-        ];
-
-        const text = dialogues[Math.floor(Math.random() * dialogues.length)];
-        
-        setIslandState('loading');
-        
-        aiResponseTimer = setTimeout(() => {
-            const chatId = state.currentChat.id;
-            if (!state.messages[chatId]) state.messages[chatId] = [];
-            
-            state.messages[chatId].push({
-                type: 'ai',
-                senderId: sender.id,
-                text: text,
-                time: new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0')
-            });
-            
-            renderMessages(chatId);
-            setIslandState('default');
-            aiResponseTimer = null;
-        }, 1000 + Math.random() * 1000);
     }
 
     function closeAllPanels() {
@@ -3192,51 +3108,10 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // AI 领取红包后的反应
             setTimeout(() => {
-                let reactionText = "";
                 const average = parseFloat(m.amount) / parseInt(m.count);
-                if (m.remainingCount === 0) {
-                    // 最后一个领完，可以判断运气王
-                    let bestAmount = 0;
-                    let bestId = null;
-                    if (parseInt(m.count) > 1) {
-                        m.grabRecords.forEach(r => {
-                            if (r.amount > bestAmount) {
-                                bestAmount = r.amount;
-                                bestId = r.id;
-                            }
-                        });
-                    }
-                    if (bestId === grabberId) {
-                        reactionText = "哈哈，我是运气王！谢谢老板！😎";
-                    } else if (parseInt(m.count) === 1) {
-                        reactionText = "谢谢老板的红包！";
-                    } else if (grabAmount < average * 0.5) {
-                        reactionText = `才抢到 ${grabAmount}，错过了一个亿😭`;
-                    } else {
-                        reactionText = "抢到了！谢谢~";
-                    }
-                } else {
-                    if (grabAmount > average * 1.5) {
-                        reactionText = `哇，抢到 ${grabAmount}，手气不错！😄`;
-                    } else if (grabAmount < average * 0.5) {
-                        reactionText = `才 ${grabAmount}，手气太差了😢`;
-                    } else {
-                        reactionText = "谢谢老板的红包！";
-                    }
-                }
-                
-                const aiMsg = {
-                    id: 'msg_' + Date.now() + Math.random(),
-                    type: 'ai',
-                    senderId: grabberId,
-                    text: reactionText,
-                    time: new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0'),
-                    msgType: 'text'
-                };
-                state.messages[chatId].push(aiMsg);
-                saveMessagesToLocalStorage();
-                renderMessages(chatId);
-            }, 1000 + Math.random() * 1000);
+                const prompt = `[系统指令：角色 ${grabberName} 刚才领取了红包，金额为 ${grabAmount} 元（平均金额为 ${average} 元）。请发表一句符合人设的简短感言。直接输出内容，不要带括号。]`;
+                triggerAIResponse(prompt, grabberId, chatId);
+            }, 1000);
         }
 
         saveMessagesToLocalStorage();
@@ -3807,7 +3682,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ]);
     };
 
-    function sendMessage(msgData) {
+    function sendMessage(msgData, targetId = null) {
         if (!state.currentChat) return;
         const chatId = state.currentChat.id;
         if (!state.messages[chatId]) state.messages[chatId] = [];
@@ -3846,38 +3721,44 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 只有系统消息才自动触发 AI，用户发送的消息需要手动点击灵动岛或通话头像
         if (msgData.isSilent && !msgData.noTrigger) {
-            triggerAIResponse(msgData.text);
+            triggerAIResponse(msgData.text, targetId);
         }
     }
 
-    function triggerAIResponse(customPrompt = null, targetId = null) {
+    function triggerAIResponse(customPrompt = null, targetId = null, chatId = null) {
         if (island.classList.contains('active')) return;
         
         setIslandState('loading');
         
-        const chatId = state.currentChat ? state.currentChat.id : 'unknown';
+        const activeChatId = chatId || (state.currentChat ? state.currentChat.id : 'unknown');
+        const mode = state.currentPage === 'moments' ? 'moments' : 'chat';
         
         // 使用构建生成 Prompt 的函数，过滤掉历史记录
-        const currentSessionMessages = buildGenerationPrompt(chatId);
+        const currentSessionMessages = buildGenerationPrompt(activeChatId);
         const lastMessages = currentSessionMessages.slice(-5);
         
         const requestData = {
             source: 'yuii-phone',
             type: 'YUII_AI_REQUEST',
-            requestId: 'req_' + Date.now(),
+            requestId: 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
             prompt: customPrompt,
+            targetId: targetId || activeChatId,
+            mode: mode,
             context: lastMessages,
-            mode: state.currentPage === 'moments' ? 'moments' : 'chat',
-            chatId: chatId
+            chatId: activeChatId
         };
         
-        console.log('[SillyPhone] 发送标准桥接请求:', requestData);
+        lastAIRequest = requestData;
+        
+        console.log('[SillyPhone] 发送 AI 请求:', requestData);
         window.parent.postMessage(requestData, '*');
 
+        if (aiResponseTimer) clearTimeout(aiResponseTimer);
         aiResponseTimer = setTimeout(() => {
             if (island.classList.contains('active')) {
                 setIslandState('default');
-                showToast('酒馆响应超时', 'x-circle');
+                showToast('响应超时，请重试', 'x-circle');
+                aiResponseTimer = null;
             }
         }, 60000); 
     }
@@ -4562,51 +4443,16 @@ document.addEventListener('DOMContentLoaded', () => {
     function triggerMemberChangeReaction(chatId, type, names) {
         if (!state.currentChat || !state.currentChat.isGroup) return;
         
-        // 随机选择一个还在群里的角色（非用户）
         const otherMembers = state.currentChat.members.filter(m => m.id !== 'user');
         if (otherMembers.length === 0) return;
         
         const reactor = otherMembers[Math.floor(Math.random() * otherMembers.length)];
+        const prompt = `[系统指令：角色 ${reactor.name} 看到 ${names} ${type === 'add' ? '加入' : '离开'} 了群聊，请发表一句符合人设的简短感言。直接输出内容，不要带括号。]`;
         
-        let reactionText = '';
-        if (type === 'add') {
-            const reactions = [
-                `欢迎 ${names}！`,
-                `哇，新人来了！欢迎欢迎`,
-                `欢迎加入我们这个大家庭~`,
-                `欢迎 ${names}，进群请发红包（开玩笑的）`,
-                `欢迎欢迎，这里很热闹的`
-            ];
-            reactionText = reactions[Math.floor(Math.random() * reactions.length)];
-        } else {
-            const reactions = [
-                `${names} 怎么走了？`,
-                `啊，${names} 被踢了吗？`,
-                `群里又冷清了一点...`,
-                `走好不送~`,
-                `发生了什么事？`
-            ];
-            reactionText = reactions[Math.floor(Math.random() * reactions.length)];
-        }
-
-        // 延迟发送反应消息
+        // 延迟触发 AI 请求
         setTimeout(() => {
-            const aiMsg = {
-                id: 'msg_' + Date.now(),
-                senderId: reactor.id,
-                type: 'ai',
-                text: reactionText,
-                time: new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0')
-            };
-            
-            if (state.messages[chatId]) {
-                state.messages[chatId].push(aiMsg);
-                saveMessagesToLocalStorage();
-                if (state.currentPage === 'chat-window' && state.currentChat.id === chatId) {
-                    renderMessages(chatId);
-                }
-            }
-        }, 1500 + Math.random() * 2000);
+            triggerAIResponse(prompt, reactor.id, chatId);
+        }, 1000);
     }
 
     function handleAILeaveAction(chatId, aiSenderId) {
@@ -4682,31 +4528,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 6. 触发离开者的“回归感言”
             setTimeout(() => {
-                const comebackReactions = [
-                    `哼，既然你们这么求我，那我就勉为其难回来吧。`,
-                    `怎么又把我拉回来了？真是拿你们没办法。`,
-                    `刚才手滑了，绝对不是故意退群的！`,
-                    `哎呀，群里没我果然不行吧？`,
-                    `我看谁还敢气我，下次我真走了！`,
-                    `既然大家这么热情，那我就继续留下来陪你们聊天吧~`,
-                    `刚才是谁在想我？我感觉到召唤就回来了。`
-                ];
-                const comebackText = comebackReactions[Math.floor(Math.random() * comebackReactions.length)];
-                
-                const comebackMsg = {
-                    id: 'msg_' + Date.now() + '_comeback',
-                    senderId: leavingAI.id,
-                    type: 'ai',
-                    text: comebackText,
-                    time: new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0')
-                };
-                
-                state.messages[chatId].push(comebackMsg);
-                saveMessagesToLocalStorage();
-                if (state.currentChat && state.currentChat.id === chatId) {
-                    renderMessages(chatId);
-                }
-            }, 2000 + Math.random() * 2000);
+                const prompt = `[系统指令：角色 ${leavingAI.name} 刚才退群后又被拉回来了，请发表一句符合人设的“回归感言”。直接输出内容，不要带括号。]`;
+                triggerAIResponse(prompt, leavingAI.id, chatId);
+            }, 2000);
 
         }, rejoinDelay);
     }
@@ -4948,11 +4772,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleAIMomentsAction(momentId, actionType) {
         const prompt = `(系统指令：请以角色的身份，对 ID 为 ${momentId} 的朋友圈动态进行 ${actionType === 'like' ? '点赞并简短评论' : '回复'}。请直接输出回复内容，不要带括号)`;
-        triggerAIResponse(prompt);
-    }
-
-    function handleAIChatReply(prompt) {
-        triggerAIResponse(prompt);
+        triggerAIResponse(prompt, momentId);
     }
 
     window.addEventListener('message', (event) => {
@@ -4964,35 +4784,112 @@ document.addEventListener('DOMContentLoaded', () => {
             setIslandState('default');
 
             if (data.replyText) {
-                processAIReply(data.replyText, data.chatId);
+                const mode = data.mode || (lastAIRequest ? lastAIRequest.mode : null);
+                const targetId = data.targetId || (lastAIRequest ? lastAIRequest.targetId : null);
+                const chatId = data.chatId || (lastAIRequest ? lastAIRequest.chatId : null);
+                
+                processAIReply(data.replyText, chatId, mode, targetId);
             }
             
             loadFromSillyTavern();
         }
 
         if (data.type === 'YUII_AI_ERROR') {
+            if (aiResponseTimer) clearTimeout(aiResponseTimer);
             setIslandState('default');
             showToast('生成失败: ' + data.error, 'x-circle');
         }
     });
 
-    function processAIReply(text, chatId) {
-        if (!chatId || !state.messages[chatId]) return;
+    function processAIReply(text, chatId, mode, targetId) {
+        // 兜底逻辑：如果缺少上下文，尝试从当前状态获取
+        mode = mode || (state.currentPage === 'moments' ? 'moments' : 'chat');
+        chatId = chatId || (state.currentChat ? state.currentChat.id : null);
+        targetId = targetId || chatId;
 
-        const time = new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0');
-        
-        const newMessage = {
-            id: 'msg_' + Date.now(),
-            type: 'ai',
-            senderId: chatId,
-            time: time,
-            text: text
-        };
+        if (mode === 'moments') {
+            const moment = state.moments.find(m => m.id === targetId);
+            if (moment) {
+                // 尝试从文本中解析角色名，或者随机选一个
+                let senderName = '好友';
+                let cleanText = text;
+                
+                // 简单的解析逻辑：如果回复以 "角色名: " 开头
+                const match = text.match(/^([^：:]+)[：:]\s*(.*)/);
+                if (match) {
+                    senderName = match[1];
+                    cleanText = match[2];
+                }
 
-        state.messages[chatId].push(newMessage);
-        saveMessagesToLocalStorage();
-        renderMessages(chatId);
-        showToast('收到新消息', 'message-square');
+                moment.comments.push({
+                    id: 'c' + Date.now(),
+                    authorId: 'ai',
+                    authorName: senderName,
+                    text: cleanText
+                });
+                saveMoments();
+                renderMomentsList();
+                showToast('朋友圈收到新回复', 'sparkles');
+            }
+        } else {
+            if (!chatId || !state.messages[chatId]) return;
+
+            // 检查是否是上帝模式或群聊，尝试解析多行对话
+            const isGroup = state.currentChat && state.currentChat.isGroup;
+            const isGodMode = state.currentChat && state.currentChat.godMode;
+
+            if (isGroup || isGodMode) {
+                const lines = text.split('\n').filter(l => l.trim());
+                let processedAny = false;
+
+                lines.forEach(line => {
+                    // 匹配 "角色名: 内容" 或 "角色名：内容"
+                    const match = line.match(/^([^：:]+)[：:]\s*(.*)/);
+                    if (match) {
+                        const senderName = match[1].trim();
+                        const content = match[2].trim();
+                        
+                        // 查找对应的联系人 ID
+                        const contact = state.contacts.find(c => c.name === senderName);
+                        const senderId = contact ? contact.id : chatId;
+
+                        const time = new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0');
+                        state.messages[chatId].push({
+                            id: 'msg_' + Date.now() + Math.random().toString(36).substr(2, 5),
+                            type: 'ai',
+                            senderId: senderId,
+                            senderName: senderName,
+                            time: time,
+                            text: content
+                        });
+                        processedAny = true;
+                    }
+                });
+
+                if (processedAny) {
+                    saveMessagesToLocalStorage();
+                    renderMessages(chatId);
+                    showToast('收到新消息', 'message-square');
+                    return;
+                }
+            }
+
+            // 普通单人聊天或解析失败的兜底
+            const time = new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0');
+            
+            const newMessage = {
+                id: 'msg_' + Date.now(),
+                type: 'ai',
+                senderId: chatId,
+                time: time,
+                text: text
+            };
+
+            state.messages[chatId].push(newMessage);
+            saveMessagesToLocalStorage();
+            renderMessages(chatId);
+            showToast('收到新消息', 'message-square');
+        }
     }
 
     loadUserStickers();
