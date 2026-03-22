@@ -4,7 +4,7 @@
  * Bridge Version - 2026-03-22
  */
 
-document.addEventListener('DOMContentLoaded', () => {
+function initSillyPhoneUI() {
     const state = {
         currentPage: 'chat-list',
         currentChat: null,
@@ -4955,4 +4955,11 @@ document.addEventListener('DOMContentLoaded', () => {
     loadSettings();
     loadStateFromLocalStorage();
     renderChatList();
-});
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initSillyPhoneUI);
+} else {
+    // 如果是动态注入（如酒馆正则），DOM 已经加载完毕，直接执行
+    initSillyPhoneUI();
+}
