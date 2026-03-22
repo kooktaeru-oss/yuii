@@ -907,6 +907,7 @@ function initSillyPhoneUI() {
     const islandText = document.getElementById('island-text');
     let aiResponseTimer = null;
     let lastAIRequest = null;
+    let isAIRequestPending = false; // AI 请求挂起状态
     const msgInput = document.getElementById('msg-input');
     const screen = document.querySelector('.screen');
 
@@ -3119,6 +3120,20 @@ function initSillyPhoneUI() {
             return;
         }
 
+        // 如果正在请求 AI，再次点击则取消响应
+        if (isAIRequestPending) {
+            isAIRequestPending = false;
+            setIslandState('default');
+            showToast('已取消响应', 'x');
+            
+            // 尝试停止酒馆生成
+            const st = getSTInterface();
+            if (st.executeSlashCommands) {
+                st.executeSlashCommands('/stop');
+            }
+            return;
+        }
+
         // 上帝视角下的灵动岛交互：触发群内角色随机对话
         if (state.currentPage === 'chat-window' && state.currentChat && state.currentChat.isGroup && state.currentChat.godMode) {
             triggerAIResponse("[系统指令：请让群里的角色进行随机对话，模拟角色之间的互动。不要带括号，直接输出对话内容。]");
@@ -3961,8 +3976,9 @@ function initSillyPhoneUI() {
     }
 
     async function triggerAIResponse(customPrompt = null, targetId = null, chatId = null) {
-        if (island.classList.contains('active')) return;
+        if (isAIRequestPending) return;
         
+        isAIRequestPending = true;
         setIslandState('loading');
         
         const activeChatId = chatId || (state.currentChat ? state.currentChat.id : 'unknown');
@@ -4013,6 +4029,10 @@ function initSillyPhoneUI() {
                 
                 const replyText = String(await st.generateRaw(rawRequestData) || '').trim();
                 
+                // 检查是否已被取消
+                if (!isAIRequestPending) return;
+                
+                isAIRequestPending = false;
                 setIslandState('default');
                 if (replyText) {
                     processAIReply(replyText, activeChatId, mode, targetId || activeChatId);
@@ -4021,6 +4041,7 @@ function initSillyPhoneUI() {
                 }
             } catch (error) {
                 console.error('[SillyPhone] 同层生成失败:', error);
+                isAIRequestPending = false;
                 setIslandState('default');
                 showToast('生成失败: ' + error.message, 'x-circle');
             }
@@ -4037,6 +4058,8 @@ function initSillyPhoneUI() {
                 // 这里为了兼容性，我们仍然发送 postMessage 兜底
             } catch (error) {
                 console.error('[SillyPhone] Slash 命令执行失败:', error);
+                isAIRequestPending = false;
+                setIslandState('default');
             }
         }
 
@@ -4045,7 +4068,8 @@ function initSillyPhoneUI() {
 
         if (aiResponseTimer) clearTimeout(aiResponseTimer);
         aiResponseTimer = setTimeout(() => {
-            if (island.classList.contains('active')) {
+            if (isAIRequestPending) {
+                isAIRequestPending = false;
                 setIslandState('default');
                 showToast('响应超时，请重试', 'x-circle');
                 aiResponseTimer = null;
@@ -5127,24 +5151,30 @@ function initSillyPhoneUI() {
         if (!data || data.source !== 'yuii-phone-bridge') return;
 
         if (data.type === 'YUII_AI_REPLY') {
-            if (aiResponseTimer) clearTimeout(aiResponseTimer);
-            setIslandState('default');
+            if (isAIRequestPending) {
+                isAIRequestPending = false;
+                if (aiResponseTimer) clearTimeout(aiResponseTimer);
+                setIslandState('default');
 
-            if (data.replyText) {
-                const mode = data.mode || (lastAIRequest ? lastAIRequest.mode : null);
-                const targetId = data.targetId || (lastAIRequest ? lastAIRequest.targetId : null);
-                const chatId = data.chatId || (lastAIRequest ? lastAIRequest.chatId : null);
+                if (data.replyText) {
+                    const mode = data.mode || (lastAIRequest ? lastAIRequest.mode : null);
+                    const targetId = data.targetId || (lastAIRequest ? lastAIRequest.targetId : null);
+                    const chatId = data.chatId || (lastAIRequest ? lastAIRequest.chatId : null);
+                    
+                    processAIReply(data.replyText, chatId, mode, targetId);
+                }
                 
-                processAIReply(data.replyText, chatId, mode, targetId);
+                loadFromSillyTavern();
             }
-            
-            loadFromSillyTavern();
         }
 
         if (data.type === 'YUII_AI_ERROR') {
-            if (aiResponseTimer) clearTimeout(aiResponseTimer);
-            setIslandState('default');
-            showToast('生成失败: ' + data.error, 'x-circle');
+            if (isAIRequestPending) {
+                isAIRequestPending = false;
+                if (aiResponseTimer) clearTimeout(aiResponseTimer);
+                setIslandState('default');
+                showToast('生成失败: ' + data.error, 'x-circle');
+            }
         }
     });
 
