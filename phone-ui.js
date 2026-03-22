@@ -798,7 +798,7 @@ document.addEventListener('DOMContentLoaded', () => {
         content.appendChild(cancelBtn);
 
         modal.style.display = 'flex';
-        if (typeof lucide !== 'undefined') lucide.createIcons();
+        if (typeof lucide !== 'undefined') if(typeof lucide !== 'undefined') lucide.createIcons();
     }
 
     function switchAccount() {
@@ -993,7 +993,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <span>${text}</span>
         `;
         toastContainer.appendChild(toast);
-        lucide.createIcons();
+        if(typeof lucide !== 'undefined') lucide.createIcons();
 
         setTimeout(() => {
             toast.classList.add('fade-out');
@@ -1149,7 +1149,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const content = document.getElementById('text-img-full-content');
         content.textContent = fullText;
         modal.style.display = 'flex';
-        lucide.createIcons();
+        if(typeof lucide !== 'undefined') lucide.createIcons();
     };
 
     document.getElementById('close-text-img-modal').onclick = () => {
@@ -1226,7 +1226,7 @@ document.addEventListener('DOMContentLoaded', () => {
         applyGlassOpacity(glassOpacityVal);
         glassOpacityIntensityInput.value = parseFloat(glassOpacityVal) * 100;
         glassOpacityValueDisplay.textContent = glassOpacityVal;
-        lucide.createIcons();
+        if(typeof lucide !== 'undefined') lucide.createIcons();
     }
 
     function applyBlur(val) {
@@ -1612,11 +1612,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     item.classList.add('selected');
                     item.querySelector('.check-icon').style.display = 'block';
                 }
-                lucide.createIcons();
+                if(typeof lucide !== 'undefined') lucide.createIcons();
             };
             memberSelectList.appendChild(item);
         });
-        lucide.createIcons();
+        if(typeof lucide !== 'undefined') lucide.createIcons();
     }
 
     confirmCreateGroupBtn.onclick = () => {
@@ -1715,7 +1715,7 @@ document.addEventListener('DOMContentLoaded', () => {
             item.onclick = () => openChat(g);
             list.appendChild(item);
         });
-        lucide.createIcons();
+        if(typeof lucide !== 'undefined') lucide.createIcons();
     }
 
     function renderChatList() {
@@ -1904,7 +1904,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
         
-        lucide.createIcons();
+        if(typeof lucide !== 'undefined') lucide.createIcons();
         attachMomentEvents();
     }
 
@@ -2278,7 +2278,7 @@ document.addEventListener('DOMContentLoaded', () => {
             addMomentImageBtn.style.display = 'flex';
         }
         
-        lucide.createIcons();
+        if(typeof lucide !== 'undefined') lucide.createIcons();
     }
 
     confirmPostMomentBtn.onclick = () => {
@@ -2463,7 +2463,7 @@ document.addEventListener('DOMContentLoaded', () => {
             contactsList.appendChild(item);
         });
 
-        lucide.createIcons();
+        if(typeof lucide !== 'undefined') lucide.createIcons();
     }
 
     function renderMyFriendsList() {
@@ -2499,7 +2499,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             myFriendsList.appendChild(item);
         });
-        lucide.createIcons();
+        if(typeof lucide !== 'undefined') lucide.createIcons();
     }
 
     function openChat(contact) {
@@ -2555,7 +2555,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const btnTransferIcon = document.querySelector('#btn-transfer .panel-icon');
         if (btnTransferIcon) {
             btnTransferIcon.innerHTML = `<i data-lucide="${contact.isGroup ? 'gift' : 'banknote'}" size="24"></i>`;
-            lucide.createIcons();
+            if(typeof lucide !== 'undefined') lucide.createIcons();
         }
         
         checkExpiredMoney(contact.id);
@@ -3212,7 +3212,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 `;
             });
-            lucide.createIcons();
+            if(typeof lucide !== 'undefined') lucide.createIcons();
         } else {
             listEl.innerHTML = '<div style="text-align:center; color:rgba(255,255,255,0.5); padding: 20px;">暂无领取记录</div>';
         }
@@ -3565,7 +3565,7 @@ document.addEventListener('DOMContentLoaded', () => {
             wrapper.appendChild(bubbleContainer);
             messagesContainer.appendChild(wrapper);
         });
-        lucide.createIcons();
+        if(typeof lucide !== 'undefined') lucide.createIcons();
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
 
@@ -4410,7 +4410,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         grid.appendChild(removeBtn);
         
-        lucide.createIcons();
+        if(typeof lucide !== 'undefined') lucide.createIcons();
     }
 
     function addMembersToGroup() {
