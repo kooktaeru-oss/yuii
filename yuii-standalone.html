@@ -17,9 +17,9 @@
     --c-accent: rgba(255, 255, 255, 0.4);
     --c-bubble-ai: rgba(255, 255, 255, 0.18);
     --c-bubble-user: rgb(227, 224, 255, 0.20);
-    --blur-val: 12px;
-    --bubble-blur-val: 12px;
-    --nav-blur: 15px;
+    --blur-val: 20px;
+    --bubble-blur-val: 15px;
+    --nav-blur: 20px;
     --glass-opacity: 0.05;
     --blur: blur(var(--blur-val));
     --bubble-blur: blur(var(--bubble-blur-val));
@@ -107,18 +107,18 @@ body {
 }
 
 .dynamic-island {
-    background: rgba(39, 39, 42, 0.8); /* 深灰雾面，替代纯黑 */
-    backdrop-filter: var(--blur);
-    -webkit-backdrop-filter: var(--blur);
+    background: rgba(255, 255, 255, 0.12); /* 奶灰雾面 */
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
     will-change: backdrop-filter;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 20px;
     min-width: 110px;
     height: 30px;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: white;
+    color: rgba(255, 255, 255, 0.9);
     font-size: 11px;
     transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     cursor: pointer;
@@ -137,6 +137,12 @@ body {
     border-radius: 50%;
     margin-right: 8px;
     display: none;
+}
+
+.island-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .dynamic-island.active {
@@ -401,6 +407,27 @@ body {
     backdrop-filter: var(--bubble-blur);
     -webkit-backdrop-filter: var(--bubble-blur);
     border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* 消息分组美化 */
+.message-wrapper.consecutive {
+    margin-top: -1px;
+}
+
+.message-wrapper.consecutive .bubble.ai {
+    border-top-left-radius: 18px;
+}
+
+.message-wrapper.consecutive .bubble.user {
+    border-top-right-radius: 18px;
+}
+
+.message-wrapper.consecutive .msg-avatar-spacer {
+    display: block;
+}
+
+.message-wrapper.consecutive .msg-sender-name {
+    display: none;
 }
 
 .mention-highlight {
@@ -1157,7 +1184,7 @@ input[type="number"] {
 }
 
 .sticker-item.selected::after {
-    content: '✓';
+    content: "";
     position: absolute;
     top: -4px;
     right: -4px;
@@ -2021,15 +2048,18 @@ input[type="number"] {
 .dynamic-island.notification {
     min-width: 220px;
     height: 44px;
-    background: rgba(255, 255, 255, 0.95);
-    color: #1a1a1a;
+    background: rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    color: #ffffff;
     border-radius: 22px;
     padding: 0 16px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
 .dynamic-island.notification #island-text {
     font-weight: 700;
-    color: #1a1a1a;
+    color: #ffffff;
 }
 
 .dynamic-island.notification .island-dot {
@@ -4617,7 +4647,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return `<div class="text-img-card" data-full-text="${safeDesc}" onclick="window.openTextImgDetail(this)">
                     <div class="text-img-header">
                         <i data-lucide="image" size="10"></i>
-                        <span>IMAGE DESCRIPTION</span>
+                        <span>意境图</span>
                     </div>
                     <div class="text-img-body">${desc}</div>
                 </div>`;
@@ -6300,7 +6330,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (status === 'loading') {
             island.classList.add('active');
-            islandText.textContent = '...';
+            islandText.textContent = '正在思考';
             if (callAvatar) callAvatar.classList.add('responding');
             if (state.currentChat) {
                 chatName.textContent = '对方正在输入...';
@@ -6792,6 +6822,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             const wrapper = document.createElement('div');
             const isUser = m.type === 'user';
+            const isFirstInGroup = m.senderId !== lastSenderId;
 
             // 处理撤回消息：显示为居中的系统消息
             if (m.isRecalled) {
@@ -6853,23 +6884,31 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            wrapper.className = `message-wrapper ${isUser ? 'user' : 'ai'}`;
+            wrapper.className = `message-wrapper ${isUser ? 'user' : 'ai'} ${isFirstInGroup ? 'first-in-group' : 'consecutive'}`;
             
-            const avatar = document.createElement('img');
-            avatar.className = 'msg-avatar';
-            avatar.referrerPolicy = 'no-referrer';
-            
-            if (isUser) {
-                avatar.src = m.senderAvatar || state.userAvatar;
-            } else if (state.currentChat.isGroup) {
-                // 群聊中根据 senderId 找头像
-                const member = state.currentChat.members.find(mem => mem.id === m.senderId);
-                avatar.src = member ? member.avatar : state.currentChat.avatar;
+            if (isFirstInGroup) {
+                const avatar = document.createElement('img');
+                avatar.className = 'msg-avatar';
+                avatar.referrerPolicy = 'no-referrer';
+                
+                if (isUser) {
+                    avatar.src = m.senderAvatar || state.userAvatar;
+                } else if (state.currentChat.isGroup) {
+                    // 群聊中根据 senderId 找头像
+                    const member = state.currentChat.members.find(mem => mem.id === m.senderId);
+                    avatar.src = member ? member.avatar : state.currentChat.avatar;
+                } else {
+                    // 使用当前聊天的头像 (可能已被修改)
+                    avatar.src = state.currentChat.avatar;
+                }
+                wrapper.appendChild(avatar);
             } else {
-                // 使用当前聊天的头像 (可能已被修改)
-                avatar.src = state.currentChat.avatar;
+                const spacer = document.createElement('div');
+                spacer.className = 'msg-avatar-spacer';
+                wrapper.appendChild(spacer);
             }
-            wrapper.appendChild(avatar);
+
+            lastSenderId = m.senderId;
 
             const bubbleContainer = document.createElement('div');
             bubbleContainer.className = 'bubble-container';
