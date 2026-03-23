@@ -184,6 +184,19 @@ function initSillyPhoneUI() {
         return text;
     }
 
+    function getStorageKey() {
+        try {
+            const target = window.getCurrentMessageId ? window : window.parent;
+            if (target.chat_metadata && target.chat_metadata.chat_id) {
+                return 'sillyphone_data_' + target.chat_metadata.chat_id;
+            }
+            if (target.this_chid !== undefined) {
+                return 'sillyphone_data_char_' + target.this_chid;
+            }
+        } catch (e) {}
+        return 'sillyphone_backup_data';
+    }
+
     function syncToSillyTavern() {
         const st = getSTInterface();
         const msgId = st.getCurrentMessageId();
@@ -209,16 +222,14 @@ function initSillyPhoneUI() {
             if (acc.messages) {
                 for (const chatId in acc.messages) {
                     if (Array.isArray(acc.messages[chatId])) {
-                        // 每个会话保留最近 10 条消息（含历史和当前），足以维持“延续感”且不卡顿
-                        prunedMessages[chatId] = acc.messages[chatId].slice(-10);
+                        // 每个会话保留最近 20 条消息（含历史和当前），足以维持“延续感”且不卡顿
+                        prunedMessages[chatId] = acc.messages[chatId].slice(-20);
                     }
                 }
             }
-            const prunedMoments = acc.moments ? acc.moments.slice(-5) : [];
             return {
                 ...acc,
-                messages: prunedMessages,
-                moments: prunedMoments
+                messages: prunedMessages
             };
         });
 
@@ -239,9 +250,14 @@ function initSillyPhoneUI() {
             textContent += serializeMomentsToText(activeAccount.moments);
         }
 
-        // 恢复 JSON 备份，放在 HTML 注释中，避免污染 AI 的上下文，同时保留用户的名字、头像等设置
-        const jsonBackup = `<!-- SILLYPHONE_DATA_START\n${JSON.stringify(shoujiData)}\nSILLYPHONE_DATA_END -->`;
-        const shoujiTag = `<shouji>\n${jsonBackup}\n${textContent.trim()}\n</shouji>`;
+        // 保存 JSON 备份到 localStorage，避免污染 AI 的上下文，同时保留用户的名字、头像等设置
+        try {
+            localStorage.setItem(getStorageKey(), JSON.stringify(shoujiData));
+        } catch (e) {
+            console.error("保存手机数据到本地失败", e);
+        }
+
+        const shoujiTag = `<shouji>\n${textContent.trim()}\n</shouji>`;
         
         let updatedMessage;
         if (raw.includes('<shouji>')) {
@@ -456,6 +472,15 @@ function initSillyPhoneUI() {
         const msgId = st.getCurrentMessageId();
         if (msgId === null) return;
 
+        // 尝试从 localStorage 读取最新状态
+        let localDataObj = null;
+        try {
+            const localData = localStorage.getItem(getStorageKey());
+            if (localData) {
+                localDataObj = JSON.parse(localData);
+            }
+        } catch (e) { console.error("读取本地备份JSON失败", e); }
+
         // 尝试从当前层往回找最多 30 层，寻找最近的手机数据
         let combinedMessages = {};
         let combinedMoments = [];
@@ -464,6 +489,14 @@ function initSillyPhoneUI() {
         
         let foundShouji = false;
         let latestRawAIMessage = null;
+
+        // 如果本地有数据，优先使用本地的设置和账号信息
+        if (localDataObj) {
+            settings = localDataObj.settings;
+            userAccounts = localDataObj.userAccounts;
+            state.activeAccountId = localDataObj.activeAccountId;
+            state.stickers = localDataObj.stickers || state.stickers;
+        }
 
         for (let i = 0; i <= 30; i++) {
             const targetId = msgId - i;
@@ -484,7 +517,7 @@ function initSillyPhoneUI() {
             if (shoujiContent !== null) {
                 foundShouji = true;
                 
-                // 尝试提取隐藏的 JSON 备份
+                // 尝试提取隐藏的 JSON 备份 (兼容老数据)
                 const backupMatch = shoujiContent.match(/<!-- SILLYPHONE_DATA_START\n([\s\S]*?)\nSILLYPHONE_DATA_END -->/);
                 let data = null;
                 
@@ -492,7 +525,7 @@ function initSillyPhoneUI() {
                     try {
                         data = JSON.parse(backupMatch[1]);
                     } catch (e) { console.error("解析备份JSON失败", e); }
-                } else {
+                } else if (!localDataObj) {
                     // 兼容旧版本：整个内容都是 JSON
                     try {
                         data = JSON.parse(shoujiContent);
