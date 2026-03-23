@@ -59,7 +59,8 @@ function initSillyPhoneUI() {
             isMuted: false,
             isSpeaker: false,
             transcript: []
-        }
+        },
+        stUserName: null
     };
 
     // --- SillyTavern 同层同步逻辑 ---
@@ -505,6 +506,11 @@ function initSillyPhoneUI() {
             const chat = st.getChatMessages(targetId)[0];
             if (!chat || !chat.message) continue;
 
+            // 记录用户在酒馆里的名字，用于解析原始代码时识别身份
+            if (chat.is_user && chat.name && chat.name !== '我' && chat.name !== 'user') {
+                state.stUserName = chat.name;
+            }
+
             // 1. 检查是否有 <shouji> 标签
             let shoujiContent = null;
             const jsonMatch = chat.message.match(/<shouji>([\s\S]*?)<\/shouji>/);
@@ -621,7 +627,7 @@ function initSillyPhoneUI() {
                     
                     const formattedMsgs = textData.messages[cid].map(m => {
                         let senderName = m.sender || effectiveCid;
-                        const isUser = senderName === '我' || senderName === state.userName || senderName === 'user' || senderName === state.wechatId;
+                        const isUser = senderName === '我' || senderName === state.userName || senderName === 'user' || senderName === 'me' || senderName === state.wechatId || (state.stUserName && senderName === state.stUserName) || (!isGroup && senderName !== effectiveCid && senderName !== '系统消息');
                         
                         if (isUser) {
                             senderName = state.userName; // 统一使用当前用户名
@@ -889,7 +895,7 @@ function initSillyPhoneUI() {
                             }
                         }
                         
-                        const isUser = senderName === '我' || senderName === state.userName || senderName === 'user' || senderName === state.wechatId;
+                        const isUser = senderName === '我' || senderName === state.userName || senderName === 'user' || senderName === 'me' || senderName === state.wechatId || (state.stUserName && senderName === state.stUserName) || (!state.currentChat.isGroup && senderName !== state.currentChat.name && senderName !== '系统消息');
 
                         const msg = {
                             id: 'msg_' + Math.random().toString(36).substr(2, 9),
@@ -5504,7 +5510,7 @@ function initSillyPhoneUI() {
                     // 转换格式以匹配 state.messages 的结构，并过滤掉 AI 幻觉生成的玩家消息
                     const formattedMsgs = newMsgs.map(m => {
                         let senderName = m.sender || effectiveCid;
-                        const isUser = senderName === '我' || senderName === state.userName || senderName === 'user' || senderName === state.wechatId;
+                        const isUser = senderName === '我' || senderName === state.userName || senderName === 'user' || senderName === 'me' || senderName === state.wechatId || (state.stUserName && senderName === state.stUserName) || (state.currentChat && !state.currentChat.isGroup && senderName !== state.currentChat.name && senderName !== '系统消息');
                         
                         if (isUser) {
                             senderName = state.userName; // 统一使用当前用户名
