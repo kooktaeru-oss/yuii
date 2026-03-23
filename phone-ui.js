@@ -525,9 +525,9 @@ function initSillyPhoneUI() {
                             if (!combinedMessages[cid]) {
                                 combinedMessages[cid] = active.messages[cid].map(m => ({ ...m, isHistory: true }));
                             } else {
-                                const existingSignatures = new Set(combinedMessages[cid].map(m => `${m.sender || m.senderId}|${m.time}|${m.type}|${m.content || m.text || m.duration || ''}`));
+                                const existingSignatures = new Set(combinedMessages[cid].map(m => `${m.senderName || m.sender || m.senderId}|${m.time}|${m.type}|${m.content || m.text || m.duration || ''}`));
                                 const historyToAdd = active.messages[cid]
-                                    .filter(m => !existingSignatures.has(`${m.sender || m.senderId}|${m.time}|${m.type}|${m.content || m.text || m.duration || ''}`))
+                                    .filter(m => !existingSignatures.has(`${m.senderName || m.sender || m.senderId}|${m.time}|${m.type}|${m.content || m.text || m.duration || ''}`))
                                     .map(m => ({ ...m, isHistory: true }));
                                 combinedMessages[cid] = [...historyToAdd, ...combinedMessages[cid]];
                             }
@@ -558,18 +558,35 @@ function initSillyPhoneUI() {
                 };
 
                 for (const cid in textData.messages) {
-                    const realCid = getContactIdByName(cid);
+                    let effectiveCid = cid;
+                    let realCid = getContactIdByName(effectiveCid);
+                    
+                    // 如果 cid 是用户自己，说明 AI 搞反了视角（比如生成了【和林钰如的聊天】）
+                    if (effectiveCid === state.userName || effectiveCid === '我' || effectiveCid === 'user') {
+                        // 寻找不是用户的发送者
+                        const aiMsg = textData.messages[cid].find(m => {
+                            const s = m.sender;
+                            return s && s !== '我' && s !== state.userName && s !== 'user' && s !== '系统消息';
+                        });
+                        if (aiMsg && aiMsg.sender) {
+                            effectiveCid = aiMsg.sender;
+                            realCid = getContactIdByName(effectiveCid);
+                        } else if (state.currentChat) {
+                            effectiveCid = state.currentChat.name;
+                            realCid = state.currentChat.id;
+                        }
+                    }
                     
                     // 判断是否是群聊
-                    const isGroup = cid.includes('群聊') || textData.messages[cid].some(m => m.sender && m.sender !== cid && m.sender !== '我' && m.sender !== '我方消息' && m.sender !== '系统消息');
+                    const isGroup = effectiveCid.includes('群聊') || textData.messages[cid].some(m => m.sender && m.sender !== effectiveCid && m.sender !== '我' && m.sender !== '我方消息' && m.sender !== '系统消息');
                     
                     const formattedMsgs = textData.messages[cid].map(m => {
-                        let senderName = m.sender || cid;
+                        let senderName = m.sender || effectiveCid;
                         const isUser = senderName === '我' || senderName === state.userName || senderName === 'user';
                         
                         // 私聊强制使用对方的名字，防止 AI 幻觉使用其他名字
                         if (!isUser && !isGroup) {
-                            senderName = cid; // cid 就是私聊对象的原名
+                            senderName = effectiveCid; // effectiveCid 就是私聊对象的原名
                         }
 
                         return {
@@ -604,9 +621,9 @@ function initSillyPhoneUI() {
                             if (t === 'redpacket') return 'red-packet';
                             return t;
                         };
-                        const existingSignatures = new Set(combinedMessages[realCid].map(m => `${m.sender || m.senderId}|${m.time}|${getNormalizedType(m)}|${m.content || m.text || m.duration || ''}`));
+                        const existingSignatures = new Set(combinedMessages[realCid].map(m => `${m.senderName || m.sender || m.senderId}|${m.time}|${getNormalizedType(m)}|${m.content || m.text || m.duration || ''}`));
                         const historyToAdd = formattedMsgs
-                            .filter(m => !existingSignatures.has(`${m.sender || m.senderId}|${m.time}|${getNormalizedType(m)}|${m.content || m.text || m.duration || ''}`));
+                            .filter(m => !existingSignatures.has(`${m.senderName || m.sender || m.senderId}|${m.time}|${getNormalizedType(m)}|${m.content || m.text || m.duration || ''}`));
                         combinedMessages[realCid] = [...historyToAdd, ...combinedMessages[realCid]];
                     }
                     
@@ -645,8 +662,39 @@ function initSillyPhoneUI() {
         }
 
         if (userAccounts || Object.keys(combinedMessages).length > 0) {
-            if (userAccounts) state.userAccounts = userAccounts;
-            if (settings) state.settings = settings;
+            if (userAccounts) {
+                userAccounts.forEach(acc => {
+                    const existingAcc = state.userAccounts.find(a => a.id === acc.id);
+                    if (existingAcc) {
+                        if (acc.contacts) {
+                            acc.contacts.forEach(c => {
+                                if (!existingAcc.contacts.find(ec => ec.id === c.id)) {
+                                    existingAcc.contacts.push(c);
+                                }
+                            });
+                        }
+                        if (acc.groups) {
+                            acc.groups.forEach(g => {
+                                if (!existingAcc.groups.find(eg => eg.id === g.id)) {
+                                    existingAcc.groups.push(g);
+                                }
+                            });
+                        }
+                        // 只有在当前名字是默认的“我”时，才从备份中恢复名字和头像，防止覆盖用户最新修改的设置
+                        if (existingAcc.name === '我') {
+                            existingAcc.name = acc.name;
+                            existingAcc.avatar = acc.avatar;
+                            existingAcc.wechatId = acc.wechatId;
+                            if (acc.momentsBg) existingAcc.momentsBg = acc.momentsBg;
+                        }
+                    } else {
+                        state.userAccounts.push(acc);
+                    }
+                });
+            }
+            if (settings) {
+                state.settings = { ...state.settings, ...settings };
+            }
 
             const active = state.userAccounts.find(a => a.id === state.activeAccountId) || state.userAccounts[0];
             if (active) {
@@ -655,14 +703,9 @@ function initSillyPhoneUI() {
                 state.userAvatar = active.avatar;
                 state.wechatId = active.wechatId;
                 
-                // 继承回溯找到的消息和朋友圈
-                if (userAccounts) {
-                    state.contacts = active.contacts || [];
-                    state.groups = active.groups || [];
-                } else {
-                    active.contacts = state.contacts;
-                    active.groups = state.groups;
-                }
+                // 继承合并后的联系人和群组
+                state.contacts = active.contacts || [];
+                state.groups = active.groups || [];
             }
             state.messages = combinedMessages;
             state.moments = combinedMoments;
@@ -5347,7 +5390,24 @@ function initSillyPhoneUI() {
             for (const cid in parsedData.messages) {
                 if (parsedData.messages[cid].length > 0) {
                     hasParsedMessages = true;
-                    const realCid = getContactIdByName(cid);
+                    let effectiveCid = cid;
+                    let realCid = getContactIdByName(effectiveCid);
+                    
+                    // 如果 cid 是用户自己，说明 AI 搞反了视角（比如生成了【和林钰如的聊天】）
+                    if (effectiveCid === state.userName || effectiveCid === '我' || effectiveCid === 'user') {
+                        // 寻找不是用户的发送者
+                        const aiMsg = parsedData.messages[cid].find(m => {
+                            const s = m.sender;
+                            return s && s !== '我' && s !== state.userName && s !== 'user' && s !== '系统消息';
+                        });
+                        if (aiMsg && aiMsg.sender) {
+                            effectiveCid = aiMsg.sender;
+                            realCid = getContactIdByName(effectiveCid);
+                        } else if (state.currentChat) {
+                            effectiveCid = state.currentChat.name;
+                            realCid = state.currentChat.id;
+                        }
+                    }
                     
                     if (!state.messages[realCid]) state.messages[realCid] = [];
                     // 检查重复并添加
@@ -5358,12 +5418,12 @@ function initSillyPhoneUI() {
                         if (t === 'redpacket') return 'red-packet';
                         return t;
                     };
-                    const existingSignatures = new Set(state.messages[realCid].map(m => `${m.sender || m.senderId}|${m.time}|${getNormalizedType(m)}|${m.content || m.text || m.duration || ''}`));
-                    const newMsgs = parsedData.messages[cid].filter(m => !existingSignatures.has(`${m.sender || m.senderId}|${m.time}|${getNormalizedType(m)}|${m.content || m.text || m.duration || ''}`));
+                    const existingSignatures = new Set(state.messages[realCid].map(m => `${m.senderName || m.sender || m.senderId}|${m.time}|${getNormalizedType(m)}|${m.content || m.text || m.duration || ''}`));
+                    const newMsgs = parsedData.messages[cid].filter(m => !existingSignatures.has(`${m.senderName || m.sender || m.senderId}|${m.time}|${getNormalizedType(m)}|${m.content || m.text || m.duration || ''}`));
                     
-                    // 转换格式以匹配 state.messages 的结构
+                    // 转换格式以匹配 state.messages 的结构，并过滤掉 AI 幻觉生成的玩家消息
                     const formattedMsgs = newMsgs.map(m => {
-                        let senderName = m.sender || cid;
+                        let senderName = m.sender || effectiveCid;
                         const isUser = senderName === '我' || senderName === state.userName || senderName === 'user';
                         
                         // 私聊强制使用对方的名字，防止 AI 幻觉使用其他名字
@@ -5389,7 +5449,7 @@ function initSillyPhoneUI() {
                             quote: m.quote,
                             isRecalled: m.type === 'recall'
                         };
-                    });
+                    }).filter(m => m.type !== 'user');
                     
                     state.messages[realCid].push(...formattedMsgs);
                 }
