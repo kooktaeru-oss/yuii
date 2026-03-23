@@ -237,8 +237,9 @@ function initSillyPhoneUI() {
             textContent += serializeMomentsToText(activeAccount.moments);
         }
 
-        // 移除 JSON 备份，只保留纯文本格式，符合 A 老师的格式，避免思维链等额外标签被包裹进 JSON 导致冗余
-        const shoujiTag = `<shouji>\n${textContent.trim()}\n</shouji>`;
+        // 恢复 JSON 备份，放在 HTML 注释中，避免污染 AI 的上下文，同时保留用户的名字、头像等设置
+        const jsonBackup = `<!-- SILLYPHONE_DATA_START\n${JSON.stringify(shoujiData)}\nSILLYPHONE_DATA_END -->`;
+        const shoujiTag = `<shouji>\n${jsonBackup}\n${textContent.trim()}\n</shouji>`;
         
         let updatedMessage;
         if (raw.includes('<shouji>')) {
@@ -525,10 +526,13 @@ function initSillyPhoneUI() {
                             if (!combinedMessages[cid]) {
                                 combinedMessages[cid] = active.messages[cid].map(m => ({ ...m, isHistory: true }));
                             } else {
-                                const existingSignatures = new Set(combinedMessages[cid].map(m => `${m.senderName || m.sender || m.senderId}|${m.time}|${m.type}|${m.content || m.text || m.duration || ''}`));
-                                const historyToAdd = active.messages[cid]
-                                    .filter(m => !existingSignatures.has(`${m.senderName || m.sender || m.senderId}|${m.time}|${m.type}|${m.content || m.text || m.duration || ''}`))
-                                    .map(m => ({ ...m, isHistory: true }));
+                                const existingSignatures = new Set(combinedMessages[cid].map(m => `${m.senderName || m.sender || m.senderId}|${m.type}|${m.content || m.text || m.duration || ''}`));
+                                const historyToAdd = active.messages[cid].filter(m => {
+                                    const sig = `${m.senderName || m.sender || m.senderId}|${m.type}|${m.content || m.text || m.duration || ''}`;
+                                    if (existingSignatures.has(sig)) return false;
+                                    existingSignatures.add(sig);
+                                    return true;
+                                }).map(m => ({ ...m, isHistory: true }));
                                 combinedMessages[cid] = [...historyToAdd, ...combinedMessages[cid]];
                             }
                         }
@@ -584,8 +588,10 @@ function initSillyPhoneUI() {
                         let senderName = m.sender || effectiveCid;
                         const isUser = senderName === '我' || senderName === state.userName || senderName === 'user';
                         
-                        // 私聊强制使用对方的名字，防止 AI 幻觉使用其他名字
-                        if (!isUser && !isGroup) {
+                        if (isUser) {
+                            senderName = state.userName; // 统一使用当前用户名
+                        } else if (!isGroup) {
+                            // 私聊强制使用对方的名字，防止 AI 幻觉使用其他名字
                             senderName = effectiveCid; // effectiveCid 就是私聊对象的原名
                         }
 
@@ -621,9 +627,13 @@ function initSillyPhoneUI() {
                             if (t === 'redpacket') return 'red-packet';
                             return t;
                         };
-                        const existingSignatures = new Set(combinedMessages[realCid].map(m => `${m.senderName || m.sender || m.senderId}|${m.time}|${getNormalizedType(m)}|${m.content || m.text || m.duration || ''}`));
-                        const historyToAdd = formattedMsgs
-                            .filter(m => !existingSignatures.has(`${m.senderName || m.sender || m.senderId}|${m.time}|${getNormalizedType(m)}|${m.content || m.text || m.duration || ''}`));
+                        const existingSignatures = new Set(combinedMessages[realCid].map(m => `${m.senderName || m.sender || m.senderId}|${getNormalizedType(m)}|${m.content || m.text || m.duration || ''}`));
+                        const historyToAdd = formattedMsgs.filter(m => {
+                            const sig = `${m.senderName || m.sender || m.senderId}|${getNormalizedType(m)}|${m.content || m.text || m.duration || ''}`;
+                            if (existingSignatures.has(sig)) return false;
+                            existingSignatures.add(sig);
+                            return true;
+                        });
                         combinedMessages[realCid] = [...historyToAdd, ...combinedMessages[realCid]];
                     }
                     
@@ -3709,9 +3719,32 @@ function initSillyPhoneUI() {
             if (m.msgType === 'photo') {
                 contentDiv.innerHTML = formatContent(`(IMG:${m.description || '一张照片'})`);
             } else if (m.msgType === 'sticker') {
+                let displayUrl = m.url;
+                if (displayUrl && !displayUrl.startsWith('http')) {
+                    let foundUrl = null;
+                    for (const catName in state.stickers) {
+                        const cat = state.stickers[catName];
+                        const found = cat.items.find(s => 
+                            (s.url && displayUrl.includes(s.url.split('/').pop())) || 
+                            (s.label && displayUrl.includes(s.label))
+                        );
+                        if (found) {
+                            foundUrl = found.url;
+                            break;
+                        }
+                    }
+                    if (foundUrl) {
+                        displayUrl = foundUrl;
+                    } else {
+                        const match = displayUrl.match(/[a-zA-Z0-9_-]+\.[a-zA-Z0-9]+$/);
+                        if (match) {
+                            displayUrl = 'https://files.catbox.moe/' + match[0];
+                        }
+                    }
+                }
                 contentDiv.innerHTML = `
                     <div class="sticker-content">
-                        <img src="${m.url}" referrerpolicy="no-referrer" class="sticker-img">
+                        <img src="${displayUrl}" referrerpolicy="no-referrer" class="sticker-img">
                     </div>
                 `;
             } else if (m.msgType === 'voice') {
@@ -4281,7 +4314,7 @@ function initSillyPhoneUI() {
                         msgType: 'sticker', 
                         url: sticker.url, 
                         label: sticker.label,
-                        text: `[表情包: ${sticker.label}]`
+                        text: sticker.label + (sticker.url ? sticker.url.split('/').pop() : '')
                     });
                 }
             };
@@ -5418,16 +5451,23 @@ function initSillyPhoneUI() {
                         if (t === 'redpacket') return 'red-packet';
                         return t;
                     };
-                    const existingSignatures = new Set(state.messages[realCid].map(m => `${m.senderName || m.sender || m.senderId}|${m.time}|${getNormalizedType(m)}|${m.content || m.text || m.duration || ''}`));
-                    const newMsgs = parsedData.messages[cid].filter(m => !existingSignatures.has(`${m.senderName || m.sender || m.senderId}|${m.time}|${getNormalizedType(m)}|${m.content || m.text || m.duration || ''}`));
+                    const existingSignatures = new Set(state.messages[realCid].map(m => `${m.senderName || m.sender || m.senderId}|${getNormalizedType(m)}|${m.content || m.text || m.duration || ''}`));
+                    const newMsgs = parsedData.messages[cid].filter(m => {
+                        const sig = `${m.senderName || m.sender || m.senderId}|${getNormalizedType(m)}|${m.content || m.text || m.duration || ''}`;
+                        if (existingSignatures.has(sig)) return false;
+                        existingSignatures.add(sig);
+                        return true;
+                    });
                     
                     // 转换格式以匹配 state.messages 的结构，并过滤掉 AI 幻觉生成的玩家消息
                     const formattedMsgs = newMsgs.map(m => {
                         let senderName = m.sender || effectiveCid;
                         const isUser = senderName === '我' || senderName === state.userName || senderName === 'user';
                         
-                        // 私聊强制使用对方的名字，防止 AI 幻觉使用其他名字
-                        if (!isUser && state.currentChat && !state.currentChat.isGroup && realCid === state.currentChat.id) {
+                        if (isUser) {
+                            senderName = state.userName; // 统一使用当前用户名
+                        } else if (state.currentChat && !state.currentChat.isGroup && realCid === state.currentChat.id) {
+                            // 私聊强制使用对方的名字，防止 AI 幻觉使用其他名字
                             senderName = state.currentChat.name;
                         }
 
