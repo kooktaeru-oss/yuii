@@ -131,7 +131,7 @@ function initSillyPhoneUI() {
                 const avatar = msg.senderAvatar || msg.avatar || '';
                 const content = msg.text || msg.content || '';
                 const time = msg.time || '';
-                const msgType = msg.msgType || (msg.type === 'system' ? 'system' : 'text');
+                const msgType = msg.isRecalled ? 'recall' : (msg.msgType || (msg.type === 'system' ? 'system' : 'text'));
 
                 if (msgType === 'text') {
                     text += `[${sender}|${content}|${time}]\n`;
@@ -220,25 +220,25 @@ function initSillyPhoneUI() {
             };
         });
 
-        // 序列化修剪后的状态
+        // 序列化修剪后的状态，作为隐藏备份
         const shoujiData = {
             userAccounts: prunedAccounts,
             activeAccountId: state.activeAccountId,
             settings: state.settings,
             stickers: state.stickers
         };
+        const jsonBackup = `<!-- SILLYPHONE_DATA_START\n${JSON.stringify(shoujiData)}\nSILLYPHONE_DATA_END -->`;
 
         // 优先使用文本格式序列化当前账号的消息和朋友圈
         const activeAccount = prunedAccounts.find(a => a.id === state.activeAccountId) || prunedAccounts[0];
         let textContent = '';
         if (activeAccount) {
-            // 这里内部会调用 buildGenerationPrompt 逻辑（通过 filter(!isHistory)）
             textContent += serializeMessagesToText(activeAccount.messages);
             textContent += serializeMomentsToText(activeAccount.moments);
         }
 
-        // 移除 JSON 备份，只保留纯文本格式，符合 A 老师的格式，避免思维链等额外标签被包裹进 JSON 导致冗余
-        const shoujiTag = `<shouji>\n${textContent.trim()}\n</shouji>`;
+        // 将文本内容和 JSON 备份一起打包
+        const shoujiTag = `<shouji>\n${textContent.trim()}\n\n${jsonBackup}\n</shouji>`;
         
         let updatedMessage;
         if (raw.includes('<shouji>')) {
@@ -1740,6 +1740,7 @@ function initSillyPhoneUI() {
             renderContactsList();
             renderChatList();
             saveStateToLocalStorage();
+            syncToSillyTavern();
             return;
         }
 
@@ -1767,6 +1768,7 @@ function initSillyPhoneUI() {
             showToast(`已向 ${res.name} 发送好友申请`, 'send');
             // 触发 AI 审批通知
             triggerFriendApprovalNotification(newContact);
+            syncToSillyTavern();
         } else {
             showToast('请勿重复发送申请', 'info');
         }
@@ -1878,6 +1880,7 @@ function initSillyPhoneUI() {
         renderChatList();
         renderGroupsList(); // 同时刷新群组列表
         saveStateToLocalStorage();
+        syncToSillyTavern();
         switchPage('chat-list');
     };
 
@@ -2134,6 +2137,7 @@ function initSillyPhoneUI() {
         saveMoments(); // 永久保存到本地
         renderMomentsList();
         showToast('已永久删除动态');
+        syncToSillyTavern();
     }
 
     function deleteComment(momentId, commentId) {
@@ -2143,6 +2147,7 @@ function initSillyPhoneUI() {
             saveMoments(); // 永久保存到本地
             renderMomentsList();
             showToast('已永久删除评论');
+            syncToSillyTavern();
         }
     }
 
@@ -3874,6 +3879,7 @@ function initSillyPhoneUI() {
         saveMessagesToLocalStorage();
         renderMessages(chatId);
         showToast('已撤回消息');
+        syncToSillyTavern();
     }
 
     function deleteMessage(chatId, index) {
@@ -3881,6 +3887,7 @@ function initSillyPhoneUI() {
         saveMessagesToLocalStorage();
         renderMessages(chatId);
         showToast('已永久删除消息');
+        syncToSillyTavern();
     }
 
     function enableMultiSelect(chatId, initialIndex) {
@@ -3959,6 +3966,9 @@ function initSillyPhoneUI() {
         saveMessagesToLocalStorage();
         renderMessages(chatId);
         closeAllPanels();
+        
+        // 同步到酒馆，确保原代码实时更新
+        syncToSillyTavern();
         
         // 如果在通话中，将消息加入通话记录
         if (state.call.active) {
@@ -4708,6 +4718,7 @@ function initSillyPhoneUI() {
             saveStateToLocalStorage();
             renderMemberGrid();
             renderMessages(state.currentChat.id);
+            syncToSillyTavern();
             
             // 角色反应
             triggerMemberChangeReaction(state.currentChat.id, 'add', names);
@@ -4747,6 +4758,7 @@ function initSillyPhoneUI() {
                 saveStateToLocalStorage();
                 renderMemberGrid();
                 renderMessages(state.currentChat.id);
+                syncToSillyTavern();
                 
                 // 角色反应
                 triggerMemberChangeReaction(state.currentChat.id, 'remove', m.name);
@@ -4937,6 +4949,7 @@ function initSillyPhoneUI() {
             
             // 持久化
             saveStateToLocalStorage();
+            syncToSillyTavern();
         };
     }
 
@@ -4958,6 +4971,7 @@ function initSillyPhoneUI() {
             showToast('聊天记录已清空', 'check');
             saveStateToLocalStorage();
             saveMessagesToLocalStorage();
+            syncToSillyTavern();
             switchPage('chat-window');
         };
     }
@@ -4992,6 +5006,7 @@ function initSillyPhoneUI() {
             renderChatList();
             renderContactsList(); // 确保联系人列表也刷新
             
+            syncToSillyTavern();
             switchPage('chat-list');
             showToast(isGroup ? '已删除并退出群聊' : '已删除聊天', 'check');
         };
@@ -5364,6 +5379,8 @@ function initSillyPhoneUI() {
             saveMessagesToLocalStorage();
             renderMessages(chatId);
             showToast('收到新消息', 'message-square');
+            // 同步到酒馆，确保原代码实时更新
+            syncToSillyTavern();
         }
     }
 
