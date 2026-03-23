@@ -925,7 +925,9 @@ function initSillyPhoneUI() {
         const s = state.settings;
         if (s.globalBg) screen.style.backgroundImage = `url(${s.globalBg})`;
         document.getElementById('chat-bg-layer').style.backgroundImage = s.chatBg ? `url(${s.chatBg})` : '';
-        document.getElementById('moments-user-bg').src = s.momentsBg || 'https://files.catbox.moe/smqrt7.jpg';
+        
+        const activeAccount = state.userAccounts.find(acc => acc.id === state.activeAccountId) || state.userAccounts[0];
+        document.getElementById('moments-user-bg').src = s.momentsBg || activeAccount.momentsBg || 'https://files.catbox.moe/smqrt7.jpg';
         
         screen.style.setProperty('--blur-intensity', `${s.blur}px`);
         screen.style.setProperty('--bubble-blur', `${s.bubbleBlur}px`);
@@ -935,7 +937,7 @@ function initSillyPhoneUI() {
         // 更新设置页 UI
         globalBgInput.value = s.globalBg || '';
         chatBgInput.value = s.chatBg || '';
-        momentsBgInput.value = s.momentsBg || '';
+        momentsBgInput.value = s.momentsBg || activeAccount.momentsBg || '';
         blurIntensityInput.value = s.blur;
         blurValueDisplay.textContent = s.blur;
         bubbleBlurIntensityInput.value = s.bubbleBlur;
@@ -944,6 +946,19 @@ function initSillyPhoneUI() {
         navBlurValueDisplay.textContent = s.navBlur;
         glassOpacityIntensityInput.value = s.glassOpacity;
         glassOpacityValueDisplay.textContent = s.glassOpacity / 100;
+
+        if (settingsUserNameInput) settingsUserNameInput.value = state.userName;
+        if (settingsWechatIdInput) settingsWechatIdInput.value = state.wechatId;
+        if (settingsUserAvatarImg) settingsUserAvatarImg.src = state.userAvatar;
+
+        // 更新朋友圈头部显示
+        const momentsUserName = document.getElementById('moments-user-name');
+        const momentsUserAvatar = document.getElementById('moments-user-avatar');
+        
+        if (momentsUserName) momentsUserName.textContent = state.userName;
+        if (momentsUserAvatar) momentsUserAvatar.src = state.userAvatar;
+
+        if(typeof lucide !== 'undefined') lucide.createIcons();
     }
 
     // 防抖同步
@@ -1217,7 +1232,7 @@ function initSillyPhoneUI() {
 
             loading.style.display = 'none';
             showToast(`已切换至：${state.userName}`, 'user');
-            deferredSync();
+            saveStateToLocalStorage();
         }, 800);
     }
 
@@ -1453,79 +1468,6 @@ function initSillyPhoneUI() {
         document.getElementById('text-img-detail-modal').style.display = 'none';
     };
 
-    function loadSettings() {
-        const globalBg = localStorage.getItem('global-bg-url');
-        const chatBg = localStorage.getItem('chat-bg-url');
-        const blurVal = localStorage.getItem('blur-intensity') || '12';
-        const bubbleBlurVal = localStorage.getItem('bubble-blur-intensity') || '12';
-        const navBlurVal = localStorage.getItem('nav-blur-intensity') || '15';
-        const glassOpacityVal = localStorage.getItem('glass-opacity-intensity') || '0.05';
-        const savedUserName = localStorage.getItem('user-name') || '我';
-        const savedUserAvatar = localStorage.getItem('user-avatar') || 'https://files.catbox.moe/blaehb.jpg';
-        const savedWechatId = localStorage.getItem('wechat-id') || 'wxid_sillyphone';
-        const savedMoments = localStorage.getItem('moments');
-        const savedActiveAccountId = localStorage.getItem('active-account-id') || 'user_main';
-        const savedUserAccounts = localStorage.getItem('user-accounts');
-
-        if (savedUserAccounts) {
-            state.userAccounts = JSON.parse(savedUserAccounts);
-        }
-        state.activeAccountId = savedActiveAccountId;
-
-        // 获取当前选中的账号信息
-        const activeAccount = state.userAccounts.find(acc => acc.id === state.activeAccountId);
-        
-        state.userName = activeAccount.name;
-        state.userAvatar = activeAccount.avatar;
-        state.wechatId = activeAccount.wechatId;
-        state.contacts = activeAccount.contacts || [];
-        state.groups = activeAccount.groups || [];
-
-        if (savedMoments) {
-            state.moments = JSON.parse(savedMoments);
-        }
-
-        if (settingsUserNameInput) settingsUserNameInput.value = state.userName;
-        if (settingsWechatIdInput) settingsWechatIdInput.value = state.wechatId;
-        if (settingsUserAvatarImg) settingsUserAvatarImg.src = state.userAvatar;
-
-        // 更新朋友圈头部显示
-        const momentsUserName = document.getElementById('moments-user-name');
-        const momentsUserAvatar = document.getElementById('moments-user-avatar');
-        const momentsUserBg = document.getElementById('moments-user-bg');
-        
-        if (momentsUserName) momentsUserName.textContent = state.userName;
-        if (momentsUserAvatar) momentsUserAvatar.src = state.userAvatar;
-        if (momentsUserBg) momentsUserBg.src = activeAccount.momentsBg;
-        if (momentsBgInput) momentsBgInput.value = activeAccount.momentsBg;
-
-        if (globalBg) {
-            screen.style.backgroundImage = `url(${globalBg})`;
-            globalBgInput.value = globalBg;
-        }
-        if (chatBg) {
-            messagesContainer.style.backgroundImage = `url(${chatBg})`;
-            chatBgInput.value = chatBg;
-        }
-
-        applyBlur(blurVal);
-        blurIntensityInput.value = blurVal;
-        blurValueDisplay.textContent = blurVal;
-
-        applyBubbleBlur(bubbleBlurVal);
-        bubbleBlurIntensityInput.value = bubbleBlurVal;
-        bubbleBlurValueDisplay.textContent = bubbleBlurVal;
-
-        applyNavBlur(navBlurVal);
-        navBlurIntensityInput.value = navBlurVal;
-        navBlurValueDisplay.textContent = navBlurVal;
-
-        applyGlassOpacity(glassOpacityVal);
-        glassOpacityIntensityInput.value = parseFloat(glassOpacityVal) * 100;
-        glassOpacityValueDisplay.textContent = glassOpacityVal;
-        if(typeof lucide !== 'undefined') lucide.createIcons();
-    }
-
     function applyBlur(val) {
         document.documentElement.style.setProperty('--blur-val', `${val}px`);
     }
@@ -1603,7 +1545,7 @@ function initSillyPhoneUI() {
 
         applySettings();
         showToast('设置已保存', 'save');
-        deferredSync();
+        saveStateToLocalStorage();
     }
 
     function saveMoments() {
@@ -5221,14 +5163,23 @@ function initSillyPhoneUI() {
             groups: state.groups,
             moments: state.moments
         };
-        localStorage.setItem('sillyphone-state', JSON.stringify(dataToSave));
+        try {
+            localStorage.setItem(getStorageKey(), JSON.stringify(dataToSave));
+            // 兼容旧版本全局存储
+            localStorage.setItem('sillyphone-state', JSON.stringify(dataToSave));
+        } catch (e) {
+            console.error("Failed to save state to localStorage", e);
+        }
         deferredSync();
     }
 
     // 初始化时加载持久化数据
     function loadStateFromLocalStorage() {
         try {
-            const saved = localStorage.getItem('sillyphone-state');
+            let saved = localStorage.getItem(getStorageKey());
+            if (!saved) {
+                saved = localStorage.getItem('sillyphone-state');
+            }
             if (saved) {
                 const data = JSON.parse(saved);
                 if (data.userAccounts) state.userAccounts = data.userAccounts;
@@ -5285,6 +5236,11 @@ function initSillyPhoneUI() {
                     settingsUserAvatarImg.src = newUrl;
                     state.userAvatar = newUrl; // 立即更新状态，确保聊天窗口同步
                     
+                    const activeAccount = state.userAccounts.find(acc => acc.id === state.activeAccountId);
+                    if (activeAccount) {
+                        activeAccount.avatar = newUrl;
+                    }
+
                     // 更新朋友圈中自己的头像
                     state.moments.forEach(m => {
                         if (m.authorId === 'user') {
@@ -5297,6 +5253,7 @@ function initSillyPhoneUI() {
                 
                 avatarModal.style.display = 'none';
                 showToast('头像已更改', 'image');
+                saveStateToLocalStorage();
             }
         };
     }
@@ -5603,8 +5560,8 @@ function initSillyPhoneUI() {
     }
 
     loadUserStickers();
-    loadSettings();
     loadStateFromLocalStorage();
+    applySettings();
     renderChatList();
 }
 
