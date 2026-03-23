@@ -1515,7 +1515,8 @@ function initSillyPhoneUI() {
     }
 
     function switchPage(pageId) {
-        if (pageId !== 'chat-window') {
+        console.log('[SillyPhone] switchPage:', pageId, 'currentChat:', state.currentChat ? state.currentChat.id : 'null');
+        if (pageId !== 'chat-window' && pageId !== 'chat-info') {
             closeAllPanels();
             state.currentChat = null;
             try {
@@ -4622,6 +4623,7 @@ function initSillyPhoneUI() {
             }
             
             switchPage('chat-info');
+            console.log('[SillyPhone] Switched to chat-info, currentChat is:', state.currentChat ? state.currentChat.id : 'null');
         };
     }
 
@@ -4943,20 +4945,28 @@ function initSillyPhoneUI() {
     const deleteAndExitBtn = document.getElementById('delete-and-exit-btn');
 
     if (clearChatHistoryBtn) {
-        clearChatHistoryBtn.onclick = () => {
-            if (!state.currentChat) return;
+        clearChatHistoryBtn.addEventListener('click', (e) => {
+            console.log('[SillyPhone] 点击清空聊天记录按钮', state.currentChat);
+            if (!state.currentChat) {
+                showToast('当前无活跃聊天', 'x-circle');
+                return;
+            }
             // 彻底删除聊天记录
             state.messages[state.currentChat.id] = [];
             renderMessages(state.currentChat.id);
             showToast('聊天记录已彻底清空', 'check');
             saveStateToLocalStorage();
             switchPage('chat-window');
-        };
+        });
     }
 
     if (deleteAndExitBtn) {
-        deleteAndExitBtn.onclick = () => {
-            if (!state.currentChat) return;
+        deleteAndExitBtn.addEventListener('click', (e) => {
+            console.log('[SillyPhone] 点击删除并退出按钮', state.currentChat);
+            if (!state.currentChat) {
+                showToast('当前无活跃聊天', 'x-circle');
+                return;
+            }
             const isGroup = state.currentChat.isGroup;
             const chatId = state.currentChat.id;
             
@@ -4976,7 +4986,7 @@ function initSillyPhoneUI() {
             saveStateToLocalStorage();
             switchPage('chat-list');
             showToast(isGroup ? '已删除并退出群聊' : '已删除聊天', 'check');
-        };
+        });
     }
 
     function saveMessagesToLocalStorage() {
