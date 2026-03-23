@@ -136,9 +136,9 @@ function initSillyPhoneUI() {
                 if (msgType === 'text') {
                     text += `[${sender}|${content}|${time}]\n`;
                 } else if (msgType === 'image' || msgType === 'photo') {
-                    text += `[${sender}|图片|${content}|${time}]\n`;
+                    text += `[${sender}|图片|${msg.url || content}|${time}]\n`;
                 } else if (msgType === 'sticker') {
-                    text += `[${sender}|表情包|${content}|${time}]\n`;
+                    text += `[${sender}|表情包|${msg.url || content}|${time}]\n`;
                 } else if (msgType === 'voice') {
                     text += `[${sender}|语音消息|${content}|${time}]\n`;
                 } else if (msgType === 'transfer' || msgType === 'redpacket' || msgType === 'red-packet') {
@@ -601,11 +601,11 @@ function initSillyPhoneUI() {
                     let realCid = getContactIdByName(effectiveCid);
                     
                     // 如果 cid 是用户自己，说明 AI 搞反了视角（比如生成了【和林钰如的聊天】）
-                    if (effectiveCid === state.userName || effectiveCid === '我' || effectiveCid === 'user') {
+                    if (effectiveCid === state.userName || effectiveCid === '我' || effectiveCid === 'user' || effectiveCid === state.wechatId) {
                         // 寻找不是用户的发送者
                         const aiMsg = textData.messages[cid].find(m => {
                             const s = m.sender;
-                            return s && s !== '我' && s !== state.userName && s !== 'user' && s !== '系统消息';
+                            return s && s !== '我' && s !== state.userName && s !== 'user' && s !== '系统消息' && s !== state.wechatId;
                         });
                         if (aiMsg && aiMsg.sender) {
                             effectiveCid = aiMsg.sender;
@@ -617,11 +617,11 @@ function initSillyPhoneUI() {
                     }
                     
                     // 判断是否是群聊
-                    const isGroup = effectiveCid.includes('群聊') || textData.messages[cid].some(m => m.sender && m.sender !== effectiveCid && m.sender !== '我' && m.sender !== '我方消息' && m.sender !== '系统消息');
+                    const isGroup = effectiveCid.includes('群聊') || textData.messages[cid].some(m => m.sender && m.sender !== effectiveCid && m.sender !== '我' && m.sender !== '我方消息' && m.sender !== '系统消息' && m.sender !== state.userName && m.sender !== state.wechatId);
                     
                     const formattedMsgs = textData.messages[cid].map(m => {
                         let senderName = m.sender || effectiveCid;
-                        const isUser = senderName === '我' || senderName === state.userName || senderName === 'user';
+                        const isUser = senderName === '我' || senderName === state.userName || senderName === 'user' || senderName === state.wechatId;
                         
                         if (isUser) {
                             senderName = state.userName; // 统一使用当前用户名
@@ -872,12 +872,16 @@ function initSillyPhoneUI() {
                 };
 
                 msgLines.forEach(line => {
-                    const m = line.match(/^\[(.*?)\|(.*?)\|(.*?)\|(.*?)\]$/) || line.match(/^\[(.*?)\|(.*?)\|(.*?)\|(.*?)\|(.*?)\]$/);
+                    const m3 = line.match(/^\[(.*?)\|(.*?)\|(.*?)\]$/);
+                    const m4 = line.match(/^\[(.*?)\|(.*?)\|(.*?)\|(.*?)\]$/);
+                    const m5 = line.match(/^\[(.*?)\|(.*?)\|(.*?)\|(.*?)\|(.*?)\]$/);
+                    const m = m5 || m4 || m3;
                     if (m) {
                         flushTextBuffer();
                         let formattedSenderId = state.currentChat.id;
+                        let senderName = m[1];
                         if (state.currentChat.isGroup) {
-                            const member = state.currentChat.members.find(member => member.name === m[1]);
+                            const member = state.currentChat.members.find(member => member.name === senderName);
                             if (member) {
                                 formattedSenderId = member.id;
                             } else {
@@ -885,22 +889,59 @@ function initSillyPhoneUI() {
                             }
                         }
                         
+                        const isUser = senderName === '我' || senderName === state.userName || senderName === 'user' || senderName === state.wechatId;
+
                         const msg = {
                             id: 'msg_' + Math.random().toString(36).substr(2, 9),
-                            senderId: formattedSenderId,
+                            senderId: isUser ? 'user' : formattedSenderId,
+                            senderName: isUser ? state.userName : senderName,
                             time: m[m.length - 1],
-                            type: 'ai'
+                            type: isUser ? 'user' : 'ai'
                         };
-                        const body = m[3];
-                        if (body === '图片') {
-                            msg.msgType = 'photo';
-                            msg.url = m[4];
-                        } else if (body === '语音') {
-                            msg.msgType = 'voice';
-                            msg.duration = parseInt(m[4]) || 0;
-                        } else {
-                            msg.text = m.length === 5 ? m[3] : m[4];
+                        
+                        let typeStr = 'text';
+                        let contentStr = '';
+                        let durationStr = '';
+                        
+                        if (m === m3) {
+                            contentStr = m[2];
+                        } else if (m === m4) {
+                            typeStr = m[2];
+                            contentStr = m[3];
+                        } else if (m === m5) {
+                            typeStr = m[2];
+                            contentStr = m[3];
+                            durationStr = m[4];
                         }
+
+                        if (typeStr === '图片') {
+                            msg.msgType = 'photo';
+                            msg.url = contentStr;
+                        } else if (typeStr === '表情包') {
+                            msg.msgType = 'sticker';
+                            msg.url = contentStr;
+                        } else if (typeStr === '语音消息' || typeStr === '语音') {
+                            msg.msgType = 'voice';
+                            msg.duration = parseInt(contentStr) || 0;
+                        } else if (typeStr.includes('转账') || typeStr.includes('收账')) {
+                            msg.msgType = 'transfer';
+                            msg.text = typeStr;
+                        } else if (typeStr.includes('红包')) {
+                            msg.msgType = 'red-packet';
+                            msg.text = typeStr;
+                        } else if (typeStr === '语音通话') {
+                            msg.msgType = 'call';
+                            msg.text = contentStr;
+                        } else if (typeStr === '语音通话已挂断') {
+                            msg.msgType = 'call-end';
+                            msg.duration = durationStr || contentStr;
+                        } else if (typeStr === '撤回消息') {
+                            msg.msgType = 'recall';
+                            msg.text = contentStr;
+                        } else {
+                            msg.text = contentStr;
+                        }
+                        
                         state.messages[chatId].push(msg);
                     } else {
                         textBuffer.push(line);
@@ -3612,9 +3653,9 @@ function initSillyPhoneUI() {
                     sysMsg.title = '点击查看撤回内容 (上帝视角)';
                     sysMsg.onclick = () => {
                         let content = m.text || '';
-                        if (m.msgType === 'photo') content = `[图片] ${m.description || ''}`;
+                        if (m.msgType === 'photo') content = `[图片] ${m.url || m.description || ''}`;
                         if (m.msgType === 'voice') content = `[语音] ${m.text || ''}`;
-                        if (m.msgType === 'sticker') content = `[表情包]`;
+                        if (m.msgType === 'sticker') content = `[表情包] ${m.url || ''}`;
                         
                         if (sysMsg.dataset.revealed === 'true') {
                             sysMsg.innerHTML = `<span>${senderName} 撤回了一条消息</span>`;
@@ -3694,7 +3735,15 @@ function initSillyPhoneUI() {
             contentDiv.className = 'bubble-content';
 
             if (m.msgType === 'photo') {
-                contentDiv.innerHTML = formatContent(`(IMG:${m.description || '一张照片'})`);
+                if (m.url && m.url.startsWith('http')) {
+                    contentDiv.innerHTML = `
+                        <div class="sticker-content">
+                            <img src="${m.url}" referrerpolicy="no-referrer" class="sticker-img" style="border-radius: 8px; max-width: 200px; cursor: pointer;" onclick="window.open('${m.url}', '_blank')">
+                        </div>
+                    `;
+                } else {
+                    contentDiv.innerHTML = formatContent(`(IMG:${m.description || m.url || '一张照片'})`);
+                }
             } else if (m.msgType === 'sticker') {
                 let displayUrl = m.url;
                 if (displayUrl && !displayUrl.startsWith('http')) {
@@ -3719,9 +3768,10 @@ function initSillyPhoneUI() {
                         }
                     }
                 }
+                const safeUrlText = (m.url || '').replace(/'/g, "\\'").replace(/"/g, "&quot;");
                 contentDiv.innerHTML = `
                     <div class="sticker-content">
-                        <img src="${displayUrl}" referrerpolicy="no-referrer" class="sticker-img">
+                        <img src="${displayUrl}" referrerpolicy="no-referrer" class="sticker-img" onerror="this.outerHTML='<div style=\\'padding: 8px; color: #888; font-style: italic; font-size: 12px;\\'>[表情包: ${safeUrlText}]</div>'">
                     </div>
                 `;
             } else if (m.msgType === 'voice') {
@@ -3975,9 +4025,9 @@ function initSillyPhoneUI() {
                 if (msgType === 'text') {
                     line = `[${sender}|${content}|${time}]`;
                 } else if (msgType === 'image' || msgType === 'photo') {
-                    line = `[${sender}|图片|${content}|${time}]`;
+                    line = `[${sender}|图片|${msg.url || content}|${time}]`;
                 } else if (msgType === 'sticker') {
-                    line = `[${sender}|表情包|${content}|${time}]`;
+                    line = `[${sender}|表情包|${msg.url || content}|${time}]`;
                 } else if (msgType === 'voice') {
                     line = `[${sender}|语音消息|${content}|${time}]`;
                 } else if (msgType === 'transfer' || msgType === 'redpacket' || msgType === 'red-packet') {
@@ -5419,11 +5469,11 @@ function initSillyPhoneUI() {
                     let realCid = getContactIdByName(effectiveCid);
                     
                     // 如果 cid 是用户自己，说明 AI 搞反了视角（比如生成了【和林钰如的聊天】）
-                    if (effectiveCid === state.userName || effectiveCid === '我' || effectiveCid === 'user') {
+                    if (effectiveCid === state.userName || effectiveCid === '我' || effectiveCid === 'user' || effectiveCid === state.wechatId) {
                         // 寻找不是用户的发送者
                         const aiMsg = parsedData.messages[cid].find(m => {
                             const s = m.sender;
-                            return s && s !== '我' && s !== state.userName && s !== 'user' && s !== '系统消息';
+                            return s && s !== '我' && s !== state.userName && s !== 'user' && s !== '系统消息' && s !== state.wechatId;
                         });
                         if (aiMsg && aiMsg.sender) {
                             effectiveCid = aiMsg.sender;
@@ -5454,7 +5504,7 @@ function initSillyPhoneUI() {
                     // 转换格式以匹配 state.messages 的结构，并过滤掉 AI 幻觉生成的玩家消息
                     const formattedMsgs = newMsgs.map(m => {
                         let senderName = m.sender || effectiveCid;
-                        const isUser = senderName === '我' || senderName === state.userName || senderName === 'user';
+                        const isUser = senderName === '我' || senderName === state.userName || senderName === 'user' || senderName === state.wechatId;
                         
                         if (isUser) {
                             senderName = state.userName; // 统一使用当前用户名
