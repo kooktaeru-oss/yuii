@@ -209,14 +209,16 @@ function initSillyPhoneUI() {
             if (acc.messages) {
                 for (const chatId in acc.messages) {
                     if (Array.isArray(acc.messages[chatId])) {
-                        // 每个会话保留最近 20 条消息（含历史和当前），足以维持“延续感”且不卡顿
-                        prunedMessages[chatId] = acc.messages[chatId].slice(-20);
+                        // 每个会话保留最近 10 条消息（含历史和当前），足以维持“延续感”且不卡顿
+                        prunedMessages[chatId] = acc.messages[chatId].slice(-10);
                     }
                 }
             }
+            const prunedMoments = acc.moments ? acc.moments.slice(-5) : [];
             return {
                 ...acc,
-                messages: prunedMessages
+                messages: prunedMessages,
+                moments: prunedMoments
             };
         });
 
