@@ -94,7 +94,7 @@ function initSillyPhoneUI() {
         };
     }
 
-    function serializeMessagesToText(messages) {
+    function serializeMessagesToText(messages, currentMsgId) {
         let text = '';
         
         // 辅助函数：通过ID查找联系人名字
@@ -113,8 +113,8 @@ function initSillyPhoneUI() {
         for (const chatId in messages) {
             if (!messages[chatId] || messages[chatId].length === 0) continue;
             
-            // 仅序列化非历史消息（当前会话的消息）
-            const currentMessages = messages[chatId].filter(msg => !msg.isHistory);
+            // 仅序列化非历史消息（当前会话的消息），或者属于当前回合的消息
+            const currentMessages = messages[chatId].filter(msg => !msg.isHistory || (currentMsgId !== undefined && msg.sourceMsgId === currentMsgId));
             if (currentMessages.length === 0) continue;
 
             const chatName = getContactNameById(chatId);
@@ -127,11 +127,11 @@ function initSillyPhoneUI() {
             }
 
             currentMessages.forEach(msg => {
-                const sender = msg.senderName || msg.senderId || msg.sender || '未知';
+                const sender = msg.originalSender || msg.senderName || msg.senderId || msg.sender || '未知';
                 const avatar = msg.senderAvatar || msg.avatar || '';
                 const content = msg.text || msg.content || '';
                 const time = msg.time || '';
-                const msgType = msg.isRecalled ? 'recall' : (msg.msgType || (msg.type === 'system' ? 'system' : 'text'));
+                const msgType = msg.msgType || (msg.type === 'system' ? 'system' : 'text');
 
                 if (msgType === 'text') {
                     text += `[${sender}|${content}|${time}]\n`;
@@ -146,7 +146,7 @@ function initSillyPhoneUI() {
                 } else if (msgType === 'call') {
                     text += `[${sender}|语音通话|${content}|${time}]\n`;
                 } else if (msgType === 'call-end') {
-                    text += `[${sender}|语音通话已挂断|${msg.duration || '00:00'}|${time}]\n`;
+                    text += `[${sender}|语音通话已挂断|${msg.duration || content || '00:00'}|${time}]\n`;
                 } else if (msgType === 'recall') {
                     text += `[${sender}|撤回消息|${content}|${time}]\n`;
                 } else if (msgType === 'quote') {
@@ -220,25 +220,25 @@ function initSillyPhoneUI() {
             };
         });
 
-        // 序列化修剪后的状态，作为隐藏备份
+        // 序列化修剪后的状态
         const shoujiData = {
             userAccounts: prunedAccounts,
             activeAccountId: state.activeAccountId,
             settings: state.settings,
             stickers: state.stickers
         };
-        const jsonBackup = `<!-- SILLYPHONE_DATA_START\n${JSON.stringify(shoujiData)}\nSILLYPHONE_DATA_END -->`;
 
         // 优先使用文本格式序列化当前账号的消息和朋友圈
         const activeAccount = prunedAccounts.find(a => a.id === state.activeAccountId) || prunedAccounts[0];
         let textContent = '';
         if (activeAccount) {
-            textContent += serializeMessagesToText(activeAccount.messages);
+            // 这里内部会调用 buildGenerationPrompt 逻辑（通过 filter(!isHistory)）
+            textContent += serializeMessagesToText(activeAccount.messages, msgId);
             textContent += serializeMomentsToText(activeAccount.moments);
         }
 
-        // 将文本内容和 JSON 备份一起打包
-        const shoujiTag = `<shouji>\n${textContent.trim()}\n\n${jsonBackup}\n</shouji>`;
+        // 移除 JSON 备份，只保留纯文本格式，符合 A 老师的格式，避免思维链等额外标签被包裹进 JSON 导致冗余
+        const shoujiTag = `<shouji>\n${textContent.trim()}\n</shouji>`;
         
         let updatedMessage;
         if (raw.includes('<shouji>')) {
@@ -577,16 +577,20 @@ function initSillyPhoneUI() {
                             type: isUser ? 'user' : 'ai',
                             senderId: isUser ? 'user' : (getContactIdByName(senderName) || senderName),
                             senderName: senderName,
+                            originalSender: m.sender,
                             avatar: m.avatar || '',
                             time: m.time,
                             text: m.content || m.text,
+                            originalText: m.content || m.text,
                             msgType: m.type === 'image' ? 'photo' : (m.type === 'redpacket' ? 'red-packet' : m.type),
                             url: m.type === 'sticker' ? m.content : m.url,
                             description: m.type === 'image' ? m.content : undefined,
                             duration: m.duration,
                             amount: m.amount,
                             quote: m.quote,
-                            isHistory: true
+                            isHistory: true,
+                            sourceMsgId: targetId,
+                            isRecalled: m.type === 'recall'
                         };
                     });
 
@@ -652,8 +656,13 @@ function initSillyPhoneUI() {
                 state.wechatId = active.wechatId;
                 
                 // 继承回溯找到的消息和朋友圈
-                state.contacts = active.contacts || [];
-                state.groups = active.groups || [];
+                if (userAccounts) {
+                    state.contacts = active.contacts || [];
+                    state.groups = active.groups || [];
+                } else {
+                    active.contacts = state.contacts;
+                    active.groups = state.groups;
+                }
             }
             state.messages = combinedMessages;
             state.moments = combinedMoments;
@@ -1740,7 +1749,6 @@ function initSillyPhoneUI() {
             renderContactsList();
             renderChatList();
             saveStateToLocalStorage();
-            syncToSillyTavern();
             return;
         }
 
@@ -1768,7 +1776,6 @@ function initSillyPhoneUI() {
             showToast(`已向 ${res.name} 发送好友申请`, 'send');
             // 触发 AI 审批通知
             triggerFriendApprovalNotification(newContact);
-            syncToSillyTavern();
         } else {
             showToast('请勿重复发送申请', 'info');
         }
@@ -1880,7 +1887,6 @@ function initSillyPhoneUI() {
         renderChatList();
         renderGroupsList(); // 同时刷新群组列表
         saveStateToLocalStorage();
-        syncToSillyTavern();
         switchPage('chat-list');
     };
 
@@ -2137,7 +2143,6 @@ function initSillyPhoneUI() {
         saveMoments(); // 永久保存到本地
         renderMomentsList();
         showToast('已永久删除动态');
-        syncToSillyTavern();
     }
 
     function deleteComment(momentId, commentId) {
@@ -2147,7 +2152,6 @@ function initSillyPhoneUI() {
             saveMoments(); // 永久保存到本地
             renderMomentsList();
             showToast('已永久删除评论');
-            syncToSillyTavern();
         }
     }
 
@@ -3879,15 +3883,90 @@ function initSillyPhoneUI() {
         saveMessagesToLocalStorage();
         renderMessages(chatId);
         showToast('已撤回消息');
-        syncToSillyTavern();
+    }
+
+    function removeMessagesFromRawCode(messagesToRemove) {
+        if (!messagesToRemove || messagesToRemove.length === 0) return;
+        
+        const st = getSTInterface();
+        if (!st.getChatMessages || !st.setChatMessages) return;
+
+        // Group messages by sourceMsgId
+        const messagesBySource = {};
+        messagesToRemove.forEach(msg => {
+            if (msg.isHistory && msg.sourceMsgId !== undefined) {
+                if (!messagesBySource[msg.sourceMsgId]) {
+                    messagesBySource[msg.sourceMsgId] = [];
+                }
+                messagesBySource[msg.sourceMsgId].push(msg);
+            }
+        });
+
+        // Update each source message
+        const updates = [];
+        for (const sourceIdStr in messagesBySource) {
+            const sourceId = parseInt(sourceIdStr, 10);
+            const chat = st.getChatMessages(sourceId)[0];
+            if (!chat || !chat.message) continue;
+
+            let newRaw = chat.message;
+            let changed = false;
+
+            messagesBySource[sourceId].forEach(msg => {
+                const sender = msg.originalSender || msg.senderName || msg.senderId || msg.sender || '未知';
+                const content = msg.originalText !== undefined ? msg.originalText : (msg.text || msg.content || msg.url || msg.amount || '');
+                const time = msg.time || '';
+                const msgType = msg.msgType || (msg.type === 'system' ? 'system' : 'text');
+
+                let line = '';
+                if (msgType === 'text') {
+                    line = `[${sender}|${content}|${time}]`;
+                } else if (msgType === 'image' || msgType === 'photo') {
+                    line = `[${sender}|图片|${content}|${time}]`;
+                } else if (msgType === 'sticker') {
+                    line = `[${sender}|表情包|${content}|${time}]`;
+                } else if (msgType === 'voice') {
+                    line = `[${sender}|语音消息|${content}|${time}]`;
+                } else if (msgType === 'transfer' || msgType === 'redpacket' || msgType === 'red-packet') {
+                    line = `[${sender}|${content}|${time}]`;
+                } else if (msgType === 'call') {
+                    line = `[${sender}|语音通话|${content}|${time}]`;
+                } else if (msgType === 'call-end') {
+                    line = `[${sender}|语音通话已挂断|${msg.duration || content || '00:00'}|${time}]`;
+                } else if (msgType === 'recall') {
+                    line = `[${sender}|撤回消息|${content}|${time}]`;
+                } else if (msgType === 'quote') {
+                    line = `<${sender}|${msg.quote || ''}|${content}|${time}>`;
+                }
+
+                if (line) {
+                    if (newRaw.includes(line + '\n')) {
+                        newRaw = newRaw.replace(line + '\n', '');
+                        changed = true;
+                    } else if (newRaw.includes(line)) {
+                        newRaw = newRaw.replace(line, '');
+                        changed = true;
+                    }
+                }
+            });
+
+            if (changed && newRaw !== chat.message) {
+                updates.push({ message_id: sourceId, message: newRaw });
+            }
+        }
+
+        if (updates.length > 0) {
+            st.setChatMessages(updates, { refresh: 'none' });
+        }
     }
 
     function deleteMessage(chatId, index) {
+        const msg = state.messages[chatId][index];
         state.messages[chatId].splice(index, 1);
+        removeMessagesFromRawCode([msg]);
         saveMessagesToLocalStorage();
         renderMessages(chatId);
         showToast('已永久删除消息');
-        syncToSillyTavern();
     }
 
     function enableMultiSelect(chatId, initialIndex) {
@@ -3923,10 +4002,17 @@ function initSillyPhoneUI() {
                 danger: true, 
                 onClick: () => {
                     const chatId = state.currentChat.id;
+                    const msgsToRemove = state.messages[chatId].filter((m, index) => {
+                        const msgId = m.id || `msg_${index}`;
+                        return state.selectedMessageIds.includes(msgId);
+                    });
+                    
                     state.messages[chatId] = state.messages[chatId].filter((m, index) => {
                         const msgId = m.id || `msg_${index}`;
                         return !state.selectedMessageIds.includes(msgId);
                     });
+                    
+                    removeMessagesFromRawCode(msgsToRemove);
                     
                     state.multiSelectMode = false;
                     state.selectedMessageIds = [];
@@ -3966,9 +4052,6 @@ function initSillyPhoneUI() {
         saveMessagesToLocalStorage();
         renderMessages(chatId);
         closeAllPanels();
-        
-        // 同步到酒馆，确保原代码实时更新
-        syncToSillyTavern();
         
         // 如果在通话中，将消息加入通话记录
         if (state.call.active) {
@@ -4718,7 +4801,6 @@ function initSillyPhoneUI() {
             saveStateToLocalStorage();
             renderMemberGrid();
             renderMessages(state.currentChat.id);
-            syncToSillyTavern();
             
             // 角色反应
             triggerMemberChangeReaction(state.currentChat.id, 'add', names);
@@ -4758,7 +4840,6 @@ function initSillyPhoneUI() {
                 saveStateToLocalStorage();
                 renderMemberGrid();
                 renderMessages(state.currentChat.id);
-                syncToSillyTavern();
                 
                 // 角色反应
                 triggerMemberChangeReaction(state.currentChat.id, 'remove', m.name);
@@ -4949,7 +5030,6 @@ function initSillyPhoneUI() {
             
             // 持久化
             saveStateToLocalStorage();
-            syncToSillyTavern();
         };
     }
 
@@ -4966,12 +5046,13 @@ function initSillyPhoneUI() {
                 return;
             }
             // 彻底删除聊天记录
+            const msgsToRemove = [...(state.messages[state.currentChat.id] || [])];
             state.messages[state.currentChat.id] = [];
+            removeMessagesFromRawCode(msgsToRemove);
             renderMessages(state.currentChat.id);
             showToast('聊天记录已清空', 'check');
             saveStateToLocalStorage();
             saveMessagesToLocalStorage();
-            syncToSillyTavern();
             switchPage('chat-window');
         };
     }
@@ -4995,7 +5076,9 @@ function initSillyPhoneUI() {
             }
             
             // 移除消息记录
+            const msgsToRemove = [...(state.messages[chatId] || [])];
             delete state.messages[chatId];
+            removeMessagesFromRawCode(msgsToRemove);
             
             state.currentChat = null;
             
@@ -5006,7 +5089,6 @@ function initSillyPhoneUI() {
             renderChatList();
             renderContactsList(); // 确保联系人列表也刷新
             
-            syncToSillyTavern();
             switchPage('chat-list');
             showToast(isGroup ? '已删除并退出群聊' : '已删除聊天', 'check');
         };
@@ -5294,15 +5376,18 @@ function initSillyPhoneUI() {
                             type: isUser ? 'user' : 'ai',
                             senderId: isUser ? 'user' : (getContactIdByName(senderName) || senderName),
                             senderName: senderName,
+                            originalSender: m.sender,
                             avatar: m.avatar || '',
                             time: m.time,
                             text: m.content || m.text,
+                            originalText: m.content || m.text,
                             msgType: m.type === 'image' ? 'photo' : (m.type === 'redpacket' ? 'red-packet' : m.type),
                             url: m.type === 'sticker' ? m.content : m.url,
                             description: m.type === 'image' ? m.content : undefined,
                             duration: m.duration,
                             amount: m.amount,
-                            quote: m.quote
+                            quote: m.quote,
+                            isRecalled: m.type === 'recall'
                         };
                     });
                     
@@ -5379,8 +5464,6 @@ function initSillyPhoneUI() {
             saveMessagesToLocalStorage();
             renderMessages(chatId);
             showToast('收到新消息', 'message-square');
-            // 同步到酒馆，确保原代码实时更新
-            syncToSillyTavern();
         }
     }
 
