@@ -2478,7 +2478,7 @@ input:checked + .slider:before {
 
 /* 聊天详情页扩展样式 */
 .chat-info-container {
-    padding: 10px 15px 100px;
+    padding: 10px 15px 150px;
     overflow-y: auto;
     flex: 1;
     scrollbar-width: none;
@@ -2609,6 +2609,9 @@ input:checked + .slider:before {
     flex-direction: column;
     gap: 12px;
     padding: 0;
+    pointer-events: auto !important;
+    position: relative;
+    z-index: 10;
 }
 
 .danger-text-btn {
@@ -2622,6 +2625,9 @@ input:checked + .slider:before {
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s;
+    pointer-events: auto !important;
+    position: relative;
+    z-index: 10;
 }
 
 .danger-text-btn:active {
@@ -2640,6 +2646,9 @@ input:checked + .slider:before {
     cursor: pointer;
     transition: all 0.2s;
     box-shadow: 0 4px 12px rgba(255, 59, 48, 0.2);
+    pointer-events: auto !important;
+    position: relative;
+    z-index: 10;
 }
 
 .danger-full-btn:active {
