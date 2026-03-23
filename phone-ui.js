@@ -491,6 +491,17 @@ function initSillyPhoneUI() {
         let foundShouji = false;
         let latestRawAIMessage = null;
 
+        // 第一遍扫描：确定用户在酒馆里的真实名字，确保身份识别严谨
+        for (let i = 0; i <= 50; i++) {
+            const targetId = msgId - i;
+            if (targetId < 0) break;
+            const chat = st.getChatMessages(targetId)[0];
+            if (chat && chat.is_user && chat.name && chat.name !== '我' && chat.name !== 'user' && chat.name !== 'me') {
+                state.stUserName = chat.name;
+                break;
+            }
+        }
+
         // 如果本地有数据，优先使用本地的设置和账号信息
         if (localDataObj) {
             settings = localDataObj.settings;
@@ -505,11 +516,6 @@ function initSillyPhoneUI() {
 
             const chat = st.getChatMessages(targetId)[0];
             if (!chat || !chat.message) continue;
-
-            // 记录用户在酒馆里的名字，用于解析原始代码时识别身份
-            if (chat.is_user && chat.name && chat.name !== '我' && chat.name !== 'user') {
-                state.stUserName = chat.name;
-            }
 
             // 1. 检查是否有 <shouji> 标签
             let shoujiContent = null;
@@ -607,11 +613,11 @@ function initSillyPhoneUI() {
                     let realCid = getContactIdByName(effectiveCid);
                     
                     // 如果 cid 是用户自己，说明 AI 搞反了视角（比如生成了【和林钰如的聊天】）
-                    if (effectiveCid === state.userName || effectiveCid === '我' || effectiveCid === 'user' || effectiveCid === state.wechatId) {
+                    if (effectiveCid === state.userName || effectiveCid === '我' || effectiveCid === 'user' || effectiveCid === 'me' || effectiveCid === state.wechatId || (state.stUserName && effectiveCid === state.stUserName)) {
                         // 寻找不是用户的发送者
                         const aiMsg = textData.messages[cid].find(m => {
                             const s = m.sender;
-                            return s && s !== '我' && s !== state.userName && s !== 'user' && s !== '系统消息' && s !== state.wechatId;
+                            return s && s !== '我' && s !== state.userName && s !== 'user' && s !== 'me' && s !== '系统消息' && s !== state.wechatId && (!state.stUserName || s !== state.stUserName);
                         });
                         if (aiMsg && aiMsg.sender) {
                             effectiveCid = aiMsg.sender;
@@ -627,7 +633,13 @@ function initSillyPhoneUI() {
                     
                     const formattedMsgs = textData.messages[cid].map(m => {
                         let senderName = m.sender || effectiveCid;
-                        const isUser = senderName === '我' || senderName === state.userName || senderName === 'user' || senderName === 'me' || senderName === state.wechatId || (state.stUserName && senderName === state.stUserName) || (!isGroup && senderName !== effectiveCid && senderName !== '系统消息');
+                        // 严谨逻辑：仅匹配当前昵称、微信号、酒馆用户名或系统默认标识
+                        const isUser = senderName === state.userName || 
+                                       senderName === '我' || 
+                                       senderName === 'user' || 
+                                       senderName === 'me' || 
+                                       senderName === state.wechatId || 
+                                       (state.stUserName && senderName === state.stUserName);
                         
                         if (isUser) {
                             senderName = state.userName; // 统一使用当前用户名
@@ -750,6 +762,10 @@ function initSillyPhoneUI() {
             const active = state.userAccounts.find(a => a.id === state.activeAccountId) || state.userAccounts[0];
             if (active) {
                 state.activeAccountId = active.id;
+                // 如果当前名字是默认的“我”或者“user”，且我们找到了酒馆里的真实名字，则自动同步
+                if ((active.name === '我' || active.name === 'user') && state.stUserName) {
+                    active.name = state.stUserName;
+                }
                 state.userName = active.name;
                 state.userAvatar = active.avatar;
                 state.wechatId = active.wechatId;
@@ -895,7 +911,13 @@ function initSillyPhoneUI() {
                             }
                         }
                         
-                        const isUser = senderName === '我' || senderName === state.userName || senderName === 'user' || senderName === 'me' || senderName === state.wechatId || (state.stUserName && senderName === state.stUserName) || (!state.currentChat.isGroup && senderName !== state.currentChat.name && senderName !== '系统消息');
+                        // 严谨逻辑：仅匹配当前昵称、微信号、酒馆用户名或系统默认标识
+                        const isUser = senderName === state.userName || 
+                                       senderName === '我' || 
+                                       senderName === 'user' || 
+                                       senderName === 'me' || 
+                                       senderName === state.wechatId || 
+                                       (state.stUserName && senderName === state.stUserName);
 
                         const msg = {
                             id: 'msg_' + Math.random().toString(36).substr(2, 9),
@@ -5475,11 +5497,11 @@ function initSillyPhoneUI() {
                     let realCid = getContactIdByName(effectiveCid);
                     
                     // 如果 cid 是用户自己，说明 AI 搞反了视角（比如生成了【和林钰如的聊天】）
-                    if (effectiveCid === state.userName || effectiveCid === '我' || effectiveCid === 'user' || effectiveCid === state.wechatId) {
+                    if (effectiveCid === state.userName || effectiveCid === '我' || effectiveCid === 'user' || effectiveCid === 'me' || effectiveCid === state.wechatId || (state.stUserName && effectiveCid === state.stUserName)) {
                         // 寻找不是用户的发送者
                         const aiMsg = parsedData.messages[cid].find(m => {
                             const s = m.sender;
-                            return s && s !== '我' && s !== state.userName && s !== 'user' && s !== '系统消息' && s !== state.wechatId;
+                            return s && s !== '我' && s !== state.userName && s !== 'user' && s !== 'me' && s !== '系统消息' && s !== state.wechatId && (!state.stUserName || s !== state.stUserName);
                         });
                         if (aiMsg && aiMsg.sender) {
                             effectiveCid = aiMsg.sender;
@@ -5510,7 +5532,13 @@ function initSillyPhoneUI() {
                     // 转换格式以匹配 state.messages 的结构，并过滤掉 AI 幻觉生成的玩家消息
                     const formattedMsgs = newMsgs.map(m => {
                         let senderName = m.sender || effectiveCid;
-                        const isUser = senderName === '我' || senderName === state.userName || senderName === 'user' || senderName === 'me' || senderName === state.wechatId || (state.stUserName && senderName === state.stUserName) || (state.currentChat && !state.currentChat.isGroup && senderName !== state.currentChat.name && senderName !== '系统消息');
+                        // 严谨逻辑：仅匹配当前昵称、微信号、酒馆用户名或系统默认标识
+                        const isUser = senderName === state.userName || 
+                                       senderName === '我' || 
+                                       senderName === 'user' || 
+                                       senderName === 'me' || 
+                                       senderName === state.wechatId || 
+                                       (state.stUserName && senderName === state.stUserName);
                         
                         if (isUser) {
                             senderName = state.userName; // 统一使用当前用户名
