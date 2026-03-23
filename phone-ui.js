@@ -725,6 +725,7 @@ function initSillyPhoneUI() {
         }
 
         if (userAccounts || Object.keys(combinedMessages).length > 0) {
+            // 1. 先处理账号和设置，确立身份
             if (userAccounts) {
                 userAccounts.forEach(acc => {
                     const existingAcc = state.userAccounts.find(a => a.id === acc.id);
@@ -744,7 +745,7 @@ function initSillyPhoneUI() {
                             });
                         }
                         // 只有在当前名字是默认的“我”时，才从备份中恢复名字和头像，防止覆盖用户最新修改的设置
-                        if (existingAcc.name === '我') {
+                        if (existingAcc.name === '我' || existingAcc.name === 'user') {
                             existingAcc.name = acc.name;
                             existingAcc.avatar = acc.avatar;
                             existingAcc.wechatId = acc.wechatId;
@@ -774,6 +775,32 @@ function initSillyPhoneUI() {
                 state.contacts = active.contacts || [];
                 state.groups = active.groups || [];
             }
+
+            // 2. 身份确立后，再重新解析一次文本消息（如果刚才解析失败了）
+            // 这里的逻辑是：如果刚才解析时 state.userName 还是旧的，
+            // 那么在身份更新后，我们需要确保 combinedMessages 里的 isUser 判定是准确的。
+            // 实际上，更稳妥的做法是在解析循环前就完成身份确立。
+            // 我们已经在循环前通过 localStorage 尝试确立了，但 JSON 备份里的可能更新。
+            
+            // 重新扫描一遍 combinedMessages 纠正 type
+            for (const cid in combinedMessages) {
+                combinedMessages[cid].forEach(m => {
+                    const senderName = m.originalSender || m.senderName;
+                    const isUser = senderName === state.userName || 
+                                   senderName === '我' || 
+                                   senderName === 'user' || 
+                                   senderName === 'me' || 
+                                   senderName === state.wechatId || 
+                                   (state.stUserName && senderName === state.stUserName);
+                    
+                    if (isUser) {
+                        m.type = 'user';
+                        m.senderId = 'user';
+                        m.senderName = state.userName;
+                    }
+                });
+            }
+
             state.messages = combinedMessages;
             state.moments = combinedMoments;
             
