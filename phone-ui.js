@@ -4945,7 +4945,8 @@ function initSillyPhoneUI() {
     const deleteAndExitBtn = document.getElementById('delete-and-exit-btn');
 
     if (clearChatHistoryBtn) {
-        clearChatHistoryBtn.addEventListener('click', (e) => {
+        clearChatHistoryBtn.onclick = (e) => {
+            e.preventDefault();
             console.log('[SillyPhone] 点击清空聊天记录按钮', state.currentChat);
             if (!state.currentChat) {
                 showToast('当前无活跃聊天', 'x-circle');
@@ -4954,15 +4955,17 @@ function initSillyPhoneUI() {
             // 彻底删除聊天记录
             state.messages[state.currentChat.id] = [];
             renderMessages(state.currentChat.id);
-            showToast('聊天记录已彻底清空', 'check');
+            showToast('聊天记录已清空', 'check');
             saveStateToLocalStorage();
+            saveMessagesToLocalStorage();
             switchPage('chat-window');
-        });
+        };
     }
 
     if (deleteAndExitBtn) {
-        deleteAndExitBtn.addEventListener('click', (e) => {
-            console.log('[SillyPhone] 点击删除并退出按钮', state.currentChat);
+        deleteAndExitBtn.onclick = (e) => {
+            e.preventDefault();
+            console.log('[SillyPhone] 点击删除按钮', state.currentChat);
             if (!state.currentChat) {
                 showToast('当前无活跃聊天', 'x-circle');
                 return;
@@ -4970,11 +4973,10 @@ function initSillyPhoneUI() {
             const isGroup = state.currentChat.isGroup;
             const chatId = state.currentChat.id;
             
-            // 彻底删除在后台也要删除
             if (isGroup) {
                 state.groups = state.groups.filter(g => g.id !== chatId);
             } else {
-                // 如果是单聊，从联系人列表中移除 (彻底删除)
+                // 如果是单聊，从联系人列表中移除
                 state.contacts = state.contacts.filter(c => c.id !== chatId);
             }
             
@@ -4982,11 +4984,17 @@ function initSillyPhoneUI() {
             delete state.messages[chatId];
             
             state.currentChat = null;
-            renderChatList();
+            
+            // 关键：保存并刷新所有列表
             saveStateToLocalStorage();
+            saveMessagesToLocalStorage();
+            
+            renderChatList();
+            renderContactsList(); // 确保联系人列表也刷新
+            
             switchPage('chat-list');
             showToast(isGroup ? '已删除并退出群聊' : '已删除聊天', 'check');
-        });
+        };
     }
 
     function saveMessagesToLocalStorage() {
