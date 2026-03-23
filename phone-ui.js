@@ -127,7 +127,7 @@ function initSillyPhoneUI() {
             }
 
             currentMessages.forEach(msg => {
-                const sender = msg.originalSender || msg.senderName || msg.senderId || msg.sender || '未知';
+                const sender = msg.senderName || msg.senderId || msg.sender || '未知';
                 const avatar = msg.senderAvatar || msg.avatar || '';
                 const content = msg.text || msg.content || '';
                 const time = msg.time || '';
