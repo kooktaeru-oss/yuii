@@ -2438,12 +2438,12 @@ function initSillyPhoneUI() {
                 
                 if (isUserMoment) {
                     const targetNPC = replyTo || '该角色';
-                    promptText = `[系统提示: 朋友圈互动]\n动态内容：“${moment.content}”${commentsContext}\n\n在“我”（{{user}}）的朋友圈下，“我”回复了 ${targetNPC}：“${commentText}”。请让 ${targetNPC} 结合上下文继续回复“我”。（具体格式请严格遵守世界书设定）`;
+                    promptText = `[系统提示: 朋友圈互动]\n动态内容：“${moment.content}”${commentsContext}\n\n在“我”（{{user}}）的朋友圈下，“我”回复了 ${targetNPC}：“${commentText}”。请让 ${targetNPC} 结合上下文，对“我”的这句话做出最新的回应。（具体格式请严格遵守世界书设定，切勿重复历史评论）`;
                 } else {
                     if (replyTo && replyTo !== '') {
-                        promptText = `[系统提示: 朋友圈互动]\n动态内容：“${moment.content}”${commentsContext}\n\n“我”（{{user}}）在 ${moment.authorName} 的朋友圈下，回复了 ${replyTo}：“${commentText}”。请让 ${replyTo} 回复“我”，或者让 ${moment.authorName} 参与互动。（具体格式请严格遵守世界书设定）`;
+                        promptText = `[系统提示: 朋友圈互动]\n动态内容：“${moment.content}”${commentsContext}\n\n“我”（{{user}}）在 ${moment.authorName} 的朋友圈下，回复了 ${replyTo}：“${commentText}”。请让 ${replyTo} 对“我”的这句话做出最新的回应，或者让 ${moment.authorName} 参与互动。（具体格式请严格遵守世界书设定，切勿重复历史评论）`;
                     } else {
-                        promptText = `[系统提示: 朋友圈互动]\n动态内容：“${moment.content}”${commentsContext}\n\n“我”（{{user}}）在 ${moment.authorName} 的朋友圈下发表了评论：“${commentText}”。请让 ${moment.authorName} 回复“我”，或者挑选 1 个共同好友来调侃/回复“我”。（具体格式请严格遵守世界书设定）`;
+                        promptText = `[系统提示: 朋友圈互动]\n动态内容：“${moment.content}”${commentsContext}\n\n“我”（{{user}}）在 ${moment.authorName} 的朋友圈下发表了评论：“${commentText}”。请让 ${moment.authorName} 对“我”的这句话做出最新的回应，或者挑选 1 个共同好友来调侃/回复“我”。（具体格式请严格遵守世界书设定，切勿重复历史评论）`;
                     }
                 }
 
@@ -5641,6 +5641,14 @@ function initSillyPhoneUI() {
                 const isUser = senderName === state.userName || senderName === state.stUserName || senderName === '我' || senderName === 'user';
                 if (isUser) {
                     senderName = '匿名好友'; // 兜底，防止 AI 强行扮演用户
+                }
+
+                // 去重逻辑：如果这条评论已经存在（作者和内容完全一样），则忽略
+                const isDuplicate = moment.comments.some(c => c.authorName === senderName && c.text === cleanText);
+                if (isDuplicate) {
+                    console.warn('[SillyPhone] AI 生成了重复的评论，已忽略:', cleanText);
+                    showToast('AI 重复了之前的话，请重试', 'alert-circle');
+                    return;
                 }
 
                 moment.comments.push({
