@@ -60,7 +60,8 @@ function initSillyPhoneUI() {
             isSpeaker: false,
             transcript: []
         },
-        stUserName: null
+        stUserName: null,
+        sessionStartMsgId: null
     };
 
     // --- SillyTavern 同层同步逻辑 ---
@@ -168,16 +169,19 @@ function initSillyPhoneUI() {
         if (!moments || moments.length === 0) return '';
         let text = '<pyq>\n';
         moments.forEach((moment, index) => {
+            const author = state.contacts.find(c => c.id === moment.authorId) || { name: moment.authorName, avatar: moment.userAvatar };
             text += `<post:${index + 1}>\n`;
-            text += `[${moment.authorName}|${moment.content}|${moment.time}]\n`;
+            text += `[${author.name}|${author.avatar || ''}|${moment.content}|${moment.time}]\n`;
             if (moment.comments && moment.comments.length > 0) {
-                text += `{{\n`;
                 moment.comments.forEach(comment => {
-                    const name = comment.name || comment.authorName || '未知';
+                    const name = comment.authorName || comment.name || '未知';
                     const time = comment.time || new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0');
-                    text += `[评论|${name}|${comment.text}|${time}]\n`;
+                    if (comment.replyToName) {
+                        text += `[评论|${name}|${comment.replyToName}|${comment.text}|${time}]\n`;
+                    } else {
+                        text += `[评论|${name}|${comment.text}|${time}]\n`;
+                    }
                 });
-                text += `}}\n`;
             }
             text += `</post:${index + 1}>\n`;
         });
@@ -413,22 +417,51 @@ function initSillyPhoneUI() {
             const posts = pyqMatch[1].matchAll(/<post:\d+>([\s\S]*?)(?:<\/post:\d+>|$)/g);
             for (const p of posts) {
                 const lines = p[1].trim().split('\n');
-                const mainPost = lines[0].match(/^\[(.*?)\|(.*?)\|(.*?)\|(.*?)\]$/);
-                if (mainPost) {
-                    const moment = {
-                        id: 'mom_' + Math.random().toString(36).substr(2, 9),
-                        userName: mainPost[1],
-                        userAvatar: mainPost[2],
-                        content: mainPost[3],
-                        time: mainPost[4],
-                        comments: []
-                    };
-                    // 解析评论
-                    lines.slice(1).forEach(l => {
-                        const c = l.match(/^\[评论\|(.*?)\|(.*?)\|(.*?)\]$/);
-                        if (c) moment.comments.push({ name: c[1], text: c[2], time: c[3] });
-                    });
-                    data.moments.push(moment);
+                const m = lines[0].match(/^\[(.*)\]$/);
+                if (m) {
+                    const parts = m[1].split('|');
+                    if (parts.length >= 3) {
+                        let userName = parts[0];
+                        let content = '';
+                        let time = parts[parts.length - 1];
+                        let userAvatar = '';
+                        
+                        if (parts.length === 3) {
+                            content = parts[1];
+                        } else if (parts.length >= 4) {
+                            if (parts[1] === '朋友圈' || parts[1] === 'pyq') {
+                                content = parts[2];
+                            } else {
+                                userAvatar = parts[1];
+                                content = parts[2];
+                            }
+                        }
+
+                        const moment = {
+                            id: 'mom_' + Math.random().toString(36).substr(2, 9),
+                            authorId: getContactIdByName(userName),
+                            authorName: userName,
+                            userAvatar: userAvatar || (state.contacts.find(c => c.name === userName)?.avatar || ''),
+                            content: content,
+                            time: time,
+                            comments: []
+                        };
+                        // 解析评论
+                        lines.slice(1).forEach(l => {
+                            const c = l.match(/^\[评论\|(.*?)\]$/);
+                            if (c) {
+                                const cParts = c[1].split('|');
+                                if (cParts.length === 3) {
+                                    // [评论|人名|内容|时间]
+                                    moment.comments.push({ authorName: cParts[0], text: cParts[1], time: cParts[2] });
+                                } else if (cParts.length === 4) {
+                                    // [评论|人名|被评论人名|内容|时间]
+                                    moment.comments.push({ authorName: cParts[0], replyToName: cParts[1], text: cParts[2], time: cParts[3] });
+                                }
+                            }
+                        });
+                        data.moments.push(moment);
+                    }
                 }
             }
         }
@@ -472,6 +505,11 @@ function initSillyPhoneUI() {
         const st = getSTInterface();
         const msgId = st.getCurrentMessageId();
         if (msgId === null) return;
+
+        // 初始化会话开始时的消息ID，用于区分历史记录
+        if (state.sessionStartMsgId === null) {
+            state.sessionStartMsgId = msgId;
+        }
 
         // 尝试从 localStorage 读取最新状态
         let localDataObj = null;
@@ -529,6 +567,9 @@ function initSillyPhoneUI() {
             if (shoujiContent !== null) {
                 foundShouji = true;
                 
+                // 判断当前扫描的层是否属于“历史记录”（即在本次打开手机之前的层）
+                const isHistoryTurn = targetId < state.sessionStartMsgId;
+                
                 // 尝试提取隐藏的 JSON 备份 (兼容老数据)
                 const backupMatch = shoujiContent.match(/<!-- SILLYPHONE_DATA_START\n([\s\S]*?)\nSILLYPHONE_DATA_END -->/);
                 let data = null;
@@ -559,7 +600,7 @@ function initSillyPhoneUI() {
                             if (acc.messages) {
                                 for (const cid in acc.messages) {
                                     if (Array.isArray(acc.messages[cid])) {
-                                        acc.messages[cid].forEach(m => m.isHistory = true);
+                                        acc.messages[cid].forEach(m => m.isHistory = isHistoryTurn);
                                     }
                                 }
                             }
@@ -571,7 +612,7 @@ function initSillyPhoneUI() {
                     if (active && active.messages) {
                         for (const cid in active.messages) {
                             if (!combinedMessages[cid]) {
-                                combinedMessages[cid] = active.messages[cid].map(m => ({ ...m, isHistory: true }));
+                                combinedMessages[cid] = active.messages[cid].map(m => ({ ...m, isHistory: isHistoryTurn }));
                             } else {
                                 const existingSignatures = new Set(combinedMessages[cid].map(m => `${m.senderName || m.sender || m.senderId}|${m.type}|${m.content || m.text || m.duration || ''}`));
                                 const historyToAdd = active.messages[cid].filter(m => {
@@ -579,7 +620,7 @@ function initSillyPhoneUI() {
                                     if (existingSignatures.has(sig)) return false;
                                     existingSignatures.add(sig);
                                     return true;
-                                }).map(m => ({ ...m, isHistory: true }));
+                                }).map(m => ({ ...m, isHistory: isHistoryTurn }));
                                 combinedMessages[cid] = [...historyToAdd, ...combinedMessages[cid]];
                             }
                         }
@@ -664,7 +705,7 @@ function initSillyPhoneUI() {
                             duration: m.duration,
                             amount: m.amount,
                             quote: m.quote,
-                            isHistory: true,
+                            isHistory: isHistoryTurn,
                             sourceMsgId: targetId,
                             isRecalled: m.type === 'recall'
                         };
@@ -2170,11 +2211,14 @@ function initSillyPhoneUI() {
             
             const commentsHtml = moment.comments.length > 0 ? `
                 <div class="comments-list">
-                    ${moment.comments.map(c => `
-                        <div class="comment-item" data-moment-id="${moment.id}" data-comment-id="${c.id}" data-author-id="${c.authorId}" data-author-name="${c.authorName}" data-reply-to="${c.replyToName || ''}">
+                    ${moment.comments.map(c => {
+                        const name = c.authorName || c.name || '未知';
+                        const replyTo = c.replyToName || c.replyTo || '';
+                        return `
+                        <div class="comment-item" data-moment-id="${moment.id}" data-comment-id="${c.id}" data-author-id="${c.authorId}" data-author-name="${name}" data-reply-to="${replyTo}">
                             <div class="comment-content-wrapper">
-                                <span class="comment-author">${c.authorName}</span>
-                                ${c.replyToName ? `<span class="comment-reply">回复</span><span class="comment-author">${c.replyToName}</span>` : ''}
+                                <span class="comment-author">${name}</span>
+                                ${replyTo ? `<span class="comment-reply">回复</span><span class="comment-author">${replyTo}</span>` : ''}
                                 <span class="comment-text">: ${formatContent(c.text)}</span>
                             </div>
                             ${c.authorId === 'user' ? `
@@ -2183,7 +2227,7 @@ function initSillyPhoneUI() {
                                 </button>
                             ` : ''}
                         </div>
-                    `).join('')}
+                    `}).join('')}
                 </div>
             ` : '';
             
@@ -3295,15 +3339,7 @@ function initSillyPhoneUI() {
                     promptText = `[系统提示: 用户在朋友圈页面点击了灵动岛] 请指定由【${names}】分别发布一条符合他们人设的新朋友圈动态。`;
                 }
 
-                setIslandState('loading');
-                showToast('好友正在响应...', 'sparkles');
-                setTimeout(() => {
-                    setIslandState('default');
-                    sendMessage({ 
-                        text: promptText,
-                        isSilent: true 
-                    });
-                }, 1500);
+                triggerAIResponse(promptText);
             }, 'friends'); // 只允许好友发朋友圈
         } else {
             // 在其他页面点击：触发通用 AI 响应
@@ -4199,8 +4235,8 @@ function initSillyPhoneUI() {
     };
 
     function sendMessage(msgData, targetId = null) {
-        if (!state.currentChat) return;
-        const chatId = state.currentChat.id;
+        const chatId = state.currentChat ? state.currentChat.id : (msgData.isSilent ? 'system_queue' : null);
+        if (!chatId) return;
         if (!state.messages[chatId]) state.messages[chatId] = [];
         
         const newMessage = { 
@@ -4247,8 +4283,13 @@ function initSillyPhoneUI() {
         isAIRequestPending = true;
         setIslandState('loading');
         
-        const activeChatId = chatId || (state.currentChat ? state.currentChat.id : 'unknown');
+        const activeChatId = chatId || (state.currentChat ? state.currentChat.id : 'system_queue');
+        if (!state.messages[activeChatId]) state.messages[activeChatId] = [];
+        
         const mode = state.currentPage === 'moments' ? 'moments' : 'chat';
+        
+        // 注入全局系统约束
+        const globalConstraints = `\n[系统指令：记住“我”就是{{user}}。绝对禁止替“我”（{{user}}）发表任何朋友圈、评论或回复。你只能扮演其他角色。严禁发布重复内容。不要自主发送图片链接。]`;
         
         // 使用构建生成 Prompt 的函数，过滤掉历史记录
         const currentSessionMessages = buildGenerationPrompt(activeChatId);
@@ -4308,7 +4349,7 @@ function initSillyPhoneUI() {
                         'chat_history',
                         'user_input',
                     ],
-                    user_input: (customPrompt || (mode === 'moments' ? '请回复朋友圈...' : '请回复...')) + stickerPrompt,
+                    user_input: (customPrompt || (mode === 'moments' ? '请回复朋友圈...' : '请回复...')) + stickerPrompt + globalConstraints,
                     should_silence: true,
                 };
                 
@@ -5499,6 +5540,19 @@ function initSillyPhoneUI() {
         }
     });
 
+    // 辅助函数：通过名字查找联系人ID
+    function getContactIdByName(name) {
+        if (state.contacts) {
+            const contact = state.contacts.find(c => c.name === name);
+            if (contact) return contact.id;
+        }
+        if (state.groups) {
+            const group = state.groups.find(g => g.name === name);
+            if (group) return group.id;
+        }
+        return name; // 找不到则返回原名
+    }
+
     function processAIReply(text, chatId, mode, targetId) {
         // 兜底逻辑：如果缺少上下文，尝试从当前状态获取
         mode = mode || (state.currentPage === 'moments' ? 'moments' : 'chat');
@@ -5517,6 +5571,22 @@ function initSillyPhoneUI() {
                 if (match) {
                     senderName = match[1];
                     cleanText = match[2];
+                    
+                    // 检查是否包含 "回复 XXX: "
+                    const replyMatch = cleanText.match(/^回复\s*([^：:]+)[：:]\s*(.*)/);
+                    if (replyMatch) {
+                        moment.comments.push({
+                            id: 'c' + Date.now(),
+                            authorId: 'ai',
+                            authorName: senderName,
+                            replyToName: replyMatch[1],
+                            text: replyMatch[2]
+                        });
+                        saveMoments();
+                        renderMomentsList();
+                        showToast('朋友圈收到新回复', 'sparkles');
+                        return;
+                    }
                 }
 
                 moment.comments.push({
@@ -5528,165 +5598,155 @@ function initSillyPhoneUI() {
                 saveMoments();
                 renderMomentsList();
                 showToast('朋友圈收到新回复', 'sparkles');
+                return; // 处理完回复直接返回
             }
-        } else {
-            if (!chatId || !state.messages[chatId]) return;
+        }
 
-            // 尝试解析 <shouji> 格式
-            const defaultChatName = state.currentChat ? state.currentChat.name : chatId;
-            const parsedData = parseAuthorFormat(text, defaultChatName);
-            let hasParsedMessages = false;
-            
-            // 辅助函数：通过名字查找联系人ID
-            const getContactIdByName = (name) => {
-                if (state.contacts) {
-                    const contact = state.contacts.find(c => c.name === name);
-                    if (contact) return contact.id;
-                }
-                if (state.groups) {
-                    const group = state.groups.find(g => g.name === name);
-                    if (group) return group.id;
-                }
-                return name; // 找不到则返回原名
-            };
+        // 尝试解析 <shouji> 格式（包含朋友圈和消息）
+        const defaultChatName = state.currentChat ? state.currentChat.name : (chatId === 'system_queue' ? '系统' : chatId);
+        const parsedData = parseAuthorFormat(text, defaultChatName);
+        let hasProcessedAnything = false;
 
-            for (const cid in parsedData.messages) {
-                if (parsedData.messages[cid].length > 0) {
-                    hasParsedMessages = true;
-                    let effectiveCid = cid;
-                    let realCid = getContactIdByName(effectiveCid);
-                    
-                    // 如果 cid 是用户自己，说明 AI 搞反了视角（比如生成了【和林钰如的聊天】）
-                    if (effectiveCid === state.userName || effectiveCid === '我' || effectiveCid === 'user' || effectiveCid === 'me' || effectiveCid === state.wechatId || (state.stUserName && effectiveCid === state.stUserName)) {
-                        // 寻找不是用户的发送者
-                        const aiMsg = parsedData.messages[cid].find(m => {
-                            const s = m.sender;
-                            return s && s !== '我' && s !== state.userName && s !== 'user' && s !== 'me' && s !== '系统消息' && s !== state.wechatId && (!state.stUserName || s !== state.stUserName);
-                        });
-                        if (aiMsg && aiMsg.sender) {
-                            effectiveCid = aiMsg.sender;
-                            realCid = getContactIdByName(effectiveCid);
-                        } else if (state.currentChat) {
-                            effectiveCid = state.currentChat.name;
-                            realCid = state.currentChat.id;
-                        }
-                    }
-                    
-                    if (!state.messages[realCid]) state.messages[realCid] = [];
-                    // 检查重复并添加
-                    const getNormalizedType = (m) => {
-                        let t = m.msgType || m.type;
-                        if (t === 'ai' || t === 'user') return 'text';
-                        if (t === 'image') return 'photo';
-                        if (t === 'redpacket') return 'red-packet';
-                        return t;
-                    };
-                    const existingSignatures = new Set(state.messages[realCid].map(m => `${m.senderName || m.sender || m.senderId}|${getNormalizedType(m)}|${m.content || m.text || m.duration || ''}`));
-                    const newMsgs = parsedData.messages[cid].filter(m => {
-                        const sig = `${m.senderName || m.sender || m.senderId}|${getNormalizedType(m)}|${m.content || m.text || m.duration || ''}`;
-                        if (existingSignatures.has(sig)) return false;
-                        existingSignatures.add(sig);
-                        return true;
+        // 1. 处理解析出的朋友圈动态
+        if (parsedData.moments && parsedData.moments.length > 0) {
+            state.moments.push(...parsedData.moments);
+            saveMoments();
+            renderMomentsList();
+            showToast('朋友圈有新动态', 'sparkles');
+            hasProcessedAnything = true;
+        }
+
+        // 2. 处理解析出的聊天消息
+        for (const cid in parsedData.messages) {
+            if (parsedData.messages[cid].length > 0) {
+                hasProcessedAnything = true;
+                let effectiveCid = cid;
+                let realCid = getContactIdByName(effectiveCid);
+                
+                // 如果 cid 是用户自己，说明 AI 搞反了视角
+                if (effectiveCid === state.userName || effectiveCid === '我' || effectiveCid === 'user' || effectiveCid === 'me' || effectiveCid === state.wechatId || (state.stUserName && effectiveCid === state.stUserName)) {
+                    const aiMsg = parsedData.messages[cid].find(m => {
+                        const s = m.sender;
+                        return s && s !== '我' && s !== state.userName && s !== 'user' && s !== 'me' && s !== '系统消息' && s !== state.wechatId && (!state.stUserName || s !== state.stUserName);
                     });
-                    
-                    // 转换格式以匹配 state.messages 的结构，并过滤掉 AI 幻觉生成的玩家消息
-                    const formattedMsgs = newMsgs.map(m => {
-                        let senderName = m.sender || effectiveCid;
-                        // 严谨逻辑：仅匹配当前昵称、微信号、酒馆用户名或系统默认标识
-                        const isUser = senderName === state.userName || 
-                                       senderName === '我' || 
-                                       senderName === 'user' || 
-                                       senderName === 'me' || 
-                                       senderName === state.wechatId || 
-                                       (state.stUserName && senderName === state.stUserName);
-                        
-                        if (isUser) {
-                            senderName = state.userName; // 统一使用当前用户名
-                        } else if (state.currentChat && !state.currentChat.isGroup && realCid === state.currentChat.id) {
-                            // 私聊强制使用对方的名字，防止 AI 幻觉使用其他名字
-                            senderName = state.currentChat.name;
-                        }
-
-                        return {
-                            id: m.id || 'msg_' + Math.random().toString(36).substr(2, 9),
-                            type: isUser ? 'user' : 'ai',
-                            senderId: isUser ? 'user' : (getContactIdByName(senderName) || senderName),
-                            senderName: senderName,
-                            originalSender: m.sender,
-                            avatar: m.avatar || '',
-                            time: m.time,
-                            text: m.content || m.text,
-                            originalText: m.content || m.text,
-                            msgType: m.type === 'image' ? 'photo' : (m.type === 'redpacket' ? 'red-packet' : m.type),
-                            url: m.type === 'sticker' ? m.content : m.url,
-                            description: m.type === 'image' ? m.content : undefined,
-                            duration: m.duration,
-                            amount: m.amount,
-                            quote: m.quote,
-                            isRecalled: m.type === 'recall'
-                        };
-                    }).filter(m => m.type !== 'user');
-                    
-                    state.messages[realCid].push(...formattedMsgs);
+                    if (aiMsg && aiMsg.sender) {
+                        effectiveCid = aiMsg.sender;
+                        realCid = getContactIdByName(effectiveCid);
+                    } else if (state.currentChat) {
+                        effectiveCid = state.currentChat.name;
+                        realCid = state.currentChat.id;
+                    }
                 }
-            }
+                
+                if (!state.messages[realCid]) state.messages[realCid] = [];
+                const getNormalizedType = (m) => {
+                    let t = m.msgType || m.type;
+                    if (t === 'ai' || t === 'user') return 'text';
+                    if (t === 'image') return 'photo';
+                    if (t === 'redpacket') return 'red-packet';
+                    return t;
+                };
+                const existingSignatures = new Set(state.messages[realCid].map(m => `${m.senderName || m.sender || m.senderId}|${getNormalizedType(m)}|${m.content || m.text || m.duration || ''}`));
+                const newMsgs = parsedData.messages[cid].filter(m => {
+                    const sig = `${m.senderName || m.sender || m.senderId}|${getNormalizedType(m)}|${m.content || m.text || m.duration || ''}`;
+                    if (existingSignatures.has(sig)) return false;
+                    existingSignatures.add(sig);
+                    return true;
+                });
+                
+                const formattedMsgs = newMsgs.map(m => {
+                    let senderName = m.sender || effectiveCid;
+                    const isUser = senderName === state.userName || 
+                                   senderName === '我' || 
+                                   senderName === 'user' || 
+                                   senderName === 'me' || 
+                                   senderName === state.wechatId || 
+                                   (state.stUserName && senderName === state.stUserName);
+                    
+                    if (isUser) {
+                        senderName = state.userName;
+                    } else if (state.currentChat && !state.currentChat.isGroup && realCid === state.currentChat.id) {
+                        senderName = state.currentChat.name;
+                    }
 
-            if (hasParsedMessages) {
+                    return {
+                        id: m.id || 'msg_' + Math.random().toString(36).substr(2, 9),
+                        type: isUser ? 'user' : 'ai',
+                        senderId: isUser ? 'user' : (getContactIdByName(senderName) || senderName),
+                        senderName: senderName,
+                        originalSender: m.sender,
+                        avatar: m.avatar || '',
+                        time: m.time,
+                        text: m.content || m.text,
+                        originalText: m.content || m.text,
+                        msgType: m.type === 'image' ? 'photo' : (m.type === 'redpacket' ? 'red-packet' : m.type),
+                        url: m.type === 'sticker' ? m.content : m.url,
+                        description: m.type === 'image' ? m.content : undefined,
+                        duration: m.duration,
+                        amount: m.amount,
+                        quote: m.quote,
+                        isRecalled: m.type === 'recall'
+                    };
+                }).filter(m => m.type !== 'user');
+                
+                state.messages[realCid].push(...formattedMsgs);
+            }
+        }
+
+        if (hasProcessedAnything) {
+            saveMessagesToLocalStorage();
+            if (state.currentPage === 'chat-window' && chatId) {
+                renderMessages(chatId);
+            }
+            return;
+        }
+
+        // 检查是否是上帝模式或群聊，尝试解析多行对话
+        const isGroup = state.currentChat && state.currentChat.isGroup;
+        const isGodMode = state.currentChat && state.currentChat.godMode;
+        
+        // 清理可能残留的标签
+        let cleanText = text.replace(/<shouji>[\s\S]*?(?:<\/shouji>|$)/g, '').replace(/<horae>[\s\S]*?(?:<\/horae>|$)/g, '').trim();
+        if (!cleanText) {
+            cleanText = text;
+        }
+
+        if (isGroup || isGodMode) {
+            if (!chatId || !state.messages[chatId]) return;
+            const lines = cleanText.split('\n').filter(l => l.trim());
+            let processedAny = false;
+
+            lines.forEach(line => {
+                const match = line.match(/^([^：:]+)[：:]\s*(.*)/);
+                if (match) {
+                    const senderName = match[1].trim();
+                    const content = match[2].trim();
+                    const contact = state.contacts.find(c => c.name === senderName);
+                    const senderId = contact ? contact.id : chatId;
+                    const time = new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0');
+                    state.messages[chatId].push({
+                        id: 'msg_' + Date.now() + Math.random().toString(36).substr(2, 5),
+                        type: 'ai',
+                        senderId: senderId,
+                        senderName: senderName,
+                        time: time,
+                        text: content
+                    });
+                    processedAny = true;
+                }
+            });
+
+            if (processedAny) {
                 saveMessagesToLocalStorage();
                 renderMessages(chatId);
                 showToast('收到新消息', 'message-square');
                 return;
             }
+        }
 
-            // 检查是否是上帝模式或群聊，尝试解析多行对话
-            const isGroup = state.currentChat && state.currentChat.isGroup;
-            const isGodMode = state.currentChat && state.currentChat.godMode;
-            
-            // 清理可能残留的标签
-            let cleanText = text.replace(/<shouji>[\s\S]*?(?:<\/shouji>|$)/g, '').replace(/<horae>[\s\S]*?(?:<\/horae>|$)/g, '').trim();
-            if (!cleanText) {
-                // 如果清理后为空，说明只有标签但没解析出内容，可能是格式错误，保留原文本以供调试
-                cleanText = text;
-            }
-
-            if (isGroup || isGodMode) {
-                const lines = cleanText.split('\n').filter(l => l.trim());
-                let processedAny = false;
-
-                lines.forEach(line => {
-                    // 匹配 "角色名: 内容" 或 "角色名：内容"
-                    const match = line.match(/^([^：:]+)[：:]\s*(.*)/);
-                    if (match) {
-                        const senderName = match[1].trim();
-                        const content = match[2].trim();
-                        
-                        // 查找对应的联系人 ID
-                        const contact = state.contacts.find(c => c.name === senderName);
-                        const senderId = contact ? contact.id : chatId;
-
-                        const time = new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0');
-                        state.messages[chatId].push({
-                            id: 'msg_' + Date.now() + Math.random().toString(36).substr(2, 5),
-                            type: 'ai',
-                            senderId: senderId,
-                            senderName: senderName,
-                            time: time,
-                            text: content
-                        });
-                        processedAny = true;
-                    }
-                });
-
-                if (processedAny) {
-                    saveMessagesToLocalStorage();
-                    renderMessages(chatId);
-                    showToast('收到新消息', 'message-square');
-                    return;
-                }
-            }
-
-            // 普通单人聊天或解析失败的兜底
-            const time = new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0');
+        // 普通单人聊天或解析失败的兜底
+        if (!chatId || !state.messages[chatId]) return;
+        const time = new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0');
             
             const newMessage = {
                 id: 'msg_' + Date.now(),
@@ -5696,11 +5756,10 @@ function initSillyPhoneUI() {
                 text: cleanText
             };
 
-            state.messages[chatId].push(newMessage);
-            saveMessagesToLocalStorage();
-            renderMessages(chatId);
-            showToast('收到新消息', 'message-square');
-        }
+        state.messages[chatId].push(newMessage);
+        saveMessagesToLocalStorage();
+        renderMessages(chatId);
+        showToast('收到新消息', 'message-square');
     }
 
     loadUserStickers();
