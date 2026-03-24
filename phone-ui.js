@@ -2385,11 +2385,18 @@ function initSillyPhoneUI() {
                     return c ? c.name : null;
                 }).filter(n => n !== null);
 
+                const isUserMoment = moment.authorName === state.userName || moment.authorName === state.stUserName || moment.authorName === '我' || moment.authorName === 'user';
+                
                 let promptText = `[系统提示: 用户点击了互动按钮] 动态ID: ${moment.id}, 动态作者: ${moment.authorName}, 圈子: ${authorCircle || '未指定'}。`;
                 if (mentions.length > 0) {
                     promptText += `\n[强制响应]: 请务必让被@到的好友【${mentions.join('】和【')}】进行回复。`;
                 }
-                promptText += `\n请从该圈子（${authorCircle}）的成员中随机挑选 1 到 3 个角色（排除被屏蔽的ID: ${blockedIds.join(', ')}），发布符合他们人设的简短评论。回复格式必须为：[评论|角色名|评论内容|时间]`;
+                
+                if (isUserMoment) {
+                    promptText += `\n这是“我”（{{user}}）发的朋友圈动态。请从我的好友列表中随机挑选 1 到 3 个角色，根据动态内容发表评论。绝对不要替“我”回复。回复格式必须为：[评论|角色名|评论内容|时间]`;
+                } else {
+                    promptText += `\n这是 ${moment.authorName} 发的朋友圈动态。请从我的好友列表中挑选 1 到 2 个还没有评论过的角色来“吃瓜”评论，或者让 ${moment.authorName} 回复现有的评论。绝对不要替“我”（{{user}}）发表评论。回复格式必须为：[评论|角色名|评论内容|时间] 或 [评论|角色名|被回复人名|回复内容|时间]`;
+                }
                 
                 setIslandState('loading');
                 showToast('好友正在响应...', 'sparkles');
@@ -2413,25 +2420,26 @@ function initSillyPhoneUI() {
                 const replyTo = item.dataset.replyTo; // 这里的 replyTo 是我回复的那个人
                 const moment = state.moments.find(m => m.id === momentId);
                 
-                // 如果我明确回复了某人，点击 ✨ 直接让那个人回复我，不弹窗
-                if (replyTo && replyTo !== '') {
-                    const promptText = `[系统提示: 用户请求你互动这条动态] 动态ID: ${moment.id}, 动态作者: ${moment.authorName}, 回复对象: 我, 指定回复人: 【${replyTo}】, 内容: ${moment.content}。请让【${replyTo}】回复我的评论。回复格式必须为：[评论|${replyTo}|我|回复内容|时间]`;
-                    
-                    setIslandState('loading');
-                    showToast('好友正在响应...', 'sparkles');
-                    
-                    setTimeout(() => {
-                        setIslandState('default');
-                        sendMessage({ 
-                            text: promptText,
-                            isSilent: true 
-                        }, moment.id);
-                    }, 1200);
-                    return;
-                }
+                const commentId = item.dataset.commentId;
+                const comment = moment.comments.find(c => c.id === commentId);
+                const commentText = comment ? comment.text : '';
+                
+                const isUserMoment = moment.authorName === state.userName || moment.authorName === state.stUserName || moment.authorName === '我' || moment.authorName === 'user';
 
-                const authorCircle = moment.authorCircle || (state.contacts.find(c => c.name === moment.authorName)?.circle);
-                const promptText = `[系统提示: 用户点击了互动按钮] 动态ID: ${moment.id}, 动态作者: ${moment.authorName}, 圈子: ${authorCircle || '未指定'}。请从该圈子（${authorCircle}）的成员中随机挑选 1 个角色，回复我的评论。回复格式必须为：[评论|角色名|我|回复内容|时间]`;
+                let promptText = '';
+                
+                if (isUserMoment) {
+                    // 如果是我发的朋友圈，我回复了某人，点击 ✨ 让那个人继续回复我
+                    const targetNPC = replyTo || '该角色';
+                    promptText = `[系统提示: 用户请求互动] 在“我”（{{user}}）的朋友圈下，“我”回复了 ${targetNPC}：“${commentText}”。请让 ${targetNPC} 继续回复“我”，进行一对一的互动。绝对不要替“我”生成回复。回复格式必须为：[评论|${targetNPC}|我|回复内容|时间]`;
+                } else {
+                    // 如果是 NPC 发的朋友圈，我评论了，点击 ✨ 让发圈人回复我，或者让共友回复我
+                    if (replyTo && replyTo !== '') {
+                        promptText = `[系统提示: 用户请求互动] “我”（{{user}}）在 ${moment.authorName} 的朋友圈下，回复了 ${replyTo}：“${commentText}”。请让 ${replyTo} 回复“我”，或者让 ${moment.authorName} 参与互动。绝对不要替“我”生成回复。回复格式必须为：[评论|角色名|我|回复内容|时间]`;
+                    } else {
+                        promptText = `[系统提示: 用户请求互动] “我”（{{user}}）在 ${moment.authorName} 的朋友圈下发表了评论：“${commentText}”。在微信朋友圈中，只有共同好友能看到彼此的评论。请让 ${moment.authorName} 回复“我”，或者从我的好友名单（共同好友）中挑选 1 个角色来调侃/回复“我”。绝对不要替“我”生成回复。回复格式必须为：[评论|角色名|我|回复内容|时间]`;
+                    }
+                }
 
                 setIslandState('loading');
                 showToast('好友正在响应...', 'sparkles');
@@ -3337,10 +3345,10 @@ function initSillyPhoneUI() {
                 
                 let promptText = '';
                 if (targetNames.trim() === '') {
-                    promptText = "[系统提示: 用户在朋友圈页面点击了灵动岛] 请从当前联系人中随机挑选 1 到 2 个角色，发布一条符合他们人设的新朋友圈动态。发布动态后，请随机挑选 1 到 3 个其他角色（必须是不同的角色，绝对不能是“我”或“{{user}}”）在动态下方发表评论，模拟真实的朋友圈互动。";
+                    promptText = "[系统提示: 用户在朋友圈页面点击了灵动岛] 请从当前联系人中随机挑选 1 到 2 个角色，发布一条符合他们人设的新朋友圈动态。发布动态后，请随机挑选 1 到 3 个其他角色（必须是不同的角色，绝对不能是“我”或“{{user}}”）在动态下方发表评论。接着，让发布动态的角色根据性格，选择性地回复其中 1 到 2 条评论，模拟真实的朋友圈互动。";
                 } else {
                     const names = targetNames.trim().split(/\s+/).join('】和【');
-                    promptText = `[系统提示: 用户在朋友圈页面点击了灵动岛] 请指定由【${names}】分别发布一条符合他们人设的新朋友圈动态。发布动态后，请随机挑选 1 到 3 个其他角色（必须是不同的角色，绝对不能是“我”或“{{user}}”）在动态下方发表评论，模拟真实的朋友圈互动。`;
+                    promptText = `[系统提示: 用户在朋友圈页面点击了灵动岛] 请指定由【${names}】分别发布一条符合他们人设的新朋友圈动态。发布动态后，请随机挑选 1 到 3 个其他角色（必须是不同的角色，绝对不能是“我”或“{{user}}”）在动态下方发表评论。接着，让发布动态的角色根据性格，选择性地回复其中 1 到 2 条评论，模拟真实的朋友圈互动。`;
                 }
 
                 triggerAIResponse(promptText);
