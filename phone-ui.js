@@ -3801,19 +3801,33 @@ function initSillyPhoneUI() {
                 }
             } else if (m.msgType === 'sticker') {
                 let displayUrl = m.url;
+                // 增强匹配逻辑：优先全匹配标签，再匹配文件名
                 if (displayUrl && !displayUrl.startsWith('http')) {
                     let foundUrl = null;
+                    // 第一遍：全匹配标签
                     for (const catName in state.stickers) {
                         const cat = state.stickers[catName];
-                        const found = cat.items.find(s => 
-                            (s.url && displayUrl.includes(s.url.split('/').pop())) || 
-                            (s.label && displayUrl.includes(s.label))
-                        );
+                        const found = cat.items.find(s => s.label === displayUrl);
                         if (found) {
                             foundUrl = found.url;
                             break;
                         }
                     }
+                    // 第二遍：模糊匹配（包含标签或文件名）
+                    if (!foundUrl) {
+                        for (const catName in state.stickers) {
+                            const cat = state.stickers[catName];
+                            const found = cat.items.find(s => 
+                                (s.url && displayUrl.includes(s.url.split('/').pop())) || 
+                                (s.label && displayUrl.includes(s.label))
+                            );
+                            if (found) {
+                                foundUrl = found.url;
+                                break;
+                            }
+                        }
+                    }
+                    
                     if (foundUrl) {
                         displayUrl = foundUrl;
                     } else {
@@ -4257,6 +4271,25 @@ function initSillyPhoneUI() {
 
         const st = getSTInterface();
         
+        // 动态注入当前角色绑定的表情包清单
+        let stickerPrompt = "";
+        if (mode === 'chat' && state.currentChat && !state.currentChat.isGroup) {
+            const charName = state.currentChat.name;
+            const availableLabels = [];
+            for (const catName in state.stickers) {
+                const cat = state.stickers[catName];
+                // 检查该分类是否绑定了当前角色
+                if (cat.roles && cat.roles.includes(charName)) {
+                    cat.items.forEach(item => {
+                        if (item.label) availableLabels.push(item.label);
+                    });
+                }
+            }
+            if (availableLabels.length > 0) {
+                stickerPrompt = `\n[系统提示：你当前可用的表情包标签如下，请在需要时使用：${availableLabels.join('、')}。发送格式：[角色昵称|表情包|标签名|时间]]`;
+            }
+        }
+        
         // 尝试使用同层原生 API 进行生成
         if (st.generateRaw) {
             try {
@@ -4275,7 +4308,7 @@ function initSillyPhoneUI() {
                         'chat_history',
                         'user_input',
                     ],
-                    user_input: customPrompt || (mode === 'moments' ? '请回复朋友圈...' : '请回复...'),
+                    user_input: (customPrompt || (mode === 'moments' ? '请回复朋友圈...' : '请回复...')) + stickerPrompt,
                     should_silence: true,
                 };
                 
