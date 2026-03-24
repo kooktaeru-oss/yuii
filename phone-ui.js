@@ -5716,7 +5716,10 @@ function initSillyPhoneUI() {
                     }
                     
                     const isUser = senderName === state.userName || senderName === state.stUserName || senderName === '我' || senderName === 'user';
-                    if (isUser) senderName = '匿名好友';
+                    if (isUser) {
+                        // 忽略 AI 伪造的用户评论
+                        continue;
+                    }
 
                     const isDuplicate = moment.comments.some(c => c.authorName === senderName && c.text === cleanText);
                     if (!isDuplicate) {
@@ -5750,7 +5753,10 @@ function initSillyPhoneUI() {
                             }
                             
                             const isUser = senderName === state.userName || senderName === state.stUserName || senderName === '我' || senderName === 'user';
-                            if (isUser) senderName = '匿名好友';
+                            if (isUser) {
+                                // 忽略 AI 伪造的用户评论
+                                continue;
+                            }
                             
                             const isDuplicate = moment.comments.some(c => c.authorName === senderName && c.text === cleanText);
                             if (!isDuplicate) {
@@ -5785,7 +5791,10 @@ function initSillyPhoneUI() {
                             }
                             
                             const isUser = senderName === state.userName || senderName === state.stUserName || senderName === '我' || senderName === 'user';
-                            if (isUser) senderName = '匿名好友';
+                            if (isUser) {
+                                // 忽略 AI 伪造的用户评论
+                                return;
+                            }
                             
                             const isDuplicate = moment.comments.some(c => c.authorName === senderName && c.text === cleanText);
                             if (!isDuplicate) {
