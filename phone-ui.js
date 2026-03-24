@@ -5,6 +5,52 @@
  */
 
 function initSillyPhoneUI() {
+    // 注入必要的 CSS
+    const style = document.createElement('style');
+    style.textContent = `
+        .action-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.2s;
+        }
+        .action-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        .ai-moment-btn {
+            color: #fbbf24;
+        }
+        .ai-comment-trigger {
+            background: transparent;
+            border: none;
+            color: #fbbf24;
+            cursor: pointer;
+            padding: 2px;
+            margin-left: 8px;
+            opacity: 0.6;
+            transition: opacity 0.2s;
+        }
+        .ai-comment-trigger:hover {
+            opacity: 1;
+        }
+        .comment-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 4px 0;
+        }
+        .comment-content-wrapper {
+            flex: 1;
+        }
+    `;
+    document.head.appendChild(style);
+
     const state = {
         currentPage: 'chat-list',
         currentChat: null,
@@ -454,15 +500,32 @@ function initSillyPhoneUI() {
                                 const cParts = c[1].split('|');
                                 if (cParts.length === 3) {
                                     // [评论|人名|内容|时间]
+                                    const cAuthorName = cParts[0];
+                                    const isUser = cAuthorName === state.userName || cAuthorName === '我' || cAuthorName === 'user' || cAuthorName === 'me' || cAuthorName === state.wechatId || (state.stUserName && cAuthorName === state.stUserName);
+                                    
                                     // 过滤掉角色自己评论自己的情况
-                                    if (cParts[0] !== userName) {
-                                        moment.comments.push({ authorName: cParts[0], text: cParts[1], time: cParts[2] });
+                                    if (cAuthorName !== userName) {
+                                        moment.comments.push({ 
+                                            authorId: isUser ? 'user' : 'ai',
+                                            authorName: cAuthorName, 
+                                            text: cParts[1], 
+                                            time: cParts[2] 
+                                        });
                                     }
                                 } else if (cParts.length === 4) {
                                     // [评论|人名|被评论人名|内容|时间]
+                                    const cAuthorName = cParts[0];
+                                    const isUser = cAuthorName === state.userName || cAuthorName === '我' || cAuthorName === 'user' || cAuthorName === 'me' || cAuthorName === state.wechatId || (state.stUserName && cAuthorName === state.stUserName);
+                                    
                                     // 过滤掉角色自己回复自己的情况
-                                    if (cParts[0] !== userName && cParts[0] !== cParts[1]) {
-                                        moment.comments.push({ authorName: cParts[0], replyToName: cParts[1], text: cParts[2], time: cParts[3] });
+                                    if (cAuthorName !== userName && cAuthorName !== cParts[1]) {
+                                        moment.comments.push({ 
+                                            authorId: isUser ? 'user' : 'ai',
+                                            authorName: cAuthorName, 
+                                            replyToName: cParts[1], 
+                                            text: cParts[2], 
+                                            time: cParts[3] 
+                                        });
                                     }
                                 }
                             }
@@ -2221,16 +2284,19 @@ function initSillyPhoneUI() {
                     ${moment.comments.map(c => {
                         const name = c.authorName || c.name || '未知';
                         const replyTo = c.replyToName || c.replyTo || '';
+                        const isUserComment = c.authorId === 'user' || name === '我' || name === state.userName || name === state.wechatId || (state.stUserName && name === state.stUserName);
+                        
                         return `
-                        <div class="comment-item" data-moment-id="${moment.id}" data-comment-id="${c.id}" data-author-id="${c.authorId}" data-author-name="${name}" data-reply-to="${replyTo}">
+                        <div class="comment-item" data-moment-id="${moment.id}" data-comment-id="${c.id}" data-author-id="${c.authorId || (isUserComment ? 'user' : 'ai')}" data-author-name="${name}" data-reply-to="${replyTo}">
                             <div class="comment-content-wrapper">
                                 <span class="comment-author">${name}</span>
                                 ${replyTo ? `<span class="comment-reply">回复</span><span class="comment-author">${replyTo}</span>` : ''}
                                 <span class="comment-text">: ${formatContent(c.text)}</span>
                             </div>
-                            ${c.authorId === 'user' ? `
-                                <button class="ai-comment-trigger" title="要求对方回复我">
+                            ${isUserComment ? `
+                                <button class="action-btn ai-comment-trigger" title="要求对方回复我">
                                     <i data-lucide="sparkles" size="12"></i>
+                                    <span style="font-size: 8px;">✨</span>
                                 </button>
                             ` : ''}
                         </div>
@@ -2266,6 +2332,7 @@ function initSillyPhoneUI() {
                         <div class="moment-actions">
                             <button class="action-btn ai-moment-btn" data-id="${moment.id}" title="触发互动">
                                 <i data-lucide="sparkles" size="16"></i>
+                                <span style="font-size: 10px;">✨</span>
                             </button>
                             <button class="action-btn comment-btn" data-id="${moment.id}">
                                 <i data-lucide="message-square" size="16"></i>
@@ -2361,6 +2428,7 @@ function initSillyPhoneUI() {
     };
 
     function attachMomentEvents() {
+        console.log('[SillyPhone] Attaching moment events...');
         // 互动按钮 (针对特定动态触发回复)
         // AI 互动按钮 (点击直接触发随机互动)
         document.querySelectorAll('.ai-moment-btn').forEach(btn => {
@@ -2368,7 +2436,10 @@ function initSillyPhoneUI() {
                 e.stopPropagation();
                 const id = btn.dataset.id;
                 const moment = state.moments.find(m => m.id === id);
-                if (!moment) return;
+                if (!moment) {
+                    console.error('[SillyPhone] 未找到动态:', id);
+                    return;
+                }
 
                 const authorCircle = moment.authorCircle || (state.contacts.find(c => c.name === moment.authorName)?.circle);
                 const blockedIds = moment.blockedIds || [];
@@ -2383,8 +2454,13 @@ function initSillyPhoneUI() {
                 if (mentions.length > 0) {
                     promptText += `\n[强制响应]: 请务必让被@到的好友【${mentions.join('】和【')}】进行回复。`;
                 }
-                promptText += `\n请从该圈子（${authorCircle}）的成员中随机挑选 1 到 3 个角色（排除被屏蔽的ID: ${blockedIds.join(', ')}），发布符合他们人设的简短评论。
-请务必使用格式：[评论|人名|评论的文字内容|时间]`;
+                
+                if (authorCircle) {
+                    promptText += `\n请从该圈子（${authorCircle}）的成员中随机挑选 1 到 3 个角色（排除被屏蔽的ID: ${blockedIds.join(', ')}），发布符合他们人设的简短评论。`;
+                } else {
+                    promptText += `\n请作为动态作者的好友，随机挑选 1 到 3 个角色，发布符合他们人设的简短评论。`;
+                }
+                promptText += `\n请务必使用格式：[评论|人名|评论的文字内容|时间]`;
                 
                 setIslandState('loading');
                 showToast('好友正在响应...', 'sparkles');
@@ -2404,9 +2480,12 @@ function initSillyPhoneUI() {
             btn.onclick = (e) => {
                 e.stopPropagation();
                 const item = btn.closest('.comment-item');
+                if (!item) return;
+                
                 const momentId = item.dataset.momentId;
                 const replyTo = item.dataset.replyTo; // 这里的 replyTo 是我回复的那个人
                 const moment = state.moments.find(m => m.id === momentId);
+                if (!moment) return;
                 
                 // 如果我明确回复了某人，点击 ✨ 直接让那个人回复我，不弹窗
                 if (replyTo && replyTo !== '') {
@@ -2427,8 +2506,14 @@ function initSillyPhoneUI() {
                 }
 
                 const authorCircle = moment.authorCircle || (state.contacts.find(c => c.name === moment.authorName)?.circle);
-                const promptText = `[系统提示: 用户点击了互动按钮] 动态ID: ${moment.id}, 动态作者: ${moment.authorName}, 圈子: ${authorCircle || '未指定'}。请从该圈子（${authorCircle}）的成员中随机挑选 1 个角色，回复我的评论。
-请务必使用格式：[评论|人名|被评论的人名|评论的文字内容|时间]`;
+                let promptText = `[系统提示: 用户点击了互动按钮] 动态ID: ${moment.id}, 动态作者: ${moment.authorName}, 圈子: ${authorCircle || '未指定'}。`;
+                
+                if (authorCircle) {
+                    promptText += `\n请从该圈子（${authorCircle}）的成员中随机挑选 1 个角色，回复我的评论。`;
+                } else {
+                    promptText += `\n请作为好友，随机挑选 1 个角色，回复我的评论。`;
+                }
+                promptText += `\n请务必使用格式：[评论|人名|被评论的人名|评论的文字内容|时间]`;
 
                 setIslandState('loading');
                 showToast('好友正在响应...', 'sparkles');
