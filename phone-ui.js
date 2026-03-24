@@ -336,6 +336,18 @@ function initSillyPhoneUI() {
         return (state.messages[chatId] || []).filter(m => !m.isHistory);
     }
 
+    function generateMomentId(author, content) {
+        if (!author || !content) return 'mom_' + Math.random().toString(36).substr(2, 9);
+        // 使用作者和内容的前100个字符生成哈希，增加唯一性
+        let str = author + content.substring(0, 100);
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            hash = ((hash << 5) - hash) + str.charCodeAt(i);
+            hash |= 0;
+        }
+        return 'mom_' + Math.abs(hash).toString(36);
+    }
+
     function parseAuthorFormat(rawText, defaultChatName = "未知会话") {
         const data = {
             messages: {},
@@ -484,7 +496,7 @@ function initSillyPhoneUI() {
                         }
 
                         const moment = {
-                            id: 'mom_' + Math.random().toString(36).substr(2, 9),
+                            id: generateMomentId(userName, content),
                             authorId: getContactIdByName(userName),
                             authorName: userName,
                             userAvatar: userAvatar || (state.contacts.find(c => c.name === userName)?.avatar || ''),
@@ -505,11 +517,14 @@ function initSillyPhoneUI() {
                                     
                                     // 过滤掉角色自己评论自己的情况
                                     if (cAuthorName !== userName) {
+                                        const cText = cParts[1];
+                                        const cTime = cParts[2];
                                         moment.comments.push({ 
+                                            id: 'c_' + generateMomentId(cAuthorName, cText),
                                             authorId: isUser ? 'user' : 'ai',
                                             authorName: cAuthorName, 
-                                            text: cParts[1], 
-                                            time: cParts[2] 
+                                            text: cText, 
+                                            time: cTime 
                                         });
                                     }
                                 } else if (cParts.length === 4) {
@@ -519,12 +534,15 @@ function initSillyPhoneUI() {
                                     
                                     // 过滤掉角色自己回复自己的情况
                                     if (cAuthorName !== userName && cAuthorName !== cParts[1]) {
+                                        const cText = cParts[2];
+                                        const cTime = cParts[3];
                                         moment.comments.push({ 
+                                            id: 'c_' + generateMomentId(cAuthorName, cText),
                                             authorId: isUser ? 'user' : 'ai',
                                             authorName: cAuthorName, 
                                             replyToName: cParts[1], 
-                                            text: cParts[2], 
-                                            time: cParts[3] 
+                                            text: cText, 
+                                            time: cTime 
                                         });
                                     }
                                 }
@@ -616,6 +634,14 @@ function initSillyPhoneUI() {
             userAccounts = localDataObj.userAccounts;
             state.activeAccountId = localDataObj.activeAccountId;
             state.stickers = localDataObj.stickers || state.stickers;
+            
+            // 提前确立身份，以便后续解析朋友圈时能正确识别用户评论
+            const activeAcc = (userAccounts || []).find(a => a.id === state.activeAccountId);
+            if (activeAcc) {
+                state.userName = activeAcc.name;
+                state.userAvatar = activeAcc.avatar;
+                state.wechatId = activeAcc.wechatId;
+            }
         }
 
         for (let i = 0; i <= 30; i++) {
@@ -826,8 +852,23 @@ function initSillyPhoneUI() {
                         }
                     }
                 }
-                if (combinedMoments.length === 0 && textData.moments.length > 0) {
-                    combinedMoments = textData.moments;
+                if (textData.moments.length > 0) {
+                    textData.moments.forEach(m => {
+                        const existing = combinedMoments.find(em => em.id === m.id);
+                        if (!existing) {
+                            combinedMoments.push(m);
+                        } else {
+                            // 合并评论，去重
+                            m.comments.forEach(c => {
+                                const isDuplicate = existing.comments.some(ec => 
+                                    ec.text === c.text && ec.authorName === c.authorName
+                                );
+                                if (!isDuplicate) {
+                                    existing.comments.push(c);
+                                }
+                            });
+                        }
+                    });
                 }
             } else if (!foundShouji && !chat.is_user) {
                 // 如果还没找到 <shouji>，且这是一条 AI 消息，说明这是 AI 新生成的回复！
@@ -913,6 +954,21 @@ function initSillyPhoneUI() {
             }
 
             state.messages = combinedMessages;
+            // 合并当前内存中的动态（可能包含刚刚 processAIReply 添加的评论）
+            state.moments.forEach(m => {
+                const existing = combinedMoments.find(em => em.id === m.id);
+                if (!existing) {
+                    // 如果历史中没有，说明是本地新发的，保留
+                    combinedMoments.push(m);
+                } else {
+                    // 如果历史中有，合并评论
+                    m.comments.forEach(c => {
+                        if (!existing.comments.find(ec => ec.id === c.id)) {
+                            existing.comments.push(c);
+                        }
+                    });
+                }
+            });
             state.moments = combinedMoments;
             
             // 处理 raw AI message
@@ -2602,11 +2658,12 @@ function initSillyPhoneUI() {
             const moment = state.moments.find(m => m.id === activeMomentId);
             if (moment) {
                 moment.comments.push({
-                    id: 'c' + Date.now(),
+                    id: 'c_' + generateMomentId(state.userName || '我', text),
                     authorId: 'user',
-                    authorName: '我',
+                    authorName: state.userName || '我',
                     replyToName: activeReplyTo,
-                    text: text
+                    text: text,
+                    time: '刚刚'
                 });
                 saveMoments();
                 renderMomentsList();
@@ -2784,7 +2841,7 @@ function initSillyPhoneUI() {
         }
         
         state.moments.unshift({
-            id: 'm' + Date.now(),
+            id: generateMomentId(state.userName, content),
             authorId: 'user',
             authorName: state.userName,
             authorAvatar: state.userAvatar,
@@ -5676,25 +5733,25 @@ function initSillyPhoneUI() {
                         // [评论|人名|内容|时间]
                         if (cParts[0] !== moment.authorName) {
                             moment.comments.push({
-                                id: 'c' + Date.now() + Math.random().toString(36).substr(2, 5),
-                                authorId: 'ai',
-                                authorName: cParts[0],
-                                text: cParts[1],
-                                time: cParts[2]
-                            });
+                            id: 'c_' + generateMomentId(cParts[0], cParts[1]),
+                            authorId: 'ai',
+                            authorName: cParts[0],
+                            text: cParts[1],
+                            time: cParts[2]
+                        });
                             hasStructuredComments = true;
                         }
                     } else if (cParts.length === 4) {
                         // [评论|人名|被评论人名|内容|时间]
                         if (cParts[0] !== cParts[1]) {
                             moment.comments.push({
-                                id: 'c' + Date.now() + Math.random().toString(36).substr(2, 5),
-                                authorId: 'ai',
-                                authorName: cParts[0],
-                                replyToName: cParts[1],
-                                text: cParts[2],
-                                time: cParts[3]
-                            });
+                            id: 'c_' + generateMomentId(cParts[0], cParts[2]),
+                            authorId: 'ai',
+                            authorName: cParts[0],
+                            replyToName: cParts[1],
+                            text: cParts[2],
+                            time: cParts[3]
+                        });
                             hasStructuredComments = true;
                         }
                     }
@@ -5721,11 +5778,12 @@ function initSillyPhoneUI() {
                     const replyMatch = cleanText.match(/^回复\s*([^：:]+)[：:]\s*(.*)/);
                     if (replyMatch) {
                         moment.comments.push({
-                            id: 'c' + Date.now(),
+                            id: 'c_' + generateMomentId(senderName, replyMatch[2]),
                             authorId: 'ai',
                             authorName: senderName,
                             replyToName: replyMatch[1],
-                            text: replyMatch[2]
+                            text: replyMatch[2],
+                            time: '刚刚'
                         });
                         saveMoments();
                         renderMomentsList();
@@ -5735,10 +5793,11 @@ function initSillyPhoneUI() {
                 }
 
                 moment.comments.push({
-                    id: 'c' + Date.now(),
+                    id: 'c_' + generateMomentId(senderName, cleanText),
                     authorId: 'ai',
                     authorName: senderName,
-                    text: cleanText
+                    text: cleanText,
+                    time: '刚刚'
                 });
                 saveMoments();
                 renderMomentsList();
