@@ -2396,6 +2396,12 @@ function initSillyPhoneUI() {
                     promptText += `\n[强制响应]: 请务必让被@到的好友【${mentions.join('】和【')}】进行回复。`;
                 }
                 
+                if (isUserMoment) {
+                    promptText += `\n这是“我”（{{user}}）发的朋友圈。请挑选 1~3 个角色进行评论。（具体格式请严格遵守世界书设定）`;
+                } else {
+                    promptText += `\n这是 ${moment.authorName} 发的朋友圈。请挑选 1~2 个角色进行评论，或让 ${moment.authorName} 回复现有评论。（具体格式请严格遵守世界书设定）`;
+                }
+                
                 setIslandState('loading');
                 showToast('好友正在响应...', 'sparkles');
                 
@@ -2430,10 +2436,15 @@ function initSillyPhoneUI() {
 
                 let promptText = '';
                 
-                if (replyTo && replyTo !== '') {
-                    promptText = `[系统提示: 朋友圈互动]\n动态作者: ${moment.authorName}\n动态内容：“${moment.content}”${commentsContext}\n\n“我”（{{user}}）刚刚回复了 ${replyTo}：“${commentText}”`;
+                if (isUserMoment) {
+                    const targetNPC = replyTo || '该角色';
+                    promptText = `[系统提示: 朋友圈互动]\n动态内容：“${moment.content}”${commentsContext}\n\n在“我”（{{user}}）的朋友圈下，“我”回复了 ${targetNPC}：“${commentText}”。请让 ${targetNPC} 结合上下文继续回复“我”。（具体格式请严格遵守世界书设定）`;
                 } else {
-                    promptText = `[系统提示: 朋友圈互动]\n动态作者: ${moment.authorName}\n动态内容：“${moment.content}”${commentsContext}\n\n“我”（{{user}}）刚刚发表了评论：“${commentText}”`;
+                    if (replyTo && replyTo !== '') {
+                        promptText = `[系统提示: 朋友圈互动]\n动态内容：“${moment.content}”${commentsContext}\n\n“我”（{{user}}）在 ${moment.authorName} 的朋友圈下，回复了 ${replyTo}：“${commentText}”。请让 ${replyTo} 回复“我”，或者让 ${moment.authorName} 参与互动。（具体格式请严格遵守世界书设定）`;
+                    } else {
+                        promptText = `[系统提示: 朋友圈互动]\n动态内容：“${moment.content}”${commentsContext}\n\n“我”（{{user}}）在 ${moment.authorName} 的朋友圈下发表了评论：“${commentText}”。请让 ${moment.authorName} 回复“我”，或者挑选 1 个共同好友来调侃/回复“我”。（具体格式请严格遵守世界书设定）`;
+                    }
                 }
 
                 setIslandState('loading');
@@ -3340,10 +3351,10 @@ function initSillyPhoneUI() {
                 
                 let promptText = '';
                 if (targetNames.trim() === '') {
-                    promptText = "[系统提示: 用户请求刷新朋友圈] 请发布新的朋友圈动态。";
+                    promptText = "[系统提示: 用户在朋友圈页面点击了灵动岛] 请从当前联系人中随机挑选 1 到 2 个角色，发布一条符合他们人设的新朋友圈动态。发布动态后，请随机挑选 1 到 3 个其他角色（必须是不同的角色，绝对不能是“我”或“{{user}}”）在动态下方发表评论。接着，让发布动态的角色根据性格，选择性地回复其中 1 到 2 条评论，模拟真实的朋友圈互动。";
                 } else {
                     const names = targetNames.trim().split(/\s+/).join('】和【');
-                    promptText = `[系统提示: 用户请求刷新朋友圈] 请指定由【${names}】发布新的朋友圈动态。`;
+                    promptText = `[系统提示: 用户在朋友圈页面点击了灵动岛] 请指定由【${names}】分别发布一条符合他们人设的新朋友圈动态。发布动态后，请随机挑选 1 到 3 个其他角色（必须是不同的角色，绝对不能是“我”或“{{user}}”）在动态下方发表评论。接着，让发布动态的角色根据性格，选择性地回复其中 1 到 2 条评论，模拟真实的朋友圈互动。`;
                 }
 
                 triggerAIResponse(promptText);
