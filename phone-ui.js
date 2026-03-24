@@ -290,7 +290,7 @@ function initSillyPhoneUI() {
         return (state.messages[chatId] || []).filter(m => !m.isHistory);
     }
 
-    function parseAuthorFormat(rawText, defaultChatName = "未知会话") {
+    function parseAuthorFormat(rawText, defaultChatName = "未知会话", mode = "chat") {
         const data = {
             messages: {},
             moments: []
@@ -300,6 +300,7 @@ function initSillyPhoneUI() {
 
         // 辅助函数：解析单行消息
         const parseMessageLine = (line) => {
+            if (line.startsWith('[评论|')) return null;
             const m = line.match(/^\[(.*)\]$/);
             if (!m) return null;
             const parts = m[1].split('|');
@@ -458,12 +459,12 @@ function initSillyPhoneUI() {
                                 
                                 if (cParts.length === 3) {
                                     // [评论|人名|内容|时间]
-                                    if (commentAuthor !== userName && !isUser) {
+                                    if (!isUser) {
                                         moment.comments.push({ authorName: commentAuthor, text: cParts[1], time: cParts[2] });
                                     }
                                 } else if (cParts.length === 4) {
                                     // [评论|人名|被评论人名|内容|时间]
-                                    if (commentAuthor !== userName && commentAuthor !== cParts[1] && !isUser) {
+                                    if (commentAuthor !== cParts[1] && !isUser) {
                                         moment.comments.push({ authorName: commentAuthor, replyToName: cParts[1], text: cParts[2], time: cParts[3] });
                                     }
                                 }
@@ -477,30 +478,138 @@ function initSillyPhoneUI() {
 
         // 4. 兜底：如果没有任何标签，但包含 [名字|内容|时间] 格式，尝试直接解析
         if (!hasTags) {
-            const lines = rawText.split('\n');
+            const lines = rawText.split('\n').map(l => l.trim()).filter(l => l);
             let hasParsedAny = false;
             
             if (!data.messages[defaultChatName]) data.messages[defaultChatName] = [];
             
+            let currentMoment = null;
+
             lines.forEach(line => {
-                const msgData = parseMessageLine(line);
-                if (msgData) {
-                    hasParsedAny = true;
-                    data.messages[defaultChatName].push({
-                        id: 'msg_' + Math.random().toString(36).substr(2, 9),
-                        ...msgData
-                    });
-                }
-                
-                const quoteData = parseQuoteLine(line);
-                if (quoteData) {
-                    hasParsedAny = true;
-                    data.messages[defaultChatName].push({
-                        id: 'msg_' + Math.random().toString(36).substr(2, 9),
-                        ...quoteData
-                    });
+                const isComment = line.startsWith('[评论|');
+                if (isComment && currentMoment) {
+                    const c = line.match(/^\[评论\|(.*?)\]$/);
+                    if (c) {
+                        const cParts = c[1].split('|');
+                        const commentAuthor = cParts[0];
+                        const isUser = commentAuthor === state.userName || commentAuthor === state.stUserName || commentAuthor === '我' || commentAuthor === 'user';
+                        
+                        if (cParts.length === 3) {
+                            if (!isUser) {
+                                currentMoment.comments.push({ authorName: commentAuthor, text: cParts[1], time: cParts[2] });
+                            }
+                        } else if (cParts.length === 4) {
+                            if (commentAuthor !== cParts[1] && !isUser) {
+                                currentMoment.comments.push({ authorName: commentAuthor, replyToName: cParts[1], text: cParts[2], time: cParts[3] });
+                            }
+                        }
+                    }
+                } else if (mode === 'moments' && !isComment) {
+                    const m = line.match(/^\[(.*)\]$/);
+                    if (m) {
+                        const parts = m[1].split('|');
+                        if (parts.length >= 3) {
+                            let userName = parts[0];
+                            let content = '';
+                            let time = parts[parts.length - 1];
+                            let userAvatar = '';
+                            
+                            if (parts.length === 3) {
+                                content = parts[1];
+                            } else if (parts.length >= 4) {
+                                if (parts[1] === '朋友圈' || parts[1] === 'pyq') {
+                                    content = parts[2];
+                                } else {
+                                    userAvatar = parts[1];
+                                    content = parts[2];
+                                }
+                            }
+                            
+                            currentMoment = {
+                                id: 'mom_' + Math.random().toString(36).substr(2, 9),
+                                authorId: getContactIdByName(userName),
+                                authorName: userName,
+                                userAvatar: userAvatar || (state.contacts.find(c => c.name === userName)?.avatar || ''),
+                                content: content,
+                                time: time,
+                                images: [],
+                                comments: []
+                            };
+                            data.moments.push(currentMoment);
+                            hasParsedAny = true;
+                        } else {
+                            currentMoment = null;
+                            // Fallback to message parsing
+                            const msgData = parseMessageLine(line);
+                            if (msgData) {
+                                hasParsedAny = true;
+                                data.messages[defaultChatName].push({
+                                    id: 'msg_' + Math.random().toString(36).substr(2, 9),
+                                    ...msgData
+                                });
+                            }
+                            const quoteData = parseQuoteLine(line);
+                            if (quoteData) {
+                                hasParsedAny = true;
+                                data.messages[defaultChatName].push({
+                                    id: 'msg_' + Math.random().toString(36).substr(2, 9),
+                                    ...quoteData
+                                });
+                            }
+                        }
+                    } else {
+                        currentMoment = null;
+                        // Fallback to message parsing
+                        const msgData = parseMessageLine(line);
+                        if (msgData) {
+                            hasParsedAny = true;
+                            data.messages[defaultChatName].push({
+                                id: 'msg_' + Math.random().toString(36).substr(2, 9),
+                                ...msgData
+                            });
+                        }
+                        const quoteData = parseQuoteLine(line);
+                        if (quoteData) {
+                            hasParsedAny = true;
+                            data.messages[defaultChatName].push({
+                                id: 'msg_' + Math.random().toString(36).substr(2, 9),
+                                ...quoteData
+                            });
+                        }
+                    }
+                } else {
+                    currentMoment = null;
+                    const msgData = parseMessageLine(line);
+                    if (msgData) {
+                        hasParsedAny = true;
+                        data.messages[defaultChatName].push({
+                            id: 'msg_' + Math.random().toString(36).substr(2, 9),
+                            ...msgData
+                        });
+                    }
+                    
+                    const quoteData = parseQuoteLine(line);
+                    if (quoteData) {
+                        hasParsedAny = true;
+                        data.messages[defaultChatName].push({
+                            id: 'msg_' + Math.random().toString(36).substr(2, 9),
+                            ...quoteData
+                        });
+                    }
                 }
             });
+            
+            // Re-process comments to ensure they have IDs
+            if (data.moments) {
+                data.moments.forEach(m => {
+                    if (m.comments) {
+                        m.comments.forEach(c => {
+                            if (!c.id) c.id = 'c' + Date.now() + Math.random().toString(36).substr(2, 5);
+                            if (!c.authorId) c.authorId = 'ai';
+                        });
+                    }
+                });
+            }
             
             if (!hasParsedAny) {
                 delete data.messages[defaultChatName];
@@ -5583,11 +5692,13 @@ function initSillyPhoneUI() {
             const moment = state.moments.find(m => m.id === targetId);
             if (moment) {
                 let hasNewComment = false;
+                let hasMatchedFormat = false;
                 
                 // 1. 尝试解析所有 [评论|...] 格式
                 const commentRegex = /\[评论\|(.*?)\]/g;
                 let match;
                 while ((match = commentRegex.exec(text)) !== null) {
+                    hasMatchedFormat = true;
                     const cParts = match[1].split('|');
                     let senderName = '好友';
                     let replyToName = null;
@@ -5621,10 +5732,11 @@ function initSillyPhoneUI() {
                 }
                 
                 // 2. 如果没有匹配到任何 [评论|...]，尝试解析 [人名|内容|时间]
-                if (!hasNewComment) {
+                if (!hasNewComment && !hasMatchedFormat) {
                     const msgRegex = /\[(.*?)\]/g;
                     while ((match = msgRegex.exec(text)) !== null) {
                         if (match[0].startsWith('[评论|')) continue;
+                        hasMatchedFormat = true;
                         const mParts = match[1].split('|');
                         if (mParts.length >= 3) {
                             let senderName = mParts[0];
@@ -5656,11 +5768,12 @@ function initSillyPhoneUI() {
                 }
                 
                 // 3. 终极兜底解析：角色名: 内容
-                if (!hasNewComment) {
+                if (!hasNewComment && !hasMatchedFormat) {
                     const lines = text.split('\n');
                     lines.forEach(line => {
                         const lineMatch = line.match(/^([^：:\[\]]+)[：:]\s*(.*)/);
                         if (lineMatch) {
+                            hasMatchedFormat = true;
                             let senderName = lineMatch[1];
                             let cleanText = lineMatch[2];
                             let replyToName = null;
@@ -5690,7 +5803,7 @@ function initSillyPhoneUI() {
                 }
                 
                 // 4. 终极无格式兜底：如果完全没有解析出任何东西，且不包含 <pyq>，直接把整段话当做回复
-                if (!hasNewComment && !text.includes('<pyq>') && !text.includes('<post')) {
+                if (!hasNewComment && !hasMatchedFormat && !text.includes('<pyq>') && !text.includes('<post')) {
                     let cleanText = text.trim();
                     // 去掉可能存在的引号和前缀
                     cleanText = cleanText.replace(/^["'「”]+|["'」”]+$/g, '');
@@ -5740,7 +5853,7 @@ function initSillyPhoneUI() {
 
         // 尝试解析 <shouji> 格式（包含朋友圈和消息）
         const defaultChatName = state.currentChat ? state.currentChat.name : (chatId === 'system_queue' ? '系统' : chatId);
-        const parsedData = parseAuthorFormat(text, defaultChatName);
+        const parsedData = parseAuthorFormat(text, defaultChatName, mode);
         let hasProcessedAnything = false;
 
         // 1. 处理解析出的朋友圈动态
