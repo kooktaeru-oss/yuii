@@ -2438,12 +2438,12 @@ function initSillyPhoneUI() {
                 
                 if (isUserMoment) {
                     const targetNPC = replyTo || '该角色';
-                    promptText = `[系统提示: 朋友圈互动]\n动态内容：“${moment.content}”${commentsContext}\n\n在“我”（{{user}}）的朋友圈下，“我”回复了 ${targetNPC}：“${commentText}”。请让 ${targetNPC} 结合上下文，对“我”的这句话做出最新的回应。（具体格式请严格遵守世界书设定，切勿重复历史评论）`;
+                    promptText = `[系统提示: 朋友圈互动]\n动态内容：“${moment.content}”${commentsContext}\n\n在“我”（{{user}}）的朋友圈下，“我”回复了 ${targetNPC}：“${commentText}”。\n请让 ${targetNPC} 结合上下文，对“我”的这句话做出最新的回应。\n【重要指令】请直接输出 ${targetNPC} 的回复内容，不要加任何前缀，不要重复历史记录，不要输出任何格式代码，只输出回复的纯文本！`;
                 } else {
                     if (replyTo && replyTo !== '') {
-                        promptText = `[系统提示: 朋友圈互动]\n动态内容：“${moment.content}”${commentsContext}\n\n“我”（{{user}}）在 ${moment.authorName} 的朋友圈下，回复了 ${replyTo}：“${commentText}”。请让 ${replyTo} 对“我”的这句话做出最新的回应，或者让 ${moment.authorName} 参与互动。（具体格式请严格遵守世界书设定，切勿重复历史评论）`;
+                        promptText = `[系统提示: 朋友圈互动]\n动态内容：“${moment.content}”${commentsContext}\n\n“我”（{{user}}）在 ${moment.authorName} 的朋友圈下，回复了 ${replyTo}：“${commentText}”。\n请让 ${replyTo} 对“我”的这句话做出最新的回应。\n【重要指令】请直接输出 ${replyTo} 的回复内容，不要加任何前缀，不要重复历史记录，不要输出任何格式代码，只输出回复的纯文本！`;
                     } else {
-                        promptText = `[系统提示: 朋友圈互动]\n动态内容：“${moment.content}”${commentsContext}\n\n“我”（{{user}}）在 ${moment.authorName} 的朋友圈下发表了评论：“${commentText}”。请让 ${moment.authorName} 对“我”的这句话做出最新的回应，或者挑选 1 个共同好友来调侃/回复“我”。（具体格式请严格遵守世界书设定，切勿重复历史评论）`;
+                        promptText = `[系统提示: 朋友圈互动]\n动态内容：“${moment.content}”${commentsContext}\n\n“我”（{{user}}）在 ${moment.authorName} 的朋友圈下发表了评论：“${commentText}”。\n请让 ${moment.authorName} 对“我”的这句话做出最新的回应，或者挑选 1 个共同好友来调侃/回复“我”。\n【重要指令】请直接输出回复内容，不要加任何前缀，不要重复历史记录，不要输出任何格式代码，只输出回复的纯文本！如果是由其他好友回复，请在开头加上“好友名字：”。`;
                     }
                 }
 
@@ -5687,6 +5687,43 @@ function initSillyPhoneUI() {
                             }
                         }
                     });
+                }
+                
+                // 4. 终极无格式兜底：如果完全没有解析出任何东西，且不包含 <pyq>，直接把整段话当做回复
+                if (!hasNewComment && !text.includes('<pyq>') && !text.includes('<post')) {
+                    let cleanText = text.trim();
+                    // 去掉可能存在的引号和前缀
+                    cleanText = cleanText.replace(/^["'「”]+|["'」”]+$/g, '');
+                    cleanText = cleanText.replace(/^(回复)?.*?[：:]\s*/, ''); // 去掉可能的 "XXX回复:" 前缀
+
+                    if (cleanText.length > 0) {
+                        // 推断发送者
+                        let fallbackSender = moment.authorName;
+                        let fallbackReplyTo = null;
+                        if (moment.comments && moment.comments.length > 0) {
+                            const lastComment = moment.comments[moment.comments.length - 1];
+                            const isLastUser = lastComment.authorName === state.userName || lastComment.authorName === state.stUserName || lastComment.authorName === '我' || lastComment.authorName === 'user';
+                            if (isLastUser) {
+                                fallbackSender = lastComment.replyToName || moment.authorName;
+                                fallbackReplyTo = state.userName;
+                            } else {
+                                fallbackSender = moment.authorName;
+                                fallbackReplyTo = lastComment.authorName;
+                            }
+                        }
+
+                        const isDuplicate = moment.comments.some(c => c.text === cleanText);
+                        if (!isDuplicate) {
+                            moment.comments.push({
+                                id: 'c' + Date.now() + Math.random().toString(36).substr(2, 5),
+                                authorId: 'ai',
+                                authorName: fallbackSender,
+                                replyToName: fallbackReplyTo,
+                                text: cleanText
+                            });
+                            hasNewComment = true;
+                        }
+                    }
                 }
                 
                 if (hasNewComment) {
