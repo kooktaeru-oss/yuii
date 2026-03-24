@@ -5582,85 +5582,121 @@ function initSillyPhoneUI() {
         if (mode === 'moments') {
             const moment = state.moments.find(m => m.id === targetId);
             if (moment) {
-                let senderName = '好友';
-                let cleanText = text;
-                let replyToName = null;
-                let parsed = false;
-
-                // 1. 尝试解析 [评论|人名|被评论人名|内容|时间] 或 [评论|人名|内容|时间]
-                const commentMatch = text.match(/\[评论\|(.*?)\]/);
-                if (commentMatch) {
-                    const cParts = commentMatch[1].split('|');
+                let hasNewComment = false;
+                
+                // 1. 尝试解析所有 [评论|...] 格式
+                const commentRegex = /\[评论\|(.*?)\]/g;
+                let match;
+                while ((match = commentRegex.exec(text)) !== null) {
+                    const cParts = match[1].split('|');
+                    let senderName = '好友';
+                    let replyToName = null;
+                    let cleanText = '';
+                    
                     if (cParts.length === 3) {
-                        // [评论|人名|内容|时间]
                         senderName = cParts[0];
                         cleanText = cParts[1];
-                        parsed = true;
                     } else if (cParts.length >= 4) {
-                        // [评论|人名|被评论人名|内容|时间]
                         senderName = cParts[0];
                         replyToName = cParts[1];
                         cleanText = cParts[2];
-                        parsed = true;
+                    } else {
+                        continue;
+                    }
+                    
+                    const isUser = senderName === state.userName || senderName === state.stUserName || senderName === '我' || senderName === 'user';
+                    if (isUser) senderName = '匿名好友';
+
+                    const isDuplicate = moment.comments.some(c => c.authorName === senderName && c.text === cleanText);
+                    if (!isDuplicate) {
+                        moment.comments.push({
+                            id: 'c' + Date.now() + Math.random().toString(36).substr(2, 5),
+                            authorId: 'ai',
+                            authorName: senderName,
+                            replyToName: replyToName,
+                            text: cleanText
+                        });
+                        hasNewComment = true;
                     }
                 }
-
-                // 2. 如果没有匹配到 [评论|...]，尝试解析 [人名|内容|时间]
-                if (!parsed) {
-                    const msgMatch = text.match(/\[(.*?)\]/);
-                    if (msgMatch) {
-                        const mParts = msgMatch[1].split('|');
+                
+                // 2. 如果没有匹配到任何 [评论|...]，尝试解析 [人名|内容|时间]
+                if (!hasNewComment) {
+                    const msgRegex = /\[(.*?)\]/g;
+                    while ((match = msgRegex.exec(text)) !== null) {
+                        if (match[0].startsWith('[评论|')) continue;
+                        const mParts = match[1].split('|');
                         if (mParts.length >= 3) {
-                            senderName = mParts[0];
-                            cleanText = mParts[1];
-                            parsed = true;
+                            let senderName = mParts[0];
+                            let cleanText = mParts[1];
+                            let replyToName = null;
+                            
+                            const replyMatch = cleanText.match(/^回复\s*([^：:]+)[：:]\s*(.*)/);
+                            if (replyMatch) {
+                                replyToName = replyMatch[1];
+                                cleanText = replyMatch[2];
+                            }
+                            
+                            const isUser = senderName === state.userName || senderName === state.stUserName || senderName === '我' || senderName === 'user';
+                            if (isUser) senderName = '匿名好友';
+                            
+                            const isDuplicate = moment.comments.some(c => c.authorName === senderName && c.text === cleanText);
+                            if (!isDuplicate) {
+                                moment.comments.push({
+                                    id: 'c' + Date.now() + Math.random().toString(36).substr(2, 5),
+                                    authorId: 'ai',
+                                    authorName: senderName,
+                                    replyToName: replyToName,
+                                    text: cleanText
+                                });
+                                hasNewComment = true;
+                            }
                         }
                     }
                 }
-
-                // 3. 兜底解析：角色名: 内容
-                if (!parsed) {
-                    const match = text.match(/^([^：:\[\]]+)[：:]\s*(.*)/);
-                    if (match) {
-                        senderName = match[1];
-                        cleanText = match[2];
-                        parsed = true;
-                    }
+                
+                // 3. 终极兜底解析：角色名: 内容
+                if (!hasNewComment) {
+                    const lines = text.split('\n');
+                    lines.forEach(line => {
+                        const lineMatch = line.match(/^([^：:\[\]]+)[：:]\s*(.*)/);
+                        if (lineMatch) {
+                            let senderName = lineMatch[1];
+                            let cleanText = lineMatch[2];
+                            let replyToName = null;
+                            
+                            const replyMatch = cleanText.match(/^回复\s*([^：:]+)[：:]\s*(.*)/);
+                            if (replyMatch) {
+                                replyToName = replyMatch[1];
+                                cleanText = replyMatch[2];
+                            }
+                            
+                            const isUser = senderName === state.userName || senderName === state.stUserName || senderName === '我' || senderName === 'user';
+                            if (isUser) senderName = '匿名好友';
+                            
+                            const isDuplicate = moment.comments.some(c => c.authorName === senderName && c.text === cleanText);
+                            if (!isDuplicate) {
+                                moment.comments.push({
+                                    id: 'c' + Date.now() + Math.random().toString(36).substr(2, 5),
+                                    authorId: 'ai',
+                                    authorName: senderName,
+                                    replyToName: replyToName,
+                                    text: cleanText
+                                });
+                                hasNewComment = true;
+                            }
+                        }
+                    });
                 }
-
-                // 检查内容是否包含 "回复 XXX: " (如果前面没有解析出 replyToName)
-                if (!replyToName) {
-                    const replyMatch = cleanText.match(/^回复\s*([^：:]+)[：:]\s*(.*)/);
-                    if (replyMatch) {
-                        replyToName = replyMatch[1];
-                        cleanText = replyMatch[2];
-                    }
-                }
-
-                // 过滤掉 AI 扮演“我”进行评论的情况
-                const isUser = senderName === state.userName || senderName === state.stUserName || senderName === '我' || senderName === 'user';
-                if (isUser) {
-                    senderName = '匿名好友'; // 兜底，防止 AI 强行扮演用户
-                }
-
-                // 去重逻辑：如果这条评论已经存在（作者和内容完全一样），则忽略
-                const isDuplicate = moment.comments.some(c => c.authorName === senderName && c.text === cleanText);
-                if (isDuplicate) {
-                    console.warn('[SillyPhone] AI 生成了重复的评论，已忽略:', cleanText);
+                
+                if (hasNewComment) {
+                    saveMoments();
+                    renderMomentsList();
+                    showToast('朋友圈收到新回复', 'sparkles');
+                } else {
+                    console.warn('[SillyPhone] AI 生成了重复的评论或无法解析:', text);
                     showToast('AI 重复了之前的话，请重试', 'alert-circle');
-                    return;
                 }
-
-                moment.comments.push({
-                    id: 'c' + Date.now(),
-                    authorId: 'ai',
-                    authorName: senderName,
-                    replyToName: replyToName,
-                    text: cleanText
-                });
-                saveMoments();
-                renderMomentsList();
-                showToast('朋友圈收到新回复', 'sparkles');
                 return; // 处理完回复直接返回
             }
         }
