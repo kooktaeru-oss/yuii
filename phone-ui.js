@@ -2391,15 +2391,15 @@ function initSillyPhoneUI() {
                     ? `\n已有评论记录：\n${moment.comments.map(c => `${c.authorName}${c.replyToName ? ' 回复 ' + c.replyToName : ''}: ${c.text}`).join('\n')}` 
                     : '';
 
-                let promptText = `[系统提示: 用户点击了互动按钮] 动态ID: ${moment.id}, 动态作者: ${moment.authorName}, 圈子: ${authorCircle || '未指定'}。\n动态内容：“${moment.content}”${commentsContext}`;
+                let promptText = `[系统提示: 朋友圈互动]\n动态作者: ${moment.authorName}\n动态内容：“${moment.content}”${commentsContext}`;
                 if (mentions.length > 0) {
                     promptText += `\n[强制响应]: 请务必让被@到的好友【${mentions.join('】和【')}】进行回复。`;
                 }
                 
                 if (isUserMoment) {
-                    promptText += `\n这是“我”（{{user}}）发的朋友圈动态。请从我的好友列表中随机挑选 1 到 3 个角色，根据动态内容直接发表评论。绝对不要重复已有评论记录中的话！绝对不要替“我”回复。\n【格式要求】这是对动态的直接评论，格式必须是4段式：[评论|<具体角色名>|评论内容|时间] （注意：千万不要加被回复人！）`;
+                    promptText += `\n这是“我”（{{user}}）发的朋友圈。请挑选 1~3 个角色进行评论。（具体格式请严格遵守世界书设定）`;
                 } else {
-                    promptText += `\n这是 ${moment.authorName} 发的朋友圈动态。请从我的好友列表中挑选 1 到 2 个还没有评论过的角色来“吃瓜”评论，或者让 ${moment.authorName} 回复现有的评论。绝对不要重复已有评论记录中的话！绝对不要替“我”（{{user}}）发表评论。\n【格式要求】直接评论动态用4段式：[评论|<具体角色名>|评论内容|时间] ；回复某人评论用5段式：[评论|<具体角色名>|<被回复人名>|回复内容|时间]`;
+                    promptText += `\n这是 ${moment.authorName} 发的朋友圈。请挑选 1~2 个角色进行评论，或让 ${moment.authorName} 回复现有评论。（具体格式请严格遵守世界书设定）`;
                 }
                 
                 setIslandState('loading');
@@ -2437,15 +2437,13 @@ function initSillyPhoneUI() {
                 let promptText = '';
                 
                 if (isUserMoment) {
-                    // 如果是我发的朋友圈，我回复了某人，点击 ✨ 让那个人继续回复我
                     const targetNPC = replyTo || '该角色';
-                    promptText = `[系统提示: 用户请求互动]\n动态内容：“${moment.content}”${commentsContext}\n\n在“我”（{{user}}）的朋友圈下，“我”回复了 ${targetNPC}：“${commentText}”。请让 ${targetNPC} 结合上下文继续回复“我”，进行一对一的互动。\n【警告】绝对不要重复已有评论记录中说过的话！必须是对“${commentText}”的最新回应！绝对不要替“我”生成回复。\n【格式要求】回复格式必须为5段式：[评论|${targetNPC}|我|回复内容|时间]`;
+                    promptText = `[系统提示: 朋友圈互动]\n动态内容：“${moment.content}”${commentsContext}\n\n在“我”（{{user}}）的朋友圈下，“我”回复了 ${targetNPC}：“${commentText}”。请让 ${targetNPC} 结合上下文继续回复“我”。（具体格式请严格遵守世界书设定）`;
                 } else {
-                    // 如果是 NPC 发的朋友圈，我评论了，点击 ✨ 让发圈人回复我，或者让共友回复我
                     if (replyTo && replyTo !== '') {
-                        promptText = `[系统提示: 用户请求互动]\n动态内容：“${moment.content}”${commentsContext}\n\n“我”（{{user}}）在 ${moment.authorName} 的朋友圈下，回复了 ${replyTo}：“${commentText}”。请让 ${replyTo} 结合上下文回复“我”，或者让 ${moment.authorName} 参与互动。\n【警告】绝对不要重复已有评论记录中说过的话！必须是对“${commentText}”的最新回应！绝对不要替“我”生成回复。\n【格式要求】回复格式必须为5段式：[评论|<具体角色名>|我|回复内容|时间]`;
+                        promptText = `[系统提示: 朋友圈互动]\n动态内容：“${moment.content}”${commentsContext}\n\n“我”（{{user}}）在 ${moment.authorName} 的朋友圈下，回复了 ${replyTo}：“${commentText}”。请让 ${replyTo} 回复“我”，或者让 ${moment.authorName} 参与互动。（具体格式请严格遵守世界书设定）`;
                     } else {
-                        promptText = `[系统提示: 用户请求互动]\n动态内容：“${moment.content}”${commentsContext}\n\n“我”（{{user}}）在 ${moment.authorName} 的朋友圈下发表了评论：“${commentText}”。在微信朋友圈中，只有共同好友能看到彼此的评论。请让 ${moment.authorName} 结合上下文回复“我”，或者从我的好友名单（共同好友）中挑选 1 个角色来调侃/回复“我”。\n【警告】绝对不要重复已有评论记录中说过的话！必须是对“${commentText}”的最新回应！绝对不要替“我”生成回复。\n【格式要求】回复格式必须为5段式：[评论|<具体角色名>|我|回复内容|时间]`;
+                        promptText = `[系统提示: 朋友圈互动]\n动态内容：“${moment.content}”${commentsContext}\n\n“我”（{{user}}）在 ${moment.authorName} 的朋友圈下发表了评论：“${commentText}”。请让 ${moment.authorName} 回复“我”，或者挑选 1 个共同好友来调侃/回复“我”。（具体格式请严格遵守世界书设定）`;
                     }
                 }
 
@@ -5666,11 +5664,35 @@ function initSillyPhoneUI() {
 
         // 1. 处理解析出的朋友圈动态
         if (parsedData.moments && parsedData.moments.length > 0) {
-            state.moments.unshift(...parsedData.moments);
-            saveMoments();
-            renderMomentsList();
-            showToast('朋友圈有新动态', 'sparkles');
-            hasProcessedAnything = true;
+            let hasUpdates = false;
+            // 倒序遍历，确保最新的在最上面（假设 AI 按顺序输出 post:1, post:2）
+            [...parsedData.moments].reverse().forEach(newM => {
+                // 查找是否已经存在相同作者和内容的朋友圈
+                const existingM = state.moments.find(m => m.authorName === newM.authorName && m.content === newM.content);
+                if (existingM) {
+                    // 如果存在，只合并新评论
+                    newM.comments.forEach(newC => {
+                        const commentExists = existingM.comments.some(c => 
+                            c.authorName === newC.authorName && c.text === newC.text
+                        );
+                        if (!commentExists) {
+                            existingM.comments.push(newC);
+                            hasUpdates = true;
+                        }
+                    });
+                } else {
+                    // 如果不存在，作为新朋友圈插入到最前面
+                    state.moments.unshift(newM);
+                    hasUpdates = true;
+                }
+            });
+            
+            if (hasUpdates) {
+                saveMoments();
+                renderMomentsList();
+                showToast('朋友圈有新动态', 'sparkles');
+                hasProcessedAnything = true;
+            }
         }
 
         // 2. 处理解析出的聊天消息
