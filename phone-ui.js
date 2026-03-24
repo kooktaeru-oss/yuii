@@ -444,6 +444,7 @@ function initSillyPhoneUI() {
                             userAvatar: userAvatar || (state.contacts.find(c => c.name === userName)?.avatar || ''),
                             content: content,
                             time: time,
+                            images: [],
                             comments: []
                         };
                         // 解析评论
@@ -2187,7 +2188,7 @@ function initSillyPhoneUI() {
             item.ontouchstart = startMomentPress;
             item.ontouchend = endMomentPress;
 
-            const imagesHtml = moment.images.length > 0 ? `
+            const imagesHtml = (moment.images && moment.images.length > 0) ? `
                 <div class="moment-images ${moment.images.length === 1 ? 'single' : ''}">
                     ${moment.images.map(img => {
                         const isData = img.startsWith('data:') || img.startsWith('http');
@@ -2209,7 +2210,7 @@ function initSillyPhoneUI() {
                 </div>
             ` : '';
             
-            const commentsHtml = moment.comments.length > 0 ? `
+            const commentsHtml = (moment.comments && moment.comments.length > 0) ? `
                 <div class="comments-list">
                     ${moment.comments.map(c => {
                         const name = c.authorName || c.name || '未知';
@@ -2262,7 +2263,7 @@ function initSillyPhoneUI() {
                             </button>
                             <button class="action-btn comment-btn" data-id="${moment.id}">
                                 <i data-lucide="message-square" size="16"></i>
-                                <span>${moment.comments.length || ''}</span>
+                                <span>${(moment.comments && moment.comments.length) || ''}</span>
                             </button>
                         </div>
                     </div>
