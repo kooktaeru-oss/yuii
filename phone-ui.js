@@ -452,17 +452,19 @@ function initSillyPhoneUI() {
                             const c = l.match(/^\[评论\|(.*?)\]$/);
                             if (c) {
                                 const cParts = c[1].split('|');
+                                const commentAuthor = cParts[0];
+                                // 过滤掉角色自己评论自己，以及 AI 扮演“我”进行评论的情况
+                                const isUser = commentAuthor === state.userName || commentAuthor === state.stUserName || commentAuthor === '我' || commentAuthor === 'user';
+                                
                                 if (cParts.length === 3) {
                                     // [评论|人名|内容|时间]
-                                    // 过滤掉角色自己评论自己的情况
-                                    if (cParts[0] !== userName) {
-                                        moment.comments.push({ authorName: cParts[0], text: cParts[1], time: cParts[2] });
+                                    if (commentAuthor !== userName && !isUser) {
+                                        moment.comments.push({ authorName: commentAuthor, text: cParts[1], time: cParts[2] });
                                     }
                                 } else if (cParts.length === 4) {
                                     // [评论|人名|被评论人名|内容|时间]
-                                    // 过滤掉角色自己回复自己的情况
-                                    if (cParts[0] !== userName && cParts[0] !== cParts[1]) {
-                                        moment.comments.push({ authorName: cParts[0], replyToName: cParts[1], text: cParts[2], time: cParts[3] });
+                                    if (commentAuthor !== userName && commentAuthor !== cParts[1] && !isUser) {
+                                        moment.comments.push({ authorName: commentAuthor, replyToName: cParts[1], text: cParts[2], time: cParts[3] });
                                     }
                                 }
                             }
@@ -3335,10 +3337,10 @@ function initSillyPhoneUI() {
                 
                 let promptText = '';
                 if (targetNames.trim() === '') {
-                    promptText = "[系统提示: 用户在朋友圈页面点击了灵动岛] 请从当前联系人中随机挑选 1 到 2 个角色，发布一条符合他们人设的新朋友圈动态。不要让所有人发。";
+                    promptText = "[系统提示: 用户在朋友圈页面点击了灵动岛] 请从当前联系人中随机挑选 1 到 2 个角色，发布一条符合他们人设的新朋友圈动态。发布动态后，请随机挑选 1 到 3 个其他角色（必须是不同的角色，绝对不能是“我”或“{{user}}”）在动态下方发表评论，模拟真实的朋友圈互动。";
                 } else {
                     const names = targetNames.trim().split(/\s+/).join('】和【');
-                    promptText = `[系统提示: 用户在朋友圈页面点击了灵动岛] 请指定由【${names}】分别发布一条符合他们人设的新朋友圈动态。`;
+                    promptText = `[系统提示: 用户在朋友圈页面点击了灵动岛] 请指定由【${names}】分别发布一条符合他们人设的新朋友圈动态。发布动态后，请随机挑选 1 到 3 个其他角色（必须是不同的角色，绝对不能是“我”或“{{user}}”）在动态下方发表评论，模拟真实的朋友圈互动。`;
                 }
 
                 triggerAIResponse(promptText);
@@ -4291,7 +4293,9 @@ function initSillyPhoneUI() {
         const mode = state.currentPage === 'moments' ? 'moments' : 'chat';
         
         // 注入全局系统约束
-        const globalConstraints = `\n[系统指令：记住“我”就是{{user}}。绝对禁止替“我”（{{user}}）发表任何朋友圈、评论或回复。你只能扮演其他角色。严禁发布重复内容。朋友圈动态的“内容”字段必须是实际的文字正文，严禁只填“图片”二字。如果你想表达角色发了照片，请在正文中描述照片内容（例如：使用(IMG:描述)格式）或直接写正文。不要自主发送外部图片链接。严禁角色在自己的朋友圈下发表评论，也严禁角色回复自己的评论。角色之间应该互相互动，而不是自言自语。]`;
+        const userNames = [state.userName, state.stUserName, '我', 'user', 'me', state.wechatId].filter(Boolean);
+        const userNameStr = userNames.join('、');
+        const globalConstraints = `\n[系统指令：记住“我”就是{{user}}（名字可能是 ${userNameStr}）。绝对禁止替“我”（{{user}}，即 ${userNameStr}）发表任何朋友圈、评论或回复。你只能扮演其他角色。严禁发布重复内容。朋友圈动态的“内容”字段必须是实际的文字正文，严禁只填“图片”二字。如果你想表达角色发了照片，请在正文中描述照片内容（例如：使用(IMG:描述)格式）或直接写正文。不要自主发送外部图片链接。严禁角色在自己的朋友圈下发表评论，也严禁角色回复自己的评论。角色之间应该互相互动，而不是自言自语。]`;
         
         // 使用构建生成 Prompt 的函数，过滤掉历史记录
         const currentSessionMessages = buildGenerationPrompt(activeChatId);
@@ -5617,6 +5621,12 @@ function initSillyPhoneUI() {
                         replyToName = replyMatch[1];
                         cleanText = replyMatch[2];
                     }
+                }
+
+                // 过滤掉 AI 扮演“我”进行评论的情况
+                const isUser = senderName === state.userName || senderName === state.stUserName || senderName === '我' || senderName === 'user';
+                if (isUser) {
+                    senderName = '匿名好友'; // 兜底，防止 AI 强行扮演用户
                 }
 
                 moment.comments.push({
