@@ -5,6 +5,19 @@
  */
 
 function initSillyPhoneUI() {
+    try {
+        if (window.frameElement) {
+            window.frameElement.style.width = '400px';
+            window.frameElement.style.height = '640px';
+            window.frameElement.style.border = 'none';
+            window.frameElement.style.backgroundColor = 'transparent';
+            window.frameElement.style.display = 'block';
+            window.frameElement.style.margin = '0 auto';
+        }
+    } catch (e) {
+        // Ignore cross-origin errors
+    }
+
     const state = {
         currentPage: 'chat-list',
         currentChat: null,
@@ -311,18 +324,76 @@ function initSillyPhoneUI() {
             let type = 'text';
             let content = '';
             let duration = '';
+            let amount = undefined;
+            let remark = undefined;
+            let status = undefined;
 
             let dataParts = parts.slice(1, -1);
 
             if (dataParts.length === 1) {
-                content = dataParts[0];
+                const body = dataParts[0];
+                if (body.includes('转账') || body.includes('收账')) { 
+                    type = 'transfer'; 
+                    content = body; 
+                    const amountMatch = body.match(/[\d.]+/);
+                    amount = amountMatch ? parseFloat(amountMatch[0]).toFixed(2) : "0.00";
+                    remark = '转账给你';
+                    if (body.includes('退回')) {
+                        status = 'returned';
+                    } else if (body.includes('收账')) {
+                        status = 'received';
+                    } else {
+                        status = 'unreceived';
+                    }
+                }
+                else if (body.includes('红包')) { 
+                    type = 'redpacket'; 
+                    content = body; 
+                    const amountMatch = body.match(/[\d.]+/);
+                    amount = amountMatch ? parseFloat(amountMatch[0]).toFixed(2) : "0.00";
+                    remark = '恭喜发财，大吉大利';
+                    if (body.includes('退回')) {
+                        status = 'returned';
+                    } else if (body.includes('领') || body.includes('收')) {
+                        status = 'received';
+                    } else {
+                        status = 'unreceived';
+                    }
+                }
+                else { content = body; }
             } else if (dataParts.length === 2) {
                 const body = dataParts[0];
                 if (body === '图片') { type = 'image'; content = dataParts[1]; }
                 else if (body === '表情包') { type = 'sticker'; content = dataParts[1]; }
                 else if (body === '语音消息') { type = 'voice'; content = dataParts[1]; }
-                else if (body.includes('转账') || body.includes('收账')) { type = 'transfer'; content = body; }
-                else if (body.includes('红包')) { type = 'redpacket'; content = body; }
+                else if (body.includes('转账') || body.includes('收账')) { 
+                    type = 'transfer'; 
+                    content = body; 
+                    const amountMatch = body.match(/[\d.]+/);
+                    amount = amountMatch ? parseFloat(amountMatch[0]).toFixed(2) : "0.00";
+                    remark = dataParts[1] || '转账给你';
+                    if (body.includes('退回')) {
+                        status = 'returned';
+                    } else if (body.includes('收账')) {
+                        status = 'received';
+                    } else {
+                        status = 'unreceived';
+                    }
+                }
+                else if (body.includes('红包')) { 
+                    type = 'redpacket'; 
+                    content = body; 
+                    const amountMatch = body.match(/[\d.]+/);
+                    amount = amountMatch ? parseFloat(amountMatch[0]).toFixed(2) : "0.00";
+                    remark = dataParts[1] || '恭喜发财，大吉大利';
+                    if (body.includes('退回')) {
+                        status = 'returned';
+                    } else if (body.includes('领') || body.includes('收')) {
+                        status = 'received';
+                    } else {
+                        status = 'unreceived';
+                    }
+                }
                 else if (body === '语音通话') { type = 'call'; content = dataParts[1]; }
                 else if (body === '语音通话已挂断') { type = 'call-end'; duration = dataParts[1]; }
                 else if (body === '撤回消息') { type = 'recall'; content = dataParts[1]; }
@@ -331,7 +402,7 @@ function initSillyPhoneUI() {
                 content = dataParts[2];
             }
 
-            return { sender, time, type, content, duration };
+            return { sender, time, type, content, duration, amount, remark, status };
         };
 
         // 辅助函数：解析引用消息
@@ -822,6 +893,12 @@ function initSillyPhoneUI() {
                             description: m.type === 'image' ? m.content : undefined,
                             duration: m.duration,
                             amount: m.amount,
+                            remark: m.remark,
+                            status: m.status,
+                            count: m.type === 'redpacket' ? (m.count || 1) : undefined,
+                            grabRecords: m.type === 'redpacket' ? (m.grabRecords || []) : undefined,
+                            remainingAmount: m.type === 'redpacket' ? (m.remainingAmount || 0) : undefined,
+                            remainingCount: m.type === 'redpacket' ? (m.remainingCount || 0) : undefined,
                             quote: m.quote,
                             isHistory: isHistoryTurn,
                             sourceMsgId: targetId,
@@ -1137,12 +1214,45 @@ function initSillyPhoneUI() {
                         } else if (typeStr === '语音消息' || typeStr === '语音') {
                             msg.msgType = 'voice';
                             msg.duration = parseInt(contentStr) || 0;
-                        } else if (typeStr.includes('转账') || typeStr.includes('收账')) {
+                        } else if (typeStr.includes('转账') || typeStr.includes('收账') || contentStr.includes('转账') || contentStr.includes('收账')) {
                             msg.msgType = 'transfer';
-                            msg.text = typeStr;
-                        } else if (typeStr.includes('红包')) {
+                            msg.text = typeStr === 'text' ? contentStr : typeStr;
+                            const amountMatch = (typeStr + ' ' + contentStr).match(/[\d.]+/);
+                            msg.amount = amountMatch ? parseFloat(amountMatch[0]).toFixed(2) : "0.00";
+                            
+                            // Check if contentStr is a time string like "23:44"
+                            const isTimeStr = /^\d{1,2}:\d{2}$/.test(contentStr);
+                            msg.remark = typeStr === 'text' ? '转账给你' : (isTimeStr ? '转账给你' : (contentStr || '转账给你'));
+                            
+                            const fullText = typeStr + ' ' + contentStr;
+                            if (fullText.includes('退回')) {
+                                msg.status = 'returned';
+                            } else if (fullText.includes('收账')) {
+                                msg.status = 'received';
+                            } else {
+                                msg.status = 'unreceived';
+                            }
+                        } else if (typeStr.includes('红包') || contentStr.includes('红包')) {
                             msg.msgType = 'red-packet';
-                            msg.text = typeStr;
+                            msg.text = typeStr === 'text' ? contentStr : typeStr;
+                            const amountMatch = (typeStr + ' ' + contentStr).match(/[\d.]+/);
+                            msg.amount = amountMatch ? parseFloat(amountMatch[0]).toFixed(2) : "0.00";
+                            
+                            const isTimeStr = /^\d{1,2}:\d{2}$/.test(contentStr);
+                            msg.remark = typeStr === 'text' ? '恭喜发财，大吉大利' : (isTimeStr ? '恭喜发财，大吉大利' : (contentStr || '恭喜发财，大吉大利'));
+                            
+                            msg.count = 1;
+                            msg.grabRecords = [];
+                            msg.remainingAmount = 0;
+                            msg.remainingCount = 0;
+                            const fullText = typeStr + ' ' + contentStr;
+                            if (fullText.includes('退回')) {
+                                msg.status = 'returned';
+                            } else if (fullText.includes('领') || fullText.includes('收')) {
+                                msg.status = 'received';
+                            } else {
+                                msg.status = 'unreceived';
+                            }
                         } else if (typeStr === '语音通话') {
                             msg.msgType = 'call';
                             msg.text = contentStr;
@@ -5966,6 +6076,12 @@ function initSillyPhoneUI() {
                         description: m.type === 'image' ? m.content : undefined,
                         duration: m.duration,
                         amount: m.amount,
+                        remark: m.remark,
+                        status: m.status,
+                        count: m.type === 'redpacket' ? (m.count || 1) : undefined,
+                        grabRecords: m.type === 'redpacket' ? (m.grabRecords || []) : undefined,
+                        remainingAmount: m.type === 'redpacket' ? (m.remainingAmount || 0) : undefined,
+                        remainingCount: m.type === 'redpacket' ? (m.remainingCount || 0) : undefined,
                         quote: m.quote,
                         isRecalled: m.type === 'recall'
                     };
