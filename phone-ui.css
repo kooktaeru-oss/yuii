@@ -34,6 +34,9 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
+    min-height: 100%;
+    padding: 20px;
+    margin: 0;
     font-family: -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif;
     overflow: hidden;
 }
