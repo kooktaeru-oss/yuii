@@ -3652,31 +3652,46 @@ function initSillyPhoneUI() {
 
         receiveBtn.onclick = () => {
             m.status = 'received';
-            const senderName = state.currentChat.isGroup ? (state.currentChat.members.find(mem => mem.id === m.senderId)?.name || '对方') : state.currentChat.name;
-            const sysMsg = {
+            const receiveMsg = {
                 id: 'msg_' + Date.now(),
-                type: 'system',
-                text: `你已收款`,
-                time: new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0')
+                type: 'user',
+                senderId: 'user',
+                senderName: state.userName,
+                senderAvatar: state.userAvatar,
+                time: new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0'),
+                msgType: 'transfer',
+                text: `收账${m.amount}元`,
+                amount: m.amount,
+                remark: '已收款',
+                status: 'received'
             };
-            state.messages[chatId].push(sysMsg);
+            state.messages[chatId].push(receiveMsg);
             saveMessagesToLocalStorage();
             renderMessages(chatId);
             closeModal();
+            deferredSync();
         };
 
         returnBtn.onclick = () => {
             m.status = 'returned';
-            const sysMsg = {
+            const returnMsg = {
                 id: 'msg_' + Date.now(),
-                type: 'system',
-                text: `你已退还了转账`,
-                time: new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0')
+                type: 'user',
+                senderId: 'user',
+                senderName: state.userName,
+                senderAvatar: state.userAvatar,
+                time: new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0'),
+                msgType: 'transfer',
+                text: `已退回收账`,
+                amount: m.amount,
+                remark: '已退还',
+                status: 'returned'
             };
-            state.messages[chatId].push(sysMsg);
+            state.messages[chatId].push(returnMsg);
             saveMessagesToLocalStorage();
             renderMessages(chatId);
             closeModal();
+            deferredSync();
         };
     }
 
@@ -3883,6 +3898,25 @@ function initSillyPhoneUI() {
         let hasChanges = false;
         const now = Date.now();
         const newSysMsgs = [];
+
+        // 预处理：将收款/退回消息与之前的转账消息关联，避免被错误标记为过期
+        for (let i = 0; i < msgs.length; i++) {
+            const m = msgs[i];
+            if (m.msgType === 'transfer' && (m.status === 'received' || m.status === 'returned')) {
+                // 往前找最近的一个未收款的转账消息
+                for (let j = i - 1; j >= 0; j--) {
+                    const prevMsg = msgs[j];
+                    if (prevMsg.msgType === 'transfer' && prevMsg.status === 'unreceived' && prevMsg.senderId !== m.senderId) {
+                        prevMsg.status = m.status;
+                        if (!m.amount || m.amount === "0.00") {
+                            m.amount = prevMsg.amount;
+                        }
+                        hasChanges = true;
+                        break;
+                    }
+                }
+            }
+        }
 
         // 检查过期红包/转账 (24小时自动退还)
         msgs.forEach((m) => {
