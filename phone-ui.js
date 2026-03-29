@@ -149,23 +149,23 @@ function initSillyPhoneUI() {
                 const msgType = msg.msgType || (msg.type === 'system' ? 'system' : 'text');
 
                 if (msgType === 'text') {
-                    text += `[${sender}|${content}|${time}]\n`;
+                    text += `[${sender}|${content}]\n`;
                 } else if (msgType === 'image' || msgType === 'photo') {
-                    text += `[${sender}|图片|${msg.url || content}|${time}]\n`;
+                    text += `[${sender}|图片|${msg.url || content}]\n`;
                 } else if (msgType === 'sticker') {
-                    text += `[${sender}|表情包|${msg.url || content}|${time}]\n`;
+                    text += `[${sender}|表情包|${msg.url || content}]\n`;
                 } else if (msgType === 'voice') {
-                    text += `[${sender}|语音消息|${content}|${time}]\n`;
+                    text += `[${sender}|语音消息|${content}]\n`;
                 } else if (msgType === 'transfer' || msgType === 'redpacket' || msgType === 'red-packet') {
-                    text += `[${sender}|${content}|${time}]\n`;
+                    text += `[${sender}|${content}]\n`;
                 } else if (msgType === 'call') {
-                    text += `[${sender}|语音通话|${content}|${time}]\n`;
+                    text += `[${sender}|语音通话|${content}]\n`;
                 } else if (msgType === 'call-end') {
-                    text += `[${sender}|语音通话已挂断|${msg.duration || content || '00:00'}|${time}]\n`;
+                    text += `[${sender}|语音通话已挂断|${msg.duration || content || '00:00'}]\n`;
                 } else if (msgType === 'recall') {
-                    text += `[${sender}|撤回消息|${content}|${time}]\n`;
+                    text += `[${sender}|撤回消息|${content}]\n`;
                 } else if (msgType === 'quote') {
-                    text += `<${sender}|${msg.quote || ''}|${content}|${time}>\n`;
+                    text += `<${sender}|${msg.quote || ''}|${content}>\n`;
                 }
             });
             
@@ -184,15 +184,14 @@ function initSillyPhoneUI() {
         moments.forEach((moment, index) => {
             const author = state.contacts.find(c => c.id === moment.authorId) || { name: moment.authorName, avatar: moment.userAvatar };
             text += `<post:${index + 1}>\n`;
-            text += `[${author.name}|${author.avatar || ''}|${moment.content}|${moment.time}]\n`;
+            text += `[${author.name}|${author.avatar || ''}|${moment.content}]\n`;
             if (moment.comments && moment.comments.length > 0) {
                 moment.comments.forEach(comment => {
                     const name = comment.authorName || comment.name || '未知';
-                    const time = comment.time || new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0');
                     if (comment.replyToName) {
-                        text += `[评论|${name}|${comment.replyToName}|${comment.text}|${time}]\n`;
+                        text += `[评论|${name}|${comment.replyToName}|${comment.text}]\n`;
                     } else {
-                        text += `[评论|${name}|${comment.text}|${time}]\n`;
+                        text += `[评论|${name}|${comment.text}]\n`;
                     }
                 });
             }
@@ -317,18 +316,27 @@ function initSillyPhoneUI() {
             const m = line.match(/^\[(.*)\]$/);
             if (!m) return null;
             const parts = m[1].split('|');
-            if (parts.length < 3) return null;
+            if (parts.length < 2) return null;
 
             let sender = parts[0];
-            let time = parts[parts.length - 1];
+            let time = '';
+            let dataParts = [];
+            
+            const lastPart = parts[parts.length - 1];
+            if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(lastPart)) {
+                time = lastPart;
+                dataParts = parts.slice(1, -1);
+            } else {
+                time = new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0');
+                dataParts = parts.slice(1);
+            }
+
             let type = 'text';
             let content = '';
             let duration = '';
             let amount = undefined;
             let remark = undefined;
             let status = undefined;
-
-            let dataParts = parts.slice(1, -1);
 
             if (dataParts.length === 1) {
                 const body = dataParts[0];
@@ -400,6 +408,8 @@ function initSillyPhoneUI() {
                 else { content = dataParts[1]; }
             } else if (dataParts.length === 3) {
                 content = dataParts[2];
+            } else {
+                content = dataParts.join('|');
             }
 
             return { sender, time, type, content, duration, amount, remark, status };
@@ -410,12 +420,31 @@ function initSillyPhoneUI() {
             const q = line.match(/^<(.*)>$/);
             if (!q) return null;
             const parts = q[1].split('|');
-            if (parts.length < 3) return null;
+            if (parts.length < 2) return null;
 
             let sender = parts[0];
-            let time = parts[parts.length - 1];
-            let quote = parts[1] || '';
-            let content = parts[2] || '';
+            let time = '';
+            let quote = '';
+            let content = '';
+            
+            const lastPart = parts[parts.length - 1];
+            if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(lastPart)) {
+                time = lastPart;
+                if (parts.length >= 4) {
+                    quote = parts[1];
+                    content = parts[2];
+                } else if (parts.length === 3) {
+                    content = parts[1];
+                }
+            } else {
+                time = new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0');
+                if (parts.length >= 3) {
+                    quote = parts[1];
+                    content = parts[2];
+                } else if (parts.length === 2) {
+                    content = parts[1];
+                }
+            }
 
             return { sender, time, type: 'quote', quote, content };
         };
@@ -492,20 +521,36 @@ function initSillyPhoneUI() {
                 const m = lines[0].match(/^\[(.*)\]$/);
                 if (m) {
                     const parts = m[1].split('|');
-                    if (parts.length >= 3) {
+                    if (parts.length >= 2) {
                         let userName = parts[0];
                         let content = '';
-                        let time = parts[parts.length - 1];
+                        let time = '';
                         let userAvatar = '';
                         
-                        if (parts.length === 3) {
-                            content = parts[1];
-                        } else if (parts.length >= 4) {
-                            if (parts[1] === '朋友圈' || parts[1] === 'pyq') {
-                                content = parts[2];
-                            } else {
-                                userAvatar = parts[1];
-                                content = parts[2];
+                        const lastPart = parts[parts.length - 1];
+                        if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(lastPart)) {
+                            time = lastPart;
+                            if (parts.length === 3) {
+                                content = parts[1];
+                            } else if (parts.length >= 4) {
+                                if (parts[1] === '朋友圈' || parts[1] === 'pyq') {
+                                    content = parts[2];
+                                } else {
+                                    userAvatar = parts[1];
+                                    content = parts[2];
+                                }
+                            }
+                        } else {
+                            time = new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0');
+                            if (parts.length === 2) {
+                                content = parts[1];
+                            } else if (parts.length >= 3) {
+                                if (parts[1] === '朋友圈' || parts[1] === 'pyq') {
+                                    content = parts[2];
+                                } else {
+                                    userAvatar = parts[1];
+                                    content = parts[2];
+                                }
                             }
                         }
 
@@ -528,15 +573,33 @@ function initSillyPhoneUI() {
                                 // 过滤掉角色自己评论自己，以及 AI 扮演“我”进行评论的情况
                                 const isUser = commentAuthor === state.userName || commentAuthor === state.stUserName || commentAuthor === '我' || commentAuthor === 'user';
                                 
-                                if (cParts.length === 3) {
-                                    // [评论|人名|内容|时间]
-                                    if (!isUser) {
-                                        moment.comments.push({ authorName: commentAuthor, text: cParts[1], time: cParts[2] });
+                                let commentTime = '';
+                                const cLastPart = cParts[cParts.length - 1];
+                                if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(cLastPart)) {
+                                    commentTime = cLastPart;
+                                    if (cParts.length === 3) {
+                                        // [评论|人名|内容|时间]
+                                        if (!isUser) {
+                                            moment.comments.push({ authorName: commentAuthor, text: cParts[1], time: commentTime });
+                                        }
+                                    } else if (cParts.length === 4) {
+                                        // [评论|人名|被评论人名|内容|时间]
+                                        if (commentAuthor !== cParts[1] && !isUser) {
+                                            moment.comments.push({ authorName: commentAuthor, replyToName: cParts[1], text: cParts[2], time: commentTime });
+                                        }
                                     }
-                                } else if (cParts.length === 4) {
-                                    // [评论|人名|被评论人名|内容|时间]
-                                    if (commentAuthor !== cParts[1] && !isUser) {
-                                        moment.comments.push({ authorName: commentAuthor, replyToName: cParts[1], text: cParts[2], time: cParts[3] });
+                                } else {
+                                    commentTime = new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0');
+                                    if (cParts.length === 2) {
+                                        // [评论|人名|内容]
+                                        if (!isUser) {
+                                            moment.comments.push({ authorName: commentAuthor, text: cParts[1], time: commentTime });
+                                        }
+                                    } else if (cParts.length === 3) {
+                                        // [评论|人名|被评论人名|内容]
+                                        if (commentAuthor !== cParts[1] && !isUser) {
+                                            moment.comments.push({ authorName: commentAuthor, replyToName: cParts[1], text: cParts[2], time: commentTime });
+                                        }
                                     }
                                 }
                             }
@@ -565,13 +628,29 @@ function initSillyPhoneUI() {
                         const commentAuthor = cParts[0];
                         const isUser = commentAuthor === state.userName || commentAuthor === state.stUserName || commentAuthor === '我' || commentAuthor === 'user';
                         
-                        if (cParts.length === 3) {
-                            if (!isUser) {
-                                currentMoment.comments.push({ authorName: commentAuthor, text: cParts[1], time: cParts[2] });
+                        let commentTime = '';
+                        const cLastPart = cParts[cParts.length - 1];
+                        if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(cLastPart)) {
+                            commentTime = cLastPart;
+                            if (cParts.length === 3) {
+                                if (!isUser) {
+                                    currentMoment.comments.push({ authorName: commentAuthor, text: cParts[1], time: commentTime });
+                                }
+                            } else if (cParts.length === 4) {
+                                if (commentAuthor !== cParts[1] && !isUser) {
+                                    currentMoment.comments.push({ authorName: commentAuthor, replyToName: cParts[1], text: cParts[2], time: commentTime });
+                                }
                             }
-                        } else if (cParts.length === 4) {
-                            if (commentAuthor !== cParts[1] && !isUser) {
-                                currentMoment.comments.push({ authorName: commentAuthor, replyToName: cParts[1], text: cParts[2], time: cParts[3] });
+                        } else {
+                            commentTime = new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0');
+                            if (cParts.length === 2) {
+                                if (!isUser) {
+                                    currentMoment.comments.push({ authorName: commentAuthor, text: cParts[1], time: commentTime });
+                                }
+                            } else if (cParts.length === 3) {
+                                if (commentAuthor !== cParts[1] && !isUser) {
+                                    currentMoment.comments.push({ authorName: commentAuthor, replyToName: cParts[1], text: cParts[2], time: commentTime });
+                                }
                             }
                         }
                     }
@@ -579,20 +658,36 @@ function initSillyPhoneUI() {
                     const m = line.match(/^\[(.*)\]$/);
                     if (m) {
                         const parts = m[1].split('|');
-                        if (parts.length >= 3) {
+                        if (parts.length >= 2) {
                             let userName = parts[0];
                             let content = '';
-                            let time = parts[parts.length - 1];
+                            let time = '';
                             let userAvatar = '';
                             
-                            if (parts.length === 3) {
-                                content = parts[1];
-                            } else if (parts.length >= 4) {
-                                if (parts[1] === '朋友圈' || parts[1] === 'pyq') {
-                                    content = parts[2];
-                                } else {
-                                    userAvatar = parts[1];
-                                    content = parts[2];
+                            const lastPart = parts[parts.length - 1];
+                            if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(lastPart)) {
+                                time = lastPart;
+                                if (parts.length === 3) {
+                                    content = parts[1];
+                                } else if (parts.length >= 4) {
+                                    if (parts[1] === '朋友圈' || parts[1] === 'pyq') {
+                                        content = parts[2];
+                                    } else {
+                                        userAvatar = parts[1];
+                                        content = parts[2];
+                                    }
+                                }
+                            } else {
+                                time = new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0');
+                                if (parts.length === 2) {
+                                    content = parts[1];
+                                } else if (parts.length >= 3) {
+                                    if (parts[1] === '朋友圈' || parts[1] === 'pyq') {
+                                        content = parts[2];
+                                    } else {
+                                        userAvatar = parts[1];
+                                        content = parts[2];
+                                    }
                                 }
                             }
                             
@@ -1157,53 +1252,63 @@ function initSillyPhoneUI() {
                 };
 
                 msgLines.forEach(line => {
-                    const m3 = line.match(/^\[(.*?)\|(.*?)\|(.*?)\]$/);
-                    const m4 = line.match(/^\[(.*?)\|(.*?)\|(.*?)\|(.*?)\]$/);
-                    const m5 = line.match(/^\[(.*?)\|(.*?)\|(.*?)\|(.*?)\|(.*?)\]$/);
-                    const m = m5 || m4 || m3;
-                    if (m) {
-                        flushTextBuffer();
-                        let formattedSenderId = state.currentChat.id;
-                        let senderName = m[1];
-                        if (state.currentChat.isGroup) {
-                            const member = state.currentChat.members.find(member => member.name === senderName);
-                            if (member) {
-                                formattedSenderId = member.id;
-                            } else {
-                                formattedSenderId = state.currentChat.members[0]?.id || state.currentChat.id;
+                    const partsMatch = line.match(/^\[(.*?)\]$/);
+                    if (partsMatch && !line.startsWith('[TRANSFER:') && !line.startsWith('[REDPACKET:') && !line.startsWith('[ACCEPT_TRANSFER]') && !line.startsWith('[RETURN_TRANSFER]') && !line.startsWith('[ACTION:LEAVE]')) {
+                        const parts = partsMatch[1].split('|');
+                        if (parts.length >= 2) {
+                            flushTextBuffer();
+                            let formattedSenderId = state.currentChat.id;
+                            let senderName = parts[0];
+                            if (state.currentChat.isGroup) {
+                                const member = state.currentChat.members.find(member => member.name === senderName);
+                                if (member) {
+                                    formattedSenderId = member.id;
+                                } else {
+                                    formattedSenderId = state.currentChat.members[0]?.id || state.currentChat.id;
+                                }
                             }
-                        }
-                        
-                        // 严谨逻辑：仅匹配当前昵称、微信号、酒馆用户名或系统默认标识
-                        const isUser = senderName === state.userName || 
-                                       senderName === '我' || 
-                                       senderName === 'user' || 
-                                       senderName === 'me' || 
-                                       senderName === state.wechatId || 
-                                       (state.stUserName && senderName === state.stUserName);
+                            
+                            // 严谨逻辑：仅匹配当前昵称、微信号、酒馆用户名或系统默认标识
+                            const isUser = senderName === state.userName || 
+                                           senderName === '我' || 
+                                           senderName === 'user' || 
+                                           senderName === 'me' || 
+                                           senderName === state.wechatId || 
+                                           (state.stUserName && senderName === state.stUserName);
 
-                        const msg = {
-                            id: 'msg_' + Math.random().toString(36).substr(2, 9),
-                            senderId: isUser ? 'user' : formattedSenderId,
-                            senderName: isUser ? state.userName : senderName,
-                            time: m[m.length - 1],
-                            type: isUser ? 'user' : 'ai'
-                        };
-                        
-                        let typeStr = 'text';
-                        let contentStr = '';
-                        let durationStr = '';
-                        
-                        if (m === m3) {
-                            contentStr = m[2];
-                        } else if (m === m4) {
-                            typeStr = m[2];
-                            contentStr = m[3];
-                        } else if (m === m5) {
-                            typeStr = m[2];
-                            contentStr = m[3];
-                            durationStr = m[4];
-                        }
+                            const lastPart = parts[parts.length - 1];
+                            let timeStr;
+                            let dataParts;
+                            if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(lastPart)) {
+                                timeStr = lastPart;
+                                dataParts = parts.slice(1, -1);
+                            } else {
+                                timeStr = new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0');
+                                dataParts = parts.slice(1);
+                            }
+
+                            const msg = {
+                                id: 'msg_' + Math.random().toString(36).substr(2, 9),
+                                senderId: isUser ? 'user' : formattedSenderId,
+                                senderName: isUser ? state.userName : senderName,
+                                time: timeStr,
+                                type: isUser ? 'user' : 'ai'
+                            };
+                            
+                            let typeStr = 'text';
+                            let contentStr = '';
+                            let durationStr = '';
+                            
+                            if (dataParts.length === 1) {
+                                contentStr = dataParts[0];
+                            } else if (dataParts.length === 2) {
+                                typeStr = dataParts[0];
+                                contentStr = dataParts[1];
+                            } else if (dataParts.length >= 3) {
+                                typeStr = dataParts[0];
+                                contentStr = dataParts[1];
+                                durationStr = dataParts[2];
+                            }
 
                         if (typeStr === '图片') {
                             msg.msgType = 'photo';
@@ -1267,6 +1372,9 @@ function initSillyPhoneUI() {
                         }
                         
                         state.messages[chatId].push(msg);
+                        } else {
+                            textBuffer.push(line);
+                        }
                     } else {
                         textBuffer.push(line);
                     }
@@ -4397,34 +4505,45 @@ function initSillyPhoneUI() {
                 const time = msg.time || '';
                 const msgType = msg.msgType || (msg.type === 'system' ? 'system' : 'text');
 
-                let line = '';
+                let linesToTry = [];
                 if (msgType === 'text') {
-                    line = `[${sender}|${content}|${time}]`;
+                    linesToTry.push(`[${sender}|${content}]`);
+                    linesToTry.push(`[${sender}|${content}|${time}]`);
                 } else if (msgType === 'image' || msgType === 'photo') {
-                    line = `[${sender}|图片|${msg.url || content}|${time}]`;
+                    linesToTry.push(`[${sender}|图片|${msg.url || content}]`);
+                    linesToTry.push(`[${sender}|图片|${msg.url || content}|${time}]`);
                 } else if (msgType === 'sticker') {
-                    line = `[${sender}|表情包|${msg.url || content}|${time}]`;
+                    linesToTry.push(`[${sender}|表情包|${msg.url || content}]`);
+                    linesToTry.push(`[${sender}|表情包|${msg.url || content}|${time}]`);
                 } else if (msgType === 'voice') {
-                    line = `[${sender}|语音消息|${content}|${time}]`;
+                    linesToTry.push(`[${sender}|语音消息|${content}]`);
+                    linesToTry.push(`[${sender}|语音消息|${content}|${time}]`);
                 } else if (msgType === 'transfer' || msgType === 'redpacket' || msgType === 'red-packet') {
-                    line = `[${sender}|${content}|${time}]`;
+                    linesToTry.push(`[${sender}|${content}]`);
+                    linesToTry.push(`[${sender}|${content}|${time}]`);
                 } else if (msgType === 'call') {
-                    line = `[${sender}|语音通话|${content}|${time}]`;
+                    linesToTry.push(`[${sender}|语音通话|${content}]`);
+                    linesToTry.push(`[${sender}|语音通话|${content}|${time}]`);
                 } else if (msgType === 'call-end') {
-                    line = `[${sender}|语音通话已挂断|${msg.duration || content || '00:00'}|${time}]`;
+                    linesToTry.push(`[${sender}|语音通话已挂断|${msg.duration || content || '00:00'}]`);
+                    linesToTry.push(`[${sender}|语音通话已挂断|${msg.duration || content || '00:00'}|${time}]`);
                 } else if (msgType === 'recall') {
-                    line = `[${sender}|撤回消息|${content}|${time}]`;
+                    linesToTry.push(`[${sender}|撤回消息|${content}]`);
+                    linesToTry.push(`[${sender}|撤回消息|${content}|${time}]`);
                 } else if (msgType === 'quote') {
-                    line = `<${sender}|${msg.quote || ''}|${content}|${time}>`;
+                    linesToTry.push(`<${sender}|${msg.quote || ''}|${content}>`);
+                    linesToTry.push(`<${sender}|${msg.quote || ''}|${content}|${time}>`);
                 }
 
-                if (line) {
+                for (const line of linesToTry) {
                     if (newRaw.includes(line + '\n')) {
                         newRaw = newRaw.replace(line + '\n', '');
                         changed = true;
+                        break;
                     } else if (newRaw.includes(line)) {
                         newRaw = newRaw.replace(line, '');
                         changed = true;
+                        break;
                     }
                 }
             });
@@ -4562,11 +4681,35 @@ function initSillyPhoneUI() {
         // 注入全局系统约束
         const userNames = [state.userName, state.stUserName, '我', 'user', 'me', state.wechatId].filter(Boolean);
         const userNameStr = userNames.join('、');
-        const globalConstraints = `\n[系统指令：记住“我”就是{{user}}（名字可能是 ${userNameStr}）。绝对禁止替“我”（{{user}}，即 ${userNameStr}）发表任何朋友圈、评论或回复。你只能扮演其他角色。严禁发布重复内容。朋友圈动态的“内容”字段必须是实际的文字正文，严禁只填“图片”二字。如果你想表达角色发了照片，请在正文中描述照片内容（例如：使用(IMG:描述)格式）或直接写正文。不要自主发送外部图片链接。严禁角色在自己的朋友圈下发表评论，也严禁角色回复自己的评论。角色之间应该互相互动，而不是自言自语。]`;
+        
+        let formatConstraint = '';
+        if (mode === 'chat') {
+            const chatName = state.currentChat ? state.currentChat.name : '未知';
+            formatConstraint = `当前为【私聊模式】。你的所有输出必须放在手机框架里：以 <shouji> 开头，内部包含 <private> 区块，每个区块首行固定写 “【和${chatName}的聊天】”，随后是 1–7 行合法消息格式，最后用 </private> 和 </shouji> 结束。禁止输出任何其他文本或空行！
+注意，每个<private>区块是不同的联系人，他们不能看到{{user}}与别人的聊天记录！也不能回复user给别人发的消息。
+一次回复可以包含多个 <private> 区块；若你同时回复不同联系人，请为每个联系人单独写一个 <private> 区块。
+每个 <private> 内部所有行的角色昵称必须与该区块标题相同，严格遵循 [角色昵称|内容] 或对应类型格式。绝不允许出现“我方消息”或用户姓名。
+记住，你要扮演好<private>标签里面的角色，不许混淆。不管这个人是谁，你都必须要按照这个人的语气来输出，哪怕是从未提到过的新角色！这个是私聊！！不许出现很多人的聊天！！且语音通话部分也不许除了对应角色外的任何人！不许想当然成你认为的角色。
+要严格遵守“和${chatName}的聊天”，只生成和这个人的聊天，不许生成和他人的私聊。`;
+        } else if (mode === 'moments') {
+            formatConstraint = `当前为【朋友圈模式】。请严格按照朋友圈的 <pyq> 或 [评论|...] 格式输出，禁止输出任何其他文本或空行！`;
+        }
+
+        const globalConstraints = `\n[系统指令（最高优先级）：不许输出正文和状态栏内容，你的世界里只有手机！
+${formatConstraint}
+通用规则：
+1. 记住“我”就是{{user}}（名字可能是 ${userNameStr}）。任何情况下不允许代替user说话！！绝对禁止替“我”发表任何消息、朋友圈、评论或回复！不许替user回复！也不许生成user的名字！
+2. 严禁发布重复内容，不许重复之前的聊天内容，只针对用户最新的消息进行回复。
+3. 朋友圈动态的“内容”字段必须是实际文字，严禁只填“图片”二字。想表达发照片请在正文中描述（如：(IMG:描述)）。不要自主发送外部图片链接。
+4. 严禁角色在自己的朋友圈下发表评论，也严禁角色回复自己的评论。角色之间应该互相互动，而不是自言自语。
+5. 请不要在回复中包含具体的时间戳，也不要受历史时间戳影响。]`;
         
         // 使用构建生成 Prompt 的函数，过滤掉历史记录
         const currentSessionMessages = buildGenerationPrompt(activeChatId);
-        const lastMessages = currentSessionMessages.slice(-5);
+        const lastMessages = currentSessionMessages.slice(-5).map(m => {
+            const { time, ...rest } = m;
+            return rest;
+        });
         
         const requestData = {
             source: 'yuii-phone',
@@ -4600,7 +4743,7 @@ function initSillyPhoneUI() {
                 }
             }
             if (availableLabels.length > 0) {
-                stickerPrompt = `\n[系统提示：你当前可用的表情包标签如下，请在需要时使用：${availableLabels.join('、')}。发送格式：[角色昵称|表情包|标签名|时间]]`;
+                stickerPrompt = `\n[系统提示：你当前可用的表情包标签如下，请在需要时使用：${availableLabels.join('、')}。发送格式：[角色昵称|表情包|标签名]]`;
             }
         }
         
@@ -5848,15 +5991,31 @@ function initSillyPhoneUI() {
                     let replyToName = null;
                     let cleanText = '';
                     
-                    if (cParts.length === 3) {
-                        senderName = cParts[0];
-                        cleanText = cParts[1];
-                    } else if (cParts.length >= 4) {
-                        senderName = cParts[0];
-                        replyToName = cParts[1];
-                        cleanText = cParts[2];
+                    const cLastPart = cParts[cParts.length - 1];
+                    const hasTime = /^\d{1,2}:\d{2}(:\d{2})?$/.test(cLastPart);
+                    
+                    if (hasTime) {
+                        if (cParts.length === 3) {
+                            senderName = cParts[0];
+                            cleanText = cParts[1];
+                        } else if (cParts.length >= 4) {
+                            senderName = cParts[0];
+                            replyToName = cParts[1];
+                            cleanText = cParts[2];
+                        } else {
+                            continue;
+                        }
                     } else {
-                        continue;
+                        if (cParts.length === 2) {
+                            senderName = cParts[0];
+                            cleanText = cParts[1];
+                        } else if (cParts.length >= 3) {
+                            senderName = cParts[0];
+                            replyToName = cParts[1];
+                            cleanText = cParts[2];
+                        } else {
+                            continue;
+                        }
                     }
                     
                     const isUser = senderName === state.userName || senderName === state.stUserName || senderName === '我' || senderName === 'user';
@@ -5885,7 +6044,7 @@ function initSillyPhoneUI() {
                         if (match[0].startsWith('[评论|')) continue;
                         hasMatchedFormat = true;
                         const mParts = match[1].split('|');
-                        if (mParts.length >= 3) {
+                        if (mParts.length >= 2) {
                             let senderName = mParts[0];
                             let cleanText = mParts[1];
                             let replyToName = null;
