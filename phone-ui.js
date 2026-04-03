@@ -60,10 +60,8 @@ function initSillyPhoneUI() {
             blur: 12,
             bubbleBlur: 12,
             navBlur: 15,
-            glassOpacity: 5,
-            pureMode: false
+            glassOpacity: 5
         },
-        presets: [], // 手机轻预设
         call: {
             active: false,
             isIncoming: false,
@@ -257,8 +255,7 @@ function initSillyPhoneUI() {
             userAccounts: prunedAccounts,
             activeAccountId: state.activeAccountId,
             settings: state.settings,
-            stickers: state.stickers,
-            presets: state.presets
+            stickers: state.stickers
         };
 
         // 优先使用文本格式序列化当前账号的消息和朋友圈
@@ -277,15 +274,7 @@ function initSillyPhoneUI() {
             console.error("保存手机数据到本地失败", e);
         }
 
-        let presetText = '';
-        if (state.presets && state.presets.length > 0) {
-            const activePresets = state.presets.filter(p => p.enabled);
-            if (activePresets.length > 0) {
-                presetText = `<shouji_preset>\n${activePresets.map(p => p.content).join('\n\n')}\n</shouji_preset>\n`;
-            }
-        }
-
-        const shoujiTag = `<shouji>\n${presetText}${textContent.trim()}\n</shouji>`;
+        const shoujiTag = `<shouji>\n${textContent.trim()}\n</shouji>`;
         
         let updatedMessage;
         if (raw.includes('<shouji>')) {
@@ -841,7 +830,6 @@ function initSillyPhoneUI() {
             userAccounts = localDataObj.userAccounts;
             state.activeAccountId = localDataObj.activeAccountId;
             state.stickers = localDataObj.stickers || state.stickers;
-            state.presets = localDataObj.presets || [];
         }
 
         for (let i = 0; i <= 30; i++) {
@@ -1431,7 +1419,6 @@ function initSillyPhoneUI() {
         navBlurValueDisplay.textContent = s.navBlur;
         glassOpacityIntensityInput.value = s.glassOpacity;
         glassOpacityValueDisplay.textContent = s.glassOpacity / 100;
-        if (pureModeToggle) pureModeToggle.checked = !!s.pureMode;
 
         if (settingsUserNameInput) settingsUserNameInput.value = state.userName;
         if (settingsWechatIdInput) settingsWechatIdInput.value = state.wechatId;
@@ -1443,8 +1430,6 @@ function initSillyPhoneUI() {
         
         if (momentsUserName) momentsUserName.textContent = state.userName;
         if (momentsUserAvatar) momentsUserAvatar.src = state.userAvatar;
-
-        renderPresetList();
 
         if(typeof lucide !== 'undefined') lucide.createIcons();
     }
@@ -1550,7 +1535,6 @@ function initSillyPhoneUI() {
     const navBlurValueDisplay = document.getElementById('nav-blur-value');
     const glassOpacityIntensityInput = document.getElementById('glass-opacity-intensity');
     const glassOpacityValueDisplay = document.getElementById('glass-opacity-value');
-    const pureModeToggle = document.getElementById('pure-mode-toggle');
     const settingsUserNameInput = document.getElementById('settings-user-name');
     const settingsWechatIdInput = document.getElementById('settings-wechat-id');
     const settingsUserAvatarImg = document.getElementById('settings-user-avatar');
@@ -1559,21 +1543,6 @@ function initSillyPhoneUI() {
     const momentsBgInput = document.getElementById('moments-bg-url');
     const saveSettingsBtn = document.getElementById('save-settings-btn');
     const toastContainer = document.getElementById('toast-container');
-
-    // 预设相关
-    const addPresetBtn = document.getElementById('add-preset-btn');
-    const importPresetBtn = document.getElementById('import-preset-btn');
-    const exportPresetBtn = document.getElementById('export-preset-btn');
-    const importPresetInput = document.getElementById('import-preset-input');
-    const presetList = document.getElementById('preset-list');
-    const presetEditModal = document.getElementById('preset-edit-modal');
-    const presetModalTitle = document.getElementById('preset-modal-title');
-    const closePresetModalBtn = document.getElementById('close-preset-modal');
-    const presetNameInput = document.getElementById('preset-name-input');
-    const presetContentInput = document.getElementById('preset-content-input');
-    const cancelPresetBtn = document.getElementById('cancel-preset-btn');
-    const savePresetBtn = document.getElementById('save-preset-btn');
-    let currentEditingPresetId = null;
 
     function showActionSheet(options) {
         const modal = document.getElementById('action-sheet-modal');
@@ -1768,8 +1737,7 @@ function initSillyPhoneUI() {
             blur: 12,
             bubbleBlur: 12,
             navBlur: 15,
-            glassOpacity: 5,
-            pureMode: false
+            glassOpacity: 5
         };
 
         // 清除本地存储
@@ -1855,231 +1823,6 @@ function initSillyPhoneUI() {
             if (e.key === 'Enter') handleConfirm();
         };
     }
-
-    // --- 预设管理逻辑 ---
-    function renderPresetList() {
-        if (!presetList) return;
-        presetList.innerHTML = '';
-        
-        if (!state.presets || state.presets.length === 0) {
-            presetList.innerHTML = '<div style="color: rgba(255,255,255,0.5); font-size: 12px; text-align: center; padding: 10px;">暂无预设，点击上方添加</div>';
-            return;
-        }
-
-        state.presets.forEach(preset => {
-            const item = document.createElement('div');
-            item.className = 'preset-item';
-            item.style.display = 'flex';
-            item.style.alignItems = 'center';
-            item.style.justifyContent = 'space-between';
-            item.style.background = 'rgba(255,255,255,0.05)';
-            item.style.padding = '10px';
-            item.style.borderRadius = '8px';
-            item.style.border = '1px solid rgba(255,255,255,0.1)';
-
-            const leftDiv = document.createElement('div');
-            leftDiv.style.display = 'flex';
-            leftDiv.style.alignItems = 'center';
-            leftDiv.style.gap = '10px';
-            leftDiv.style.flex = '1';
-            leftDiv.style.overflow = 'hidden';
-
-            const toggleBtn = document.createElement('div');
-            toggleBtn.className = `toggle-btn ${preset.enabled ? 'active' : ''}`;
-            toggleBtn.style.width = '40px';
-            toggleBtn.style.height = '20px';
-            toggleBtn.style.borderRadius = '10px';
-            toggleBtn.style.background = preset.enabled ? '#07c160' : 'rgba(255,255,255,0.2)';
-            toggleBtn.style.position = 'relative';
-            toggleBtn.style.cursor = 'pointer';
-            toggleBtn.style.transition = 'background 0.3s';
-            
-            const toggleKnob = document.createElement('div');
-            toggleKnob.style.width = '16px';
-            toggleKnob.style.height = '16px';
-            toggleKnob.style.borderRadius = '50%';
-            toggleKnob.style.background = 'white';
-            toggleKnob.style.position = 'absolute';
-            toggleKnob.style.top = '2px';
-            toggleKnob.style.left = preset.enabled ? '22px' : '2px';
-            toggleKnob.style.transition = 'left 0.3s';
-            toggleBtn.appendChild(toggleKnob);
-
-            toggleBtn.onclick = () => {
-                preset.enabled = !preset.enabled;
-                syncToSillyTavern();
-                renderPresetList();
-            };
-
-            const nameSpan = document.createElement('span');
-            nameSpan.textContent = preset.name;
-            nameSpan.style.color = 'white';
-            nameSpan.style.fontSize = '14px';
-            nameSpan.style.whiteSpace = 'nowrap';
-            nameSpan.style.overflow = 'hidden';
-            nameSpan.style.textOverflow = 'ellipsis';
-
-            leftDiv.appendChild(toggleBtn);
-            leftDiv.appendChild(nameSpan);
-
-            const rightDiv = document.createElement('div');
-            rightDiv.style.display = 'flex';
-            rightDiv.style.gap = '8px';
-
-            const editBtn = document.createElement('button');
-            editBtn.innerHTML = '<i data-lucide="edit-2" size="14"></i>';
-            editBtn.style.background = 'transparent';
-            editBtn.style.border = 'none';
-            editBtn.style.color = 'rgba(255,255,255,0.7)';
-            editBtn.style.cursor = 'pointer';
-            editBtn.onclick = () => openPresetModal(preset.id);
-
-            const deleteBtn = document.createElement('button');
-            deleteBtn.innerHTML = '<i data-lucide="trash-2" size="14"></i>';
-            deleteBtn.style.background = 'transparent';
-            deleteBtn.style.border = 'none';
-            deleteBtn.style.color = '#ff4444';
-            deleteBtn.style.cursor = 'pointer';
-            deleteBtn.onclick = () => {
-                if (confirm(`确定要删除预设 "${preset.name}" 吗？`)) {
-                    state.presets = state.presets.filter(p => p.id !== preset.id);
-                    syncToSillyTavern();
-                    renderPresetList();
-                }
-            };
-
-            rightDiv.appendChild(editBtn);
-            rightDiv.appendChild(deleteBtn);
-
-            item.appendChild(leftDiv);
-            item.appendChild(rightDiv);
-            presetList.appendChild(item);
-        });
-        if(typeof lucide !== 'undefined') lucide.createIcons();
-    }
-
-    function openPresetModal(presetId = null) {
-        currentEditingPresetId = presetId;
-        if (presetId) {
-            const preset = state.presets.find(p => p.id === presetId);
-            if (preset) {
-                presetModalTitle.textContent = '编辑预设';
-                presetNameInput.value = preset.name;
-                presetContentInput.value = preset.content;
-            }
-        } else {
-            presetModalTitle.textContent = '添加预设';
-            presetNameInput.value = '';
-            presetContentInput.value = '';
-        }
-        presetEditModal.style.display = 'flex';
-    }
-
-    function closePresetModal() {
-        presetEditModal.style.display = 'none';
-        currentEditingPresetId = null;
-    }
-
-    function savePreset() {
-        const name = presetNameInput.value.trim();
-        const content = presetContentInput.value.trim();
-        
-        if (!name) {
-            showToast('请输入预设名称', 'alert-circle');
-            return;
-        }
-        if (!content) {
-            showToast('请输入预设内容', 'alert-circle');
-            return;
-        }
-
-        if (!state.presets) state.presets = [];
-
-        if (currentEditingPresetId) {
-            const preset = state.presets.find(p => p.id === currentEditingPresetId);
-            if (preset) {
-                preset.name = name;
-                preset.content = content;
-            }
-        } else {
-            state.presets.push({
-                id: 'preset_' + Date.now(),
-                name: name,
-                content: content,
-                enabled: false
-            });
-        }
-
-        syncToSillyTavern();
-        renderPresetList();
-        closePresetModal();
-        showToast('预设已保存');
-    }
-
-    function exportPresets() {
-        if (!state.presets || state.presets.length === 0) {
-            showToast('没有可导出的预设', 'alert-circle');
-            return;
-        }
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state.presets, null, 2));
-        const downloadAnchorNode = document.createElement('a');
-        downloadAnchorNode.setAttribute("href", dataStr);
-        downloadAnchorNode.setAttribute("download", "sillyphone_presets.json");
-        document.body.appendChild(downloadAnchorNode); // required for firefox
-        downloadAnchorNode.click();
-        downloadAnchorNode.remove();
-        showToast('预设已导出');
-    }
-
-    function importPresets(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            try {
-                const importedPresets = JSON.parse(e.target.result);
-                if (Array.isArray(importedPresets)) {
-                    if (!state.presets) state.presets = [];
-                    
-                    // 简单的合并逻辑，避免ID冲突
-                    importedPresets.forEach(imported => {
-                        if (imported.name && imported.content) {
-                            // 重新生成ID
-                            state.presets.push({
-                                id: 'preset_' + Date.now() + Math.random().toString(36).substr(2, 5),
-                                name: imported.name,
-                                content: imported.content,
-                                enabled: false
-                            });
-                        }
-                    });
-                    
-                    syncToSillyTavern();
-                    renderPresetList();
-                    showToast('预设导入成功');
-                } else {
-                    showToast('无效的预设文件格式', 'alert-circle');
-                }
-            } catch (err) {
-                console.error('导入预设失败:', err);
-                showToast('读取文件失败', 'alert-circle');
-            }
-        };
-        reader.readAsText(file);
-        // 清空 input，允许重复导入同一个文件
-        event.target.value = '';
-    }
-
-    if (addPresetBtn) addPresetBtn.onclick = () => openPresetModal();
-    if (closePresetModalBtn) closePresetModalBtn.onclick = closePresetModal;
-    if (cancelPresetBtn) cancelPresetBtn.onclick = closePresetModal;
-    if (savePresetBtn) savePresetBtn.onclick = savePreset;
-    if (exportPresetBtn) exportPresetBtn.onclick = exportPresets;
-    if (importPresetBtn) importPresetBtn.onclick = () => importPresetInput.click();
-    if (importPresetInput) importPresetInput.onchange = importPresets;
-
-    // --- 结束预设管理逻辑 ---
 
     function showCharacterSelect(title, callback, filterType = 'all') {
         const modal = document.getElementById('character-select-modal');
@@ -2221,7 +1964,6 @@ function initSillyPhoneUI() {
         const bubbleBlurVal = bubbleBlurIntensityInput.value;
         const navBlurVal = navBlurIntensityInput.value;
         const glassOpacityVal = glassOpacityValueDisplay.textContent;
-        const isPureMode = pureModeToggle ? pureModeToggle.checked : false;
         const newUserName = settingsUserNameInput.value.trim() || '我';
         const newWechatId = settingsWechatIdInput.value.trim() || 'wxid_sillyphone';
         const newUserAvatar = settingsUserAvatarImg.src;
@@ -2234,7 +1976,6 @@ function initSillyPhoneUI() {
         state.settings.navBlur = parseInt(navBlurVal);
         state.settings.glassOpacity = parseFloat(glassOpacityVal) * 100;
         state.settings.momentsBg = newMomentsBg;
-        state.settings.pureMode = isPureMode;
 
         state.userName = newUserName;
         state.userAvatar = newUserAvatar;
@@ -5013,21 +4754,20 @@ ${formatConstraint}
                 syncToSillyTavern();
                 
                 const rawRequestData = {
-                    user_input: (customPrompt || (mode === 'moments' ? '请回复朋友圈...' : '请回复...')) + stickerPrompt + globalConstraints,
-                    should_silence: true,
-                };
-
-                if (state.settings.pureMode) {
-                    rawRequestData.ordered_prompts = [
+                    ordered_prompts: [
                         'world_info_before',
                         'persona_description',
                         'char_description',
                         'char_personality',
+                        'scenario',
                         'world_info_after',
+                        'dialogue_examples',
                         'chat_history',
-                        'user_input'
-                    ];
-                }
+                        'user_input',
+                    ],
+                    user_input: (customPrompt || (mode === 'moments' ? '请回复朋友圈...' : '请回复...')) + stickerPrompt + globalConstraints,
+                    should_silence: true,
+                };
                 
                 const replyText = String(await st.generateRaw(rawRequestData) || '').trim();
                 
@@ -6039,7 +5779,7 @@ ${formatConstraint}
                 const data = JSON.parse(saved);
                 if (data.userAccounts) state.userAccounts = data.userAccounts;
                 if (data.activeAccountId) state.activeAccountId = data.activeAccountId;
-                if (data.settings) state.settings = { ...state.settings, ...data.settings };
+                if (data.settings) state.settings = data.settings;
                 if (data.stickers) state.stickers = data.stickers;
                 if (data.contacts) state.contacts = data.contacts;
                 if (data.groups) state.groups = data.groups;
