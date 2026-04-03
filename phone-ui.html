@@ -567,7 +567,32 @@
                         <label>玻璃遮罩透明度: <span id="glass-opacity-value">0.05</span></label>
                         <input type="range" id="glass-opacity-intensity" min="0" max="100" value="5">
                     </div>
-                    <button id="save-settings-btn" class="save-btn">
+
+                    <div class="setting-item" style="flex-direction: row; justify-content: space-between; align-items: center; margin-top: 10px;">
+                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <label style="margin-bottom: 0;">纯净手机模式</label>
+                            <span style="font-size: 10px; color: var(--c-text-sec);">开启后将屏蔽酒馆主预设、场景等重度指令，仅保留角色设定与聊天记录。</span>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="pure-mode-toggle">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+
+                    <div class="setting-group-title" style="margin-top: 20px; font-size: 14px; color: var(--c-text-sec); padding-left: 5px;">手机轻预设 (Prompt)</div>
+                    <div class="setting-item vertical" style="padding: 10px; background: rgba(255,255,255,0.03); border-radius: 12px;">
+                        <div class="preset-toolbar" style="display: flex; gap: 10px; margin-bottom: 10px;">
+                            <button id="add-preset-btn" class="secondary-btn" style="flex: 1; padding: 6px; font-size: 12px; border-radius: 6px; background: rgba(255,255,255,0.1); border: none; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center;"><i data-lucide="plus" size="14" style="margin-right: 4px;"></i>添加</button>
+                            <button id="import-preset-btn" class="secondary-btn" style="flex: 1; padding: 6px; font-size: 12px; border-radius: 6px; background: rgba(255,255,255,0.1); border: none; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center;"><i data-lucide="download" size="14" style="margin-right: 4px;"></i>导入</button>
+                            <button id="export-preset-btn" class="secondary-btn" style="flex: 1; padding: 6px; font-size: 12px; border-radius: 6px; background: rgba(255,255,255,0.1); border: none; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center;"><i data-lucide="upload" size="14" style="margin-right: 4px;"></i>导出</button>
+                            <input type="file" id="import-preset-input" accept=".json" style="display: none;">
+                        </div>
+                        <div id="preset-list" class="preset-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto; padding-right: 5px;">
+                            <!-- 动态加载预设条目 -->
+                        </div>
+                    </div>
+
+                    <button id="save-settings-btn" class="save-btn" style="margin-top: 20px;">
                         <i data-lucide="save" size="16"></i>
                         <span>保存设置</span>
                     </button>
@@ -631,6 +656,24 @@
                 </div>
                 <div class="modal-body" style="padding: 10px 0;">
                     <div id="text-img-full-content" style="color: rgba(255,255,255,0.9); font-size: 14px; line-height: 1.8; font-style: italic; white-space: pre-wrap;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 预设编辑弹窗 -->
+        <div id="preset-edit-modal" class="modal-overlay" style="display: none; z-index: 3300;">
+            <div class="modal-content" style="background: rgba(25, 25, 25, 0.95); border: 1px solid rgba(255,255,255,0.1); width: 320px;">
+                <div class="modal-header">
+                    <span class="modal-title" style="color: white;" id="preset-modal-title">添加预设</span>
+                    <span class="close-btn" id="close-preset-modal" style="color: white; cursor: pointer;"><i data-lucide="x" size="18"></i></span>
+                </div>
+                <div class="modal-body">
+                    <input type="text" id="preset-name-input" placeholder="预设名称 (如: 手机格式强提醒)" style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: white; padding: 10px; margin-bottom: 10px; outline: none;">
+                    <textarea id="preset-content-input" placeholder="预设内容 (Prompt)..." style="width: 100%; height: 120px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: white; padding: 10px; margin-bottom: 15px; resize: none; outline: none;"></textarea>
+                    <div style="display: flex; gap: 10px;">
+                        <button id="cancel-preset-btn" class="secondary-btn" style="flex: 1; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 8px; padding: 10px; cursor: pointer;">取消</button>
+                        <button id="save-preset-btn" class="primary-btn" style="flex: 1; background: #07c160; border: none; color: white; border-radius: 8px; padding: 10px; cursor: pointer;">保存</button>
+                    </div>
                 </div>
             </div>
         </div>
