@@ -172,7 +172,11 @@ function initSillyPhoneUI() {
                 } else if (msgType === 'sticker') {
                     text += `[${sender}|表情包|${msg.url || content}]\n`;
                 } else if (msgType === 'voice') {
-                    text += `[${sender}|语音消息|${content}]\n`;
+                    if (msg.duration) {
+                        text += `[${sender}|语音消息|${msg.duration}|${content}]\n`;
+                    } else {
+                        text += `[${sender}|语音消息|${content}]\n`;
+                    }
                 } else if (msgType === 'transfer' || msgType === 'redpacket' || msgType === 'red-packet') {
                     text += `[${sender}|${content}]\n`;
                 } else if (msgType === 'call') {
@@ -433,7 +437,14 @@ function initSillyPhoneUI() {
                 else if (body === '撤回消息') { type = 'recall'; content = dataParts[1]; }
                 else { content = dataParts[1]; }
             } else if (dataParts.length === 3) {
-                content = dataParts[2];
+                const body = dataParts[0];
+                if (body === '语音消息') {
+                    type = 'voice';
+                    duration = dataParts[1];
+                    content = dataParts[2];
+                } else {
+                    content = dataParts[2];
+                }
             } else {
                 content = dataParts.join('|');
             }
@@ -1159,8 +1170,81 @@ function initSillyPhoneUI() {
                 });
             }
 
-            state.messages = combinedMessages;
-            state.moments = combinedMoments;
+            // 增量更新逻辑：将解析出的消息合并到现有状态中，而不是直接覆盖
+            // 这样即使 AI 的输出不完整，旧的消息也不会丢失
+            const getMsgSig = (m) => `${m.senderName || m.senderId}|${m.msgType || m.type}|${m.text || m.content || ''}`;
+            
+            for (const cid in combinedMessages) {
+                if (!state.messages[cid] || state.messages[cid].length === 0) {
+                    state.messages[cid] = combinedMessages[cid];
+                } else {
+                    const oldMsgs = state.messages[cid];
+                    const newMsgs = combinedMessages[cid];
+                    const oldSigs = new Set(oldMsgs.map(getMsgSig));
+                    
+                    let lastFoundIndex = -1;
+                    let prependCount = 0;
+                    const merged = [...oldMsgs];
+                    
+                    newMsgs.forEach(m => {
+                        const sig = getMsgSig(m);
+                        const idxInOld = oldMsgs.findIndex(om => getMsgSig(om) === sig);
+                        
+                        if (idxInOld !== -1) {
+                            // 找到了锚点，更新位置
+                            lastFoundIndex = idxInOld + prependCount;
+                            // 可以在这里同步一些可能更新的状态（如红包状态）
+                            const existing = merged[lastFoundIndex];
+                            if (m.status && m.status !== existing.status) existing.status = m.status;
+                            if (m.duration && m.duration !== existing.duration) existing.duration = m.duration;
+                        } else {
+                            // 新消息，根据锚点位置插入
+                            if (lastFoundIndex === -1) {
+                                // 在第一个锚点之前出现的消息，前插
+                                merged.splice(prependCount, 0, m);
+                                prependCount++;
+                            } else {
+                                // 在锚点之后出现的消息，后插
+                                merged.splice(lastFoundIndex + 1, 0, m);
+                                lastFoundIndex++;
+                            }
+                        }
+                    });
+                    state.messages[cid] = merged;
+                }
+            }
+
+            // 朋友圈同样采用增量合并
+            if (combinedMoments.length > 0) {
+                if (state.moments.length === 0) {
+                    state.moments = combinedMoments;
+                } else {
+                    const getMomentSig = (m) => `${m.authorId}|${m.text || ''}|${m.time || ''}`;
+                    const oldSigs = new Set(state.moments.map(getMomentSig));
+                    
+                    let lastFoundIndex = -1;
+                    let prependCount = 0;
+                    const merged = [...state.moments];
+                    
+                    combinedMoments.forEach(m => {
+                        const sig = getMomentSig(m);
+                        const idxInOld = state.moments.findIndex(om => getMomentSig(om) === sig);
+                        
+                        if (idxInOld !== -1) {
+                            lastFoundIndex = idxInOld + prependCount;
+                        } else {
+                            if (lastFoundIndex === -1) {
+                                merged.splice(prependCount, 0, m);
+                                prependCount++;
+                            } else {
+                                merged.splice(lastFoundIndex + 1, 0, m);
+                                lastFoundIndex++;
+                            }
+                        }
+                    });
+                    state.moments = merged;
+                }
+            }
             
             // 处理 raw AI message
             if (latestRawAIMessage && state.currentChat) {
@@ -2747,7 +2831,8 @@ function initSillyPhoneUI() {
                 } else if (lastMsg.msgType === 'sticker') {
                     lastMsgText = '[表情]';
                 } else if (lastMsg.msgType === 'voice') {
-                    lastMsgText = '[语音通话]';
+                    const durationVal = parseInt(lastMsg.duration) || Math.max(1, Math.ceil((lastMsg.text || '').length / 4)) || 5;
+                    lastMsgText = `[语音] ${durationVal}"`;
                 } else if (lastMsg.msgType === 'video') {
                     lastMsgText = '[视频通话]';
                 } else if (lastMsg.msgType === 'transfer') {
@@ -4542,14 +4627,15 @@ function initSillyPhoneUI() {
                     </div>
                 `;
             } else if (m.msgType === 'voice') {
-                const durationVal = parseInt(m.duration) || 5;
-                const bubbleWidth = Math.min(220, 80 + durationVal * 4); // 根据时长动态计算宽度
-                div.style.width = bubbleWidth + 'px';
+                const calculatedDuration = Math.max(1, Math.ceil((m.text || '').length / 4));
+                const durationVal = parseInt(m.duration) || calculatedDuration || 5;
+                const bubbleWidth = Math.min(240, 80 + durationVal * 5); // 根据时长动态计算宽度
+                div.style.minWidth = bubbleWidth + 'px';
                 
                 contentDiv.innerHTML = `
                     <div class="voice-bar">
                         <div class="voice-wave"></div>
-                        <span>${m.duration || '5"'}</span>
+                        <span>${durationVal}"</span>
                     </div>
                     <div class="voice-text">${formatContent(m.text)}</div>
                 `;
@@ -4799,6 +4885,10 @@ function initSillyPhoneUI() {
                     linesToTry.push(`[${sender}|表情包|${msg.url || content}]`);
                     linesToTry.push(`[${sender}|表情包|${msg.url || content}|${time}]`);
                 } else if (msgType === 'voice') {
+                    if (msg.duration) {
+                        linesToTry.push(`[${sender}|语音消息|${msg.duration}|${content}]`);
+                        linesToTry.push(`[${sender}|语音消息|${msg.duration}|${content}|${time}]`);
+                    }
                     linesToTry.push(`[${sender}|语音消息|${content}]`);
                     linesToTry.push(`[${sender}|语音消息|${content}|${time}]`);
                 } else if (msgType === 'transfer' || msgType === 'redpacket' || msgType === 'red-packet') {
