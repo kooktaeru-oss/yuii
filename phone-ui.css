@@ -43,7 +43,7 @@ body {
 
 .screen {
     width: 360px;
-    height: 600px;
+    height: 500px;
     display: flex;
     flex-direction: column;
     position: relative;
