@@ -29,20 +29,13 @@
     display: none;
 }
 
-html {
-    width: 100vw;
-    height: 100vh;
-    overflow: hidden;
-}
-
 body {
     background: transparent;
     display: flex;
     justify-content: center;
     align-items: center;
-    width: 100vw;
-    height: 100vh;
-    padding: 0;
+    min-height: 100%;
+    padding: 20px;
     margin: 0;
     font-family: -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif;
     overflow: hidden;
