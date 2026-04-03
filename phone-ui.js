@@ -9,6 +9,8 @@ function initSillyPhoneUI() {
         if (window.frameElement) {
             window.frameElement.style.width = '400px';
             window.frameElement.style.height = '640px';
+            window.frameElement.style.maxWidth = '100%';
+            window.frameElement.style.maxHeight = '100vh';
             window.frameElement.style.border = 'none';
             window.frameElement.style.backgroundColor = 'transparent';
             window.frameElement.style.display = 'block';
@@ -6634,6 +6636,31 @@ ${formatConstraint}
         renderMessages(chatId);
         showToast('收到新消息', 'message-square');
     }
+
+    // 响应式缩放逻辑
+    function handleResize() {
+        const screenEl = document.querySelector('.screen');
+        if (!screenEl) return;
+        
+        const baseWidth = 360;
+        const baseHeight = 600;
+        
+        // 考虑 body 的 padding (20px * 2 = 40px)
+        const availableWidth = window.innerWidth - 40;
+        const availableHeight = window.innerHeight - 40;
+        
+        const scaleX = availableWidth / baseWidth;
+        const scaleY = availableHeight / baseHeight;
+        
+        // 取最小的缩放比例，但不超过 1（不放大）
+        const scale = Math.min(scaleX, scaleY, 1);
+        
+        screenEl.style.transform = `scale(${scale})`;
+        screenEl.style.transformOrigin = 'center center';
+    }
+
+    window.addEventListener('resize', handleResize);
+    handleResize();
 
     loadUserStickers();
     loadStateFromLocalStorage();
