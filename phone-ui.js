@@ -2038,19 +2038,28 @@ function initSillyPhoneUI() {
         const reader = new FileReader();
         reader.onload = (e) => {
             try {
-                const importedPresets = JSON.parse(e.target.result);
-                if (Array.isArray(importedPresets)) {
+                const importedData = JSON.parse(e.target.result);
+                let presetsToImport = [];
+                
+                if (Array.isArray(importedData)) {
+                    presetsToImport = importedData;
+                } else if (importedData && Array.isArray(importedData.items)) {
+                    presetsToImport = importedData.items;
+                }
+
+                if (presetsToImport.length > 0) {
                     if (!state.presets) state.presets = [];
                     
                     // 简单的合并逻辑，避免ID冲突
-                    importedPresets.forEach(imported => {
+                    presetsToImport.forEach(imported => {
                         if (imported.name && imported.content) {
                             // 重新生成ID
                             state.presets.push({
                                 id: 'preset_' + Date.now() + Math.random().toString(36).substr(2, 5),
                                 name: imported.name,
                                 content: imported.content,
-                                enabled: false
+                                enabled: imported.enabled !== undefined ? imported.enabled : false,
+                                locked: imported.locked !== undefined ? imported.locked : false
                             });
                         }
                     });
