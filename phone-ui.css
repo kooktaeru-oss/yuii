@@ -735,7 +735,8 @@ input[type="number"] {
 }
 
 .bubble-content {
-    word-break: break-word;
+    word-break: break-all;
+    overflow-wrap: anywhere;
 }
 
 .quoted-msg-container {
@@ -1902,6 +1903,9 @@ input[type="number"] {
     display: flex;
     align-items: center;
     gap: 8px;
+    max-width: 90vw;
+    word-break: break-all;
+    text-align: center;
 }
 
 @keyframes toast-in {
