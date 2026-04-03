@@ -60,7 +60,8 @@ function initSillyPhoneUI() {
             blur: 12,
             bubbleBlur: 12,
             navBlur: 15,
-            glassOpacity: 5
+            glassOpacity: 5,
+            pureMode: false
         },
         presets: [], // 手机轻预设
         call: {
@@ -1430,6 +1431,7 @@ function initSillyPhoneUI() {
         navBlurValueDisplay.textContent = s.navBlur;
         glassOpacityIntensityInput.value = s.glassOpacity;
         glassOpacityValueDisplay.textContent = s.glassOpacity / 100;
+        if (pureModeToggle) pureModeToggle.checked = !!s.pureMode;
 
         if (settingsUserNameInput) settingsUserNameInput.value = state.userName;
         if (settingsWechatIdInput) settingsWechatIdInput.value = state.wechatId;
@@ -1548,6 +1550,7 @@ function initSillyPhoneUI() {
     const navBlurValueDisplay = document.getElementById('nav-blur-value');
     const glassOpacityIntensityInput = document.getElementById('glass-opacity-intensity');
     const glassOpacityValueDisplay = document.getElementById('glass-opacity-value');
+    const pureModeToggle = document.getElementById('pure-mode-toggle');
     const settingsUserNameInput = document.getElementById('settings-user-name');
     const settingsWechatIdInput = document.getElementById('settings-wechat-id');
     const settingsUserAvatarImg = document.getElementById('settings-user-avatar');
@@ -1765,7 +1768,8 @@ function initSillyPhoneUI() {
             blur: 12,
             bubbleBlur: 12,
             navBlur: 15,
-            glassOpacity: 5
+            glassOpacity: 5,
+            pureMode: false
         };
 
         // 清除本地存储
@@ -2217,6 +2221,7 @@ function initSillyPhoneUI() {
         const bubbleBlurVal = bubbleBlurIntensityInput.value;
         const navBlurVal = navBlurIntensityInput.value;
         const glassOpacityVal = glassOpacityValueDisplay.textContent;
+        const isPureMode = pureModeToggle ? pureModeToggle.checked : false;
         const newUserName = settingsUserNameInput.value.trim() || '我';
         const newWechatId = settingsWechatIdInput.value.trim() || 'wxid_sillyphone';
         const newUserAvatar = settingsUserAvatarImg.src;
@@ -2229,6 +2234,7 @@ function initSillyPhoneUI() {
         state.settings.navBlur = parseInt(navBlurVal);
         state.settings.glassOpacity = parseFloat(glassOpacityVal) * 100;
         state.settings.momentsBg = newMomentsBg;
+        state.settings.pureMode = isPureMode;
 
         state.userName = newUserName;
         state.userAvatar = newUserAvatar;
@@ -5007,20 +5013,21 @@ ${formatConstraint}
                 syncToSillyTavern();
                 
                 const rawRequestData = {
-                    ordered_prompts: [
+                    user_input: (customPrompt || (mode === 'moments' ? '请回复朋友圈...' : '请回复...')) + stickerPrompt + globalConstraints,
+                    should_silence: true,
+                };
+
+                if (state.settings.pureMode) {
+                    rawRequestData.ordered_prompts = [
                         'world_info_before',
                         'persona_description',
                         'char_description',
                         'char_personality',
-                        'scenario',
                         'world_info_after',
-                        'dialogue_examples',
                         'chat_history',
-                        'user_input',
-                    ],
-                    user_input: (customPrompt || (mode === 'moments' ? '请回复朋友圈...' : '请回复...')) + stickerPrompt + globalConstraints,
-                    should_silence: true,
-                };
+                        'user_input'
+                    ];
+                }
                 
                 const replyText = String(await st.generateRaw(rawRequestData) || '').trim();
                 
@@ -6032,7 +6039,7 @@ ${formatConstraint}
                 const data = JSON.parse(saved);
                 if (data.userAccounts) state.userAccounts = data.userAccounts;
                 if (data.activeAccountId) state.activeAccountId = data.activeAccountId;
-                if (data.settings) state.settings = data.settings;
+                if (data.settings) state.settings = { ...state.settings, ...data.settings };
                 if (data.stickers) state.stickers = data.stickers;
                 if (data.contacts) state.contacts = data.contacts;
                 if (data.groups) state.groups = data.groups;
