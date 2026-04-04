@@ -91,7 +91,8 @@ function initSillyPhoneUI() {
             transcript: []
         },
         stUserName: null,
-        sessionStartMsgId: null
+        sessionStartMsgId: null,
+        _dataLoaded: false  // 保护标志：防止数据加载完成前触发同步覆盖
     };
 
     // --- SillyTavern 同层同步逻辑 ---
@@ -145,8 +146,12 @@ function initSillyPhoneUI() {
         for (const chatId in messages) {
             if (!messages[chatId] || messages[chatId].length === 0) continue;
             
-            // 仅序列化非历史消息（当前会话的消息），或者属于当前回合的消息
-            const currentMessages = messages[chatId].filter(msg => !msg.isHistory || (currentMsgId !== undefined && msg.sourceMsgId === currentMsgId));
+            // 序列化消息：保留非历史消息、属于当前回合的消息，以及没有 sourceMsgId 的消息（从文本解析恢复的）
+            const currentMessages = messages[chatId].filter(msg => 
+                !msg.isHistory || 
+                (currentMsgId !== undefined && msg.sourceMsgId === currentMsgId) ||
+                msg.sourceMsgId === undefined
+            );
             if (currentMessages.length === 0) continue;
 
             const chatName = getContactNameById(chatId);
@@ -236,6 +241,11 @@ function initSillyPhoneUI() {
     }
 
     function syncToSillyTavern() {
+        // 保护：如果数据尚未加载完成，拒绝同步，防止用不完整的空数据覆盖酒馆中的正确数据
+        if (!state._dataLoaded) {
+            console.warn('[SillyPhone] 数据尚未加载完毕，跳过同步');
+            return;
+        }
         const st = getSTInterface();
         const msgId = st.getCurrentMessageId();
         if (msgId === null) return;
@@ -1170,81 +1180,8 @@ function initSillyPhoneUI() {
                 });
             }
 
-            // 增量更新逻辑：将解析出的消息合并到现有状态中，而不是直接覆盖
-            // 这样即使 AI 的输出不完整，旧的消息也不会丢失
-            const getMsgSig = (m) => `${m.senderName || m.senderId}|${m.msgType || m.type}|${m.text || m.content || ''}`;
-            
-            for (const cid in combinedMessages) {
-                if (!state.messages[cid] || state.messages[cid].length === 0) {
-                    state.messages[cid] = combinedMessages[cid];
-                } else {
-                    const oldMsgs = state.messages[cid];
-                    const newMsgs = combinedMessages[cid];
-                    const oldSigs = new Set(oldMsgs.map(getMsgSig));
-                    
-                    let lastFoundIndex = -1;
-                    let prependCount = 0;
-                    const merged = [...oldMsgs];
-                    
-                    newMsgs.forEach(m => {
-                        const sig = getMsgSig(m);
-                        const idxInOld = oldMsgs.findIndex(om => getMsgSig(om) === sig);
-                        
-                        if (idxInOld !== -1) {
-                            // 找到了锚点，更新位置
-                            lastFoundIndex = idxInOld + prependCount;
-                            // 可以在这里同步一些可能更新的状态（如红包状态）
-                            const existing = merged[lastFoundIndex];
-                            if (m.status && m.status !== existing.status) existing.status = m.status;
-                            if (m.duration && m.duration !== existing.duration) existing.duration = m.duration;
-                        } else {
-                            // 新消息，根据锚点位置插入
-                            if (lastFoundIndex === -1) {
-                                // 在第一个锚点之前出现的消息，前插
-                                merged.splice(prependCount, 0, m);
-                                prependCount++;
-                            } else {
-                                // 在锚点之后出现的消息，后插
-                                merged.splice(lastFoundIndex + 1, 0, m);
-                                lastFoundIndex++;
-                            }
-                        }
-                    });
-                    state.messages[cid] = merged;
-                }
-            }
-
-            // 朋友圈同样采用增量合并
-            if (combinedMoments.length > 0) {
-                if (state.moments.length === 0) {
-                    state.moments = combinedMoments;
-                } else {
-                    const getMomentSig = (m) => `${m.authorId}|${m.text || ''}|${m.time || ''}`;
-                    const oldSigs = new Set(state.moments.map(getMomentSig));
-                    
-                    let lastFoundIndex = -1;
-                    let prependCount = 0;
-                    const merged = [...state.moments];
-                    
-                    combinedMoments.forEach(m => {
-                        const sig = getMomentSig(m);
-                        const idxInOld = state.moments.findIndex(om => getMomentSig(om) === sig);
-                        
-                        if (idxInOld !== -1) {
-                            lastFoundIndex = idxInOld + prependCount;
-                        } else {
-                            if (lastFoundIndex === -1) {
-                                merged.splice(prependCount, 0, m);
-                                prependCount++;
-                            } else {
-                                merged.splice(lastFoundIndex + 1, 0, m);
-                                lastFoundIndex++;
-                            }
-                        }
-                    });
-                    state.moments = merged;
-                }
-            }
+            state.messages = combinedMessages;
+            state.moments = combinedMoments;
             
             // 处理 raw AI message
             if (latestRawAIMessage && state.currentChat) {
@@ -1503,6 +1440,9 @@ function initSillyPhoneUI() {
             renderMomentsList();
             console.log(`[SillyPhone] 数据恢复成功，已合并跨层历史记录`);
         }
+        // 标记数据已加载完毕，允许后续同步操作
+        state._dataLoaded = true;
+        console.log('[SillyPhone] 数据加载完成，同步保护已解除');
     }
 
     function applySettings() {
