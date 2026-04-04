@@ -2741,3 +2741,12 @@ input:checked + .slider:before {
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
+
+@keyframes messagePopIn {
+    0% { opacity: 0; transform: translateY(10px) scale(0.95); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.message-wrapper.pop-in {
+    animation: messagePopIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    opacity: 0; /* Base state before animation starts */
+}
