@@ -1195,8 +1195,36 @@ function initSillyPhoneUI() {
                 });
             }
 
+            if (!state.typingQueue) state.typingQueue = [];
+            
+            // 找出新消息放入打字队列
+            for (const cid in combinedMessages) {
+                const oldMsgs = state.messages[cid] || [];
+                const oldIds = new Set(oldMsgs.map(m => m.id));
+                const oldSignatures = new Set(oldMsgs.map(m => `${m.time}|${m.text||m.content}`));
+
+                combinedMessages[cid].forEach(m => {
+                    const sig = `${m.time}|${m.text||m.content}`;
+                    // 判断是否是真正的“新”产生的 AI 消息
+                    if (!m.isHistory && m.type !== 'user' && !oldIds.has(m.id) && !oldSignatures.has(sig)) {
+                        m.isTypingPending = true;
+                        state.typingQueue.push(m);
+                    } else if (oldMsgs.find(oldM => (oldM.id === m.id || `${oldM.time}|${oldM.text||oldM.content}` === sig))?.isTypingPending) {
+                        // 继承老的 pending 状态
+                        m.isTypingPending = true;
+                    } else {
+                        m.isTypingPending = false;
+                    }
+                });
+            }
+
             state.messages = combinedMessages;
             state.moments = combinedMoments;
+            
+            // 触发打字机队列处理
+            if (typeof window.processTypingQueue === 'function') {
+                window.processTypingQueue();
+            }
             
             // 处理 raw AI message
             if (latestRawAIMessage && state.currentChat) {
@@ -1237,13 +1265,17 @@ function initSillyPhoneUI() {
                                          .trim();
 
                             if (text) {
-                                state.messages[chatId].push({
+                                const newMsg = {
                                     id: 'msg_' + Date.now() + Math.random().toString(36).substr(2, 5),
                                     type: 'ai',
                                     senderId: aiSenderId,
                                     time: new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0'),
-                                    text: text
-                                });
+                                    text: text,
+                                    isTypingPending: true
+                                };
+                                state.messages[chatId].push(newMsg);
+                                if (!state.typingQueue) state.typingQueue = [];
+                                state.typingQueue.push(newMsg);
                             }
 
                             // 执行隐藏指令对应的动作
@@ -1453,6 +1485,11 @@ function initSillyPhoneUI() {
             renderChatList();
             renderContactsList();
             renderMomentsList();
+            
+            if (typeof window.processTypingQueue === 'function') {
+                window.processTypingQueue();
+            }
+
             console.log(`[SillyPhone] 数据恢复成功，已合并跨层历史记录`);
         }
         // 标记数据已加载完毕，允许后续同步操作
@@ -4414,11 +4451,9 @@ function initSillyPhoneUI() {
         messagesContainer.innerHTML = '';
         lastSenderId = null;
         let historyDividerShown = false;
-        
-        window.animatedMsgIds = window.animatedMsgIds || new Set();
-        let newAiMsgCount = 0;
 
         msgs.forEach((m, index) => {
+            if (m.isTypingPending) return; // 跳过打字队列中的消息
             if (m.isSilent) return; // 跳过静默消息（通话消息等）
 
             // 插入历史记录分割线
@@ -4496,16 +4531,6 @@ function initSillyPhoneUI() {
 
             wrapper.className = `message-wrapper ${isUser ? 'user' : 'ai'}`;
             
-            // 加入递进弹出动画逻辑
-            if (!isUser && !m.isSilent && m.type !== 'system' && !m.isSystem && !m.isHistory) {
-                if (!window.animatedMsgIds.has(m.id)) {
-                    wrapper.classList.add('pop-in');
-                    wrapper.style.animationDelay = `${newAiMsgCount * 0.3}s`;
-                    newAiMsgCount++;
-                    window.animatedMsgIds.add(m.id);
-                }
-            }
-
             const avatar = document.createElement('img');
             avatar.className = 'msg-avatar';
             avatar.referrerPolicy = 'no-referrer';
@@ -4758,9 +4783,45 @@ function initSillyPhoneUI() {
             wrapper.appendChild(bubbleContainer);
             messagesContainer.appendChild(wrapper);
         });
+
         if(typeof lucide !== 'undefined') lucide.createIcons();
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
+
+    window.processTypingQueue = function() {
+        if (!state.typingQueue || state.typingQueue.length === 0) {
+            state.isTypingNow = false;
+            if (typeof isAIRequestPending !== 'undefined' && !isAIRequestPending) {
+                setIslandState('default');
+            }
+            return;
+        }
+        
+        setIslandState('loading');
+
+        if (state.isTypingNow) return;
+
+        const nextMsg = state.typingQueue[0];
+        if (!nextMsg) return;
+
+        state.isTypingNow = true;
+        
+        if (state.currentChat) renderMessages(state.currentChat.id);
+
+        const delay = Math.floor(Math.random() * 2000) + 3000;
+        
+        setTimeout(() => {
+            nextMsg.isTypingPending = false;
+            state.typingQueue.shift();
+            state.isTypingNow = false;
+            
+            saveMessagesToLocalStorage();
+            
+            if (state.currentChat) renderMessages(state.currentChat.id);
+            
+            window.processTypingQueue();
+        }, delay);
+    };
 
     let currentEditingMsg = null;
     function openEditMessageModal(chatId, msgIndex) {
@@ -6266,7 +6327,6 @@ function initSillyPhoneUI() {
             if (isAIRequestPending) {
                 isAIRequestPending = false;
                 if (aiResponseTimer) clearTimeout(aiResponseTimer);
-                setIslandState('default');
 
                 if (data.replyText) {
                     const mode = data.mode || (lastAIRequest ? lastAIRequest.mode : null);
@@ -6277,6 +6337,10 @@ function initSillyPhoneUI() {
                 }
                 
                 loadFromSillyTavern();
+                
+                if (!state.typingQueue || state.typingQueue.length === 0) {
+                    setIslandState('default');
+                }
             }
         }
 
