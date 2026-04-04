@@ -183,7 +183,19 @@ function initSillyPhoneUI() {
                         text += `[${sender}|语音消息|${content}]\n`;
                     }
                 } else if (msgType === 'transfer' || msgType === 'redpacket' || msgType === 'red-packet') {
-                    text += `[${sender}|${content}]\n`;
+                    let outText = content;
+                    if (!outText || outText.trim() === '') {
+                        if (msgType === 'transfer') {
+                            if (msg.status === 'received') outText = `收账${msg.amount || '0.00'}元`;
+                            else if (msg.status === 'returned') outText = `已退回收账`;
+                            else outText = `转账${msg.amount || '0.00'}元`;
+                        } else {
+                            if (msg.status === 'received') outText = `领取了红包`;
+                            else if (msg.status === 'returned') outText = `退回了红包`;
+                            else outText = `发了一个红包`;
+                        }
+                    }
+                    text += `[${sender}|${outText}]\n`;
                 } else if (msgType === 'call') {
                     text += `[${sender}|语音通话|${content}]\n`;
                 } else if (msgType === 'call-end') {
@@ -192,6 +204,8 @@ function initSillyPhoneUI() {
                     text += `[${sender}|撤回消息|${content}]\n`;
                 } else if (msgType === 'quote') {
                     text += `<${sender}|${msg.quote || ''}|${content}>\n`;
+                } else if (msgType === 'call-missed') {
+                    text += `[${sender}|语音未接听|${content}]\n`;
                 }
             });
             
@@ -255,7 +269,7 @@ function initSillyPhoneUI() {
 
         const raw = chat.message || '';
         
-        // 在同步前，确保当前激活账号的数据已更新到 userAccounts
+        // 在同步前，确保当前激活账号的消息完整保留，保留当前会话的全部消息，不再截断
         const active = state.userAccounts.find(a => a.id === state.activeAccountId);
         if (active) {
             active.contacts = [...state.contacts];
@@ -271,7 +285,7 @@ function initSillyPhoneUI() {
                 for (const chatId in acc.messages) {
                     if (Array.isArray(acc.messages[chatId])) {
                         // 每个会话保留最近 20 条消息（含历史和当前），足以维持“延续感”且不卡顿
-                        prunedMessages[chatId] = acc.messages[chatId].slice(-20);
+                        prunedMessages[chatId] = [...acc.messages[chatId]];
                     }
                 }
             }
@@ -314,11 +328,11 @@ function initSillyPhoneUI() {
             }
         }
 
-        const shoujiTag = `<shouji>\n${presetText}${textContent.trim()}\n</shouji>`;
+        const shoujiTag = `<div class="sillyphone-hidden-data" style="display: none;">\n<shouji>\n${textContent.trim()}\n${presetText}</shouji>\n</div>`;
         
         let updatedMessage;
         if (raw.includes('<shouji>')) {
-            updatedMessage = raw.replace(/<shouji>[\s\S]*?(?:<\/shouji>|$)/, shoujiTag);
+            updatedMessage = raw.replace(/(?:<div[^>]*sillyphone-hidden-data[^>]*>\s*)?<shouji>[\s\S]*?(?:<\/shouji>|$)(?:\s*<\/div>)?/, shoujiTag);
         } else {
             updatedMessage = raw + '\n' + shoujiTag;
         }
@@ -443,6 +457,7 @@ function initSillyPhoneUI() {
                     }
                 }
                 else if (body === '语音通话') { type = 'call'; content = dataParts[1]; }
+                else if (body === '语音未接听') { type = 'call-missed'; content = dataParts[1]; }
                 else if (body === '语音通话已挂断') { type = 'call-end'; duration = dataParts[1]; }
                 else if (body === '撤回消息') { type = 'recall'; content = dataParts[1]; }
                 else { content = dataParts[1]; }
@@ -4399,6 +4414,9 @@ function initSillyPhoneUI() {
         messagesContainer.innerHTML = '';
         lastSenderId = null;
         let historyDividerShown = false;
+        
+        window.animatedMsgIds = window.animatedMsgIds || new Set();
+        let newAiMsgCount = 0;
 
         msgs.forEach((m, index) => {
             if (m.isSilent) return; // 跳过静默消息（通话消息等）
@@ -4478,6 +4496,16 @@ function initSillyPhoneUI() {
 
             wrapper.className = `message-wrapper ${isUser ? 'user' : 'ai'}`;
             
+            // 加入递进弹出动画逻辑
+            if (!isUser && !m.isSilent && m.type !== 'system' && !m.isSystem && !m.isHistory) {
+                if (!window.animatedMsgIds.has(m.id)) {
+                    wrapper.classList.add('pop-in');
+                    wrapper.style.animationDelay = `${newAiMsgCount * 0.3}s`;
+                    newAiMsgCount++;
+                    window.animatedMsgIds.add(m.id);
+                }
+            }
+
             const avatar = document.createElement('img');
             avatar.className = 'msg-avatar';
             avatar.referrerPolicy = 'no-referrer';
@@ -4652,8 +4680,16 @@ function initSillyPhoneUI() {
                     if (state.multiSelectMode) return;
                     showTranscript(m.transcript || []);
                 };
+            } else if (m.msgType === 'call-missed' || m.type === 'call-missed') {
+                const missReason = (m.text || m.content || '').trim();
+                contentDiv.innerHTML = `
+                    <div class="call-ended-bubble">
+                        <i data-lucide="phone-missed" size="16"></i>
+                        <span>语音未接听${missReason ? ` (${missReason})` : ''}</span>
+                    </div>
+                `;
             } else {
-                contentDiv.innerHTML = formatContent(m.text);
+                contentDiv.innerHTML = formatContent(m.text || m.content || '');
             }
             div.appendChild(contentDiv);
 
@@ -4708,10 +4744,14 @@ function initSillyPhoneUI() {
             bubbleContainer.appendChild(div);
 
             // 处理引用显示 (微信风格：放在气泡下方)
-            if (m.quotedMsg) {
+            if (m.quotedMsg || (m.type === 'quote' && m.quote)) {
                 const quoteDiv = document.createElement('div');
                 quoteDiv.className = 'quoted-msg-container';
-                quoteDiv.textContent = `${m.quotedMsg.senderName}：${m.quotedMsg.text}`;
+                if (m.quotedMsg) {
+                    quoteDiv.textContent = `${m.quotedMsg.senderName}：${m.quotedMsg.text}`;
+                } else {
+                    quoteDiv.textContent = m.quote;
+                }
                 bubbleContainer.appendChild(quoteDiv);
             }
 
@@ -4995,27 +5035,7 @@ function initSillyPhoneUI() {
         const userNames = [state.userName, state.stUserName, '我', 'user', 'me', state.wechatId].filter(Boolean);
         const userNameStr = userNames.join('、');
         
-        let formatConstraint = '';
-        if (mode === 'chat') {
-            const chatName = state.currentChat ? state.currentChat.name : '未知';
-            formatConstraint = `当前为【私聊模式】。你的所有输出必须放在手机框架里：以 <shouji> 开头，内部包含 <private> 区块，每个区块首行固定写 “【和${chatName}的聊天】”，随后是 1–7 行合法消息格式，最后用 </private> 和 </shouji> 结束。禁止输出任何其他文本或空行！
-注意，每个<private>区块是不同的联系人，他们不能看到{{user}}与别人的聊天记录！也不能回复user给别人发的消息。
-一次回复可以包含多个 <private> 区块；若你同时回复不同联系人，请为每个联系人单独写一个 <private> 区块。
-每个 <private> 内部所有行的角色昵称必须与该区块标题相同，严格遵循 [角色昵称|内容] 或对应类型格式。绝不允许出现“我方消息”或用户姓名。
-记住，你要扮演好<private>标签里面的角色，不许混淆。不管这个人是谁，你都必须要按照这个人的语气来输出，哪怕是从未提到过的新角色！这个是私聊！！不许出现很多人的聊天！！且语音通话部分也不许除了对应角色外的任何人！不许想当然成你认为的角色。
-要严格遵守“和${chatName}的聊天”，只生成和这个人的聊天，不许生成和他人的私聊。`;
-        } else if (mode === 'moments') {
-            formatConstraint = `当前为【朋友圈模式】。请严格按照朋友圈的 <pyq> 或 [评论|...] 格式输出，禁止输出任何其他文本或空行！`;
-        }
-
-        const globalConstraints = `\n[系统指令（最高优先级）：不许输出正文和状态栏内容，你的世界里只有手机！
-${formatConstraint}
-通用规则：
-1. 记住“我”就是{{user}}（名字可能是 ${userNameStr}）。任何情况下不允许代替user说话！！绝对禁止替“我”发表任何消息、朋友圈、评论或回复！不许替user回复！也不许生成user的名字！
-2. 严禁发布重复内容，不许重复之前的聊天内容，只针对用户最新的消息进行回复。
-3. 朋友圈动态的“内容”字段必须是实际文字，严禁只填“图片”二字。想表达发照片请在正文中描述（如：(IMG:描述)）。不要自主发送外部图片链接。
-4. 严禁角色在自己的朋友圈下发表评论，也严禁角色回复自己的评论。角色之间应该互相互动，而不是自言自语。
-5. 请不要在回复中包含具体的时间戳，也不要受历史时间戳影响。]`;
+        const globalConstraints = '';
         
         // 使用构建生成 Prompt 的函数，过滤掉历史记录
         const currentSessionMessages = buildGenerationPrompt(activeChatId);
