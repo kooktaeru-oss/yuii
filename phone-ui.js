@@ -77,6 +77,7 @@ function initSillyPhoneUI() {
             navBlur: 15,
             glassOpacity: 5,
             pureMode: false,
+            visionMode: 'direct',
             visionProvider: 'openai',
             visionKey: '',
             visionModel: 'gpt-4o',
@@ -178,10 +179,17 @@ function initSillyPhoneUI() {
                     const quotedContent = msg.quotedMsg.text || msg.quotedMsg.content || '';
                     text += `<${sender}|${quotedContent}|${content}>\n`;
                 } else if (msgType === 'photo') {
-                    const desc = msg.description || '发送了一张图片';
+                    // 如果是原生传图且有路径，我们保持 Raw 代码极致干净，甚至可以省略文字描述
+                    const desc = msg.description || '一张照片';
                     const path = msg.serverPath ? `|IMGDATA:${msg.serverPath}` : '';
                     const fileName = msg.fileName ? `|FILENAME:${msg.fileName}` : '';
                     text += `[${sender}|图片|${desc}${path}${fileName}|${time}]\n`;
+                    
+                    // --- 多模态触发补丁 ---
+                    // 虽然我们在 meta 中挂载了附件，但在 Raw code 结尾放一个极简的标记能更稳妥触发 ST 扫描
+                    if (msg.serverPath) {
+                        text += `![](IMGDATA:${msg.serverPath})\n`;
+                    }
                 } else if (msgType === 'sticker') {
                     text += `[${sender}|图片|发送了一个表情包|${msg.label || '表情包'}|${time}]\n`;
                 } else if (msgType === 'voice') {
@@ -5944,15 +5952,29 @@ function initSillyPhoneUI() {
         let fileName = file ? file.name : null;
         let finalDescription = descriptionInput;
 
-        // --- 识图逻辑补完 (AI 视觉核心) ---
-        // 如果用户没填描述，且有图片数据，且配置了 Vision Key，则触发自动识图
-        if (!finalDescription && base64Data && state.settings.visionKey) {
-            showToast('正在识图...', 'sparkles');
-            setIslandState('loading');
-            const aiDesc = await identifyImage(base64Data);
-            if (aiDesc) {
-                finalDescription = aiDesc;
-                showToast('识图完成', 'check');
+        // --- 优化后的模式化识图逻辑 ---
+        if (state.settings.visionMode === 'direct') {
+            // 直接模式：不执行内部识图，依赖酒馆多模态
+        } else if (state.settings.visionMode !== 'none' && !finalDescription && base64Data) {
+            // 根据不同模式选择识图 API
+            let provider = state.settings.visionProvider;
+            let endpoint = state.settings.visionEndpoint;
+            
+            if (state.settings.visionMode === 'kimi') {
+                provider = 'openai';
+                endpoint = 'https://api.moonshot.cn/v1'; // Kimi 预设
+            } else if (state.settings.visionMode === 'custom') {
+                provider = 'openai'; // 自定义通常兼容 OpenAI 格式
+            }
+
+            if (state.settings.visionKey || (state.settings.visionMode === 'kimi')) {
+                showToast('正在识图...', 'sparkles');
+                setIslandState('loading');
+                const aiDesc = await identifyImage(base64Data, provider, endpoint);
+                if (aiDesc) {
+                    finalDescription = aiDesc;
+                    showToast('识图完成', 'check');
+                }
             }
         }
 
