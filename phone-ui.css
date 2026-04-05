@@ -24,7 +24,7 @@
     -webkit-tap-highlight-color: transparent;
 }
 
-/* 隐藏全局滚动条 */
+/* 闅愯棌鍏ㄥ眬婊氬姩鏉?*/
 ::-webkit-scrollbar {
     display: none;
 }
@@ -48,11 +48,11 @@ body {
     flex-direction: column;
     position: relative;
     overflow: hidden;
-    pointer-events: auto; /* 确保手机本身可点击，即使父容器设置了 pointer-events: none */
-    /* 移除 transition: all，避免切换页面时触发不必要的全局重绘和滤镜延迟 */
-    background: rgba(15, 15, 20, 0.6); /* 默认暗色背景，防止透明 */
-    border: 1px solid rgba(255, 255, 255, 0.1); /* 外边框 */
-    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2), 0 20px 40px rgba(0, 0, 0, 0.5); /* 手机外阴影 */
+    pointer-events: auto; /* 纭繚鎵嬫満鏈韩鍙偣鍑伙紝鍗充娇鐖跺鍣ㄨ缃簡 pointer-events: none */
+    /* 绉婚櫎 transition: all锛岄伩鍏嶅垏鎹㈤〉闈㈡椂瑙﹀彂涓嶅繀瑕佺殑鍏ㄥ眬閲嶇粯鍜屾护闀滃欢杩?*/
+    background: rgba(15, 15, 20, 0.6); /* 榛樿鏆楄壊鑳屾櫙锛岄槻姝㈤€忔槑 */
+    border: 1px solid rgba(255, 255, 255, 0.1); /* 澶栬竟妗?*/
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2), 0 20px 40px rgba(0, 0, 0, 0.5); /* 鎵嬫満澶栭槾褰?*/
     border-radius: 37px;
     background-size: cover;
     background-position: center;
@@ -65,7 +65,7 @@ body {
     width: 100%;
     height: 100%;
     background: rgba(255, 255, 255, var(--glass-opacity));
-    /* 强制开启硬件加速，保持滤镜稳定 */
+    /* 寮哄埗寮€鍚‖浠跺姞閫燂紝淇濇寔婊ら暅绋冲畾 */
     transform: translateZ(0);
     will-change: backdrop-filter;
     backdrop-filter: var(--blur);
@@ -76,7 +76,7 @@ body {
     pointer-events: none;
 }
 
-/* 移除之前的背景遮罩 */
+/* 绉婚櫎涔嬪墠鐨勮儗鏅伄缃?*/
 .screen::before {
     display: none;
 }
@@ -103,7 +103,7 @@ body {
 }
 
 .dynamic-island {
-    background: rgba(39, 39, 42, 0.8); /* 深灰雾面，替代纯黑 */
+    background: rgba(39, 39, 42, 0.8); /* 娣辩伆闆鹃潰锛屾浛浠ｇ函榛?*/
     backdrop-filter: var(--blur);
     -webkit-backdrop-filter: var(--blur);
     will-change: backdrop-filter;
@@ -150,15 +150,15 @@ body {
     100% { opacity: 1; transform: scale(1); }
 }
 
-/* 页面容器 */
+/* 椤甸潰瀹瑰櫒 */
 #main-content {
     flex: 1;
     position: relative;
     overflow: hidden;
-    padding-bottom: 70px; /* 为固定底部栏留出空间 */
+    padding-bottom: 70px; /* 涓哄浐瀹氬簳閮ㄦ爮鐣欏嚭绌洪棿 */
 }
 
-/* 页面 */
+/* 椤甸潰 */
 .page {
     display: none;
     position: absolute;
@@ -168,7 +168,7 @@ body {
     height: 100%;
     flex-direction: column;
     overflow: hidden;
-    /* 缩短动画时间，并使用更轻量的动画 */
+    /* 缂╃煭鍔ㄧ敾鏃堕棿锛屽苟浣跨敤鏇磋交閲忕殑鍔ㄧ敾 */
     animation: fadeIn 0.25s ease-out;
 }
 
@@ -181,9 +181,9 @@ body {
     to { opacity: 1; }
 }
 
-/* 头部 (列表页) */
+/* 澶撮儴 (鍒楄〃椤? */
 .header {
-    padding: 44px 24px 0px; /* 增加顶部间距以避开灵动岛 */
+    padding: 44px 24px 0px; /* 澧炲姞椤堕儴闂磋窛浠ラ伩寮€鐏靛姩宀?*/
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -217,19 +217,19 @@ body {
     background: rgba(255,255,255,0.4);
 }
 
-/* 列表容器 */
+/* 鍒楄〃瀹瑰櫒 */
 .list-container {
     flex: 1;
     overflow-y: auto;
-    padding: 10px 20px 20px; /* 恢复正常底部间距 */
+    padding: 10px 20px 20px; /* 鎭㈠姝ｅ父搴曢儴闂磋窛 */
     -ms-overflow-style: none; /* IE and Edge */
     scrollbar-width: none; /* Firefox */
 }
 
 .chat-card {
     background: rgba(255, 255, 255, 0.1);
-    /* 移除冗余的 backdrop-filter，全局 screen-glass 已经提供了模糊效果 */
-    transform: translateZ(0); /* 硬件加速 */
+    /* 绉婚櫎鍐椾綑鐨?backdrop-filter锛屽叏灞€ screen-glass 宸茬粡鎻愪緵浜嗘ā绯婃晥鏋?*/
+    transform: translateZ(0); /* 纭欢鍔犻€?*/
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 20px;
     padding: 16px;
@@ -284,7 +284,7 @@ body {
     text-overflow: ellipsis;
 }
 
-/* 聊天窗口 */
+/* 鑱婂ぉ绐楀彛 */
 .chat-nav {
     height: 88px;
     padding: 34px 15px 0;
@@ -320,13 +320,13 @@ body {
     pointer-events: none;
     display: flex;
     flex-direction: column;
-    color: white; /* 标题颜色改为白色 */
+    color: white; /* 鏍囬棰滆壊鏀逛负鐧借壊 */
 }
 
 .chat-title span:first-child {
     font-weight: 700;
     font-size: 16px;
-    color: white; /* 名字改为纯白 */
+    color: white; /* 鍚嶅瓧鏀逛负绾櫧 */
 }
 
 .messages-container {
@@ -335,7 +335,7 @@ body {
     padding: 15px 12px;
     display: flex;
     flex-direction: column;
-    gap: 2px; /* 统一消息间距 */
+    gap: 2px; /* 缁熶竴娑堟伅闂磋窛 */
     scrollbar-width: none;
     background-size: cover;
     background-position: center;
@@ -400,7 +400,7 @@ body {
 }
 
 .mention-highlight {
-    color: #7d8cc4; /* 柔和的浅蓝色，符合毛玻璃风格 */
+    color: #7d8cc4; /* 鏌斿拰鐨勬祬钃濊壊锛岀鍚堟瘺鐜荤拑椋庢牸 */
     font-weight: 600;
     cursor: pointer;
     transition: opacity 0.2s;
@@ -411,7 +411,7 @@ body {
     text-decoration: underline;
 }
 
-/* 文字意境图卡片 (韩系极简奶灰雾面) */
+/* 鏂囧瓧鎰忓鍥惧崱鐗?(闊╃郴鏋佺畝濂剁伆闆鹃潰) */
 .text-img-card {
     background: rgba(255, 255, 255, 0.08);
     border: 1px solid rgba(255, 255, 255, 0.12);
@@ -424,8 +424,8 @@ body {
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    width: 140px; /* 固定宽度 */
-    height: 140px; /* 固定高度，形成正方形 */
+    width: 140px; /* 鍥哄畾瀹藉害 */
+    height: 140px; /* 鍥哄畾楂樺害锛屽舰鎴愭鏂瑰舰 */
     cursor: pointer;
     transition: transform 0.2s, background 0.2s;
     position: relative;
@@ -460,12 +460,12 @@ body {
     letter-spacing: 0.2px;
     overflow: hidden;
     display: -webkit-box;
-    -webkit-line-clamp: 5; /* 限制显示行数 */
+    -webkit-line-clamp: 5; /* 闄愬埗鏄剧ず琛屾暟 */
     -webkit-box-orient: vertical;
     text-overflow: ellipsis;
 }
 
-/* 渐变遮罩提示还有更多内容 */
+/* 娓愬彉閬僵鎻愮ず杩樻湁鏇村鍐呭 */
 .text-img-card::after {
     content: '';
     position: absolute;
@@ -485,12 +485,12 @@ body {
     background: rgba(255, 255, 255, 0.1);
 }
 
-/* 朋友圈中的文字意境图 */
+/* 鏈嬪弸鍦堜腑鐨勬枃瀛楁剰澧冨浘 */
 .moment-text-img {
     margin-top: 10px;
 }
 
-/* 扩展面板样式 */
+/* 鎵╁睍闈㈡澘鏍峰紡 */
 #chat-panels {
     position: relative;
     z-index: 10;
@@ -550,7 +550,7 @@ body {
     background: rgba(255, 255, 255, 0.2);
 }
 
-/* 表单类面板 */
+/* 琛ㄥ崟绫婚潰鏉?*/
 .panel-header {
     display: flex;
     justify-content: space-between;
@@ -623,7 +623,7 @@ input[type="number"] {
     cursor: pointer;
 }
 
-/* 表情包面板 */
+/* 琛ㄦ儏鍖呴潰鏉?*/
 .sticker-tabs {
     display: flex;
     gap: 12px;
@@ -746,7 +746,7 @@ input[type="number"] {
     margin-top: 4px;
     font-size: 11px;
     color: rgba(255, 255, 255, 0.4);
-    max-width: 200px; /* 固定/最大长度 */
+    max-width: 200px; /* 鍥哄畾/鏈€澶ч暱搴?*/
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -827,7 +827,7 @@ input[type="number"] {
     line-height: 1.4;
 }
 
-/* 语音通话全屏界面 */
+/* 璇煶閫氳瘽鍏ㄥ睆鐣岄潰 */
 .call-overlay {
     position: fixed;
     top: 0;
@@ -1027,7 +1027,7 @@ input[type="number"] {
     background: #d63027;
 }
 
-/* 通话记录气泡 */
+/* 閫氳瘽璁板綍姘旀场 */
 .bubble.call-ended {
     background: rgba(0, 0, 0, 0.2);
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -1154,7 +1154,7 @@ input[type="number"] {
 }
 
 .sticker-item.selected::after {
-    content: '✓';
+    content: '鉁?;
     position: absolute;
     top: -4px;
     right: -4px;
@@ -1211,7 +1211,7 @@ input[type="number"] {
     opacity: 0.8;
 }
 
-/* 添加表单样式 */
+/* 娣诲姞琛ㄥ崟鏍峰紡 */
 .header-actions {
     display: flex;
     align-items: center;
@@ -1283,7 +1283,7 @@ input[type="number"] {
     cursor: pointer;
 }
 
-/* 弹窗样式 */
+/* 寮圭獥鏍峰紡 */
 .modal-overlay {
     position: absolute;
     top: 0;
@@ -1380,7 +1380,7 @@ input[type="number"] {
     -webkit-user-select: none;
 }
 
-/* 消息气泡增强 */
+/* 娑堟伅姘旀场澧炲己 */
 .bubble.voice {
     display: flex;
     flex-direction: column;
@@ -1522,15 +1522,15 @@ input[type="number"] {
 }
 
 .input-bar {
-    padding: 10px 12px 24px; /* 减小左右边距 */
+    padding: 10px 12px 24px; /* 鍑忓皬宸﹀彸杈硅窛 */
     background: rgba(255, 255, 255, 0.08);
     backdrop-filter: blur(var(--nav-blur));
     -webkit-backdrop-filter: blur(var(--nav-blur));
-    transform: translateZ(0); /* 硬件加速 */
+    transform: translateZ(0); /* 纭欢鍔犻€?*/
     will-change: backdrop-filter;
     display: flex;
     align-items: center;
-    gap: 8px; /* 减小间距 */
+    gap: 8px; /* 鍑忓皬闂磋窛 */
     border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
@@ -1556,8 +1556,8 @@ input[type="number"] {
 }
 
 #send-btn {
-    background: rgba(255, 255, 255, 0.6); /* 降低白色透明度 */
-    color: white; /* 改为白色图标，更有高级感 */
+    background: rgba(255, 255, 255, 0.6); /* 闄嶄綆鐧借壊閫忔槑搴?*/
+    color: white; /* 鏀逛负鐧借壊鍥炬爣锛屾洿鏈夐珮绾ф劅 */
     border: none;
     width: 34px;
     height: 34px;
@@ -1575,7 +1575,7 @@ input[type="number"] {
     transform: scale(0.9);
 }
 
-/* 聊天详情页 (Chat Info) */
+/* 鑱婂ぉ璇︽儏椤?(Chat Info) */
 .chat-info-container {
     flex: 1;
     overflow-y: auto;
@@ -1687,12 +1687,12 @@ input[type="number"] {
     background: rgba(255, 255, 255, 0.05);
 }
 
-/* 底部导航 - 悬浮胶囊样式 */
+/* 搴曢儴瀵艰埅 - 鎮诞鑳跺泭鏍峰紡 */
 .bottom-nav {
     position: absolute;
     bottom: 15px;
     left: 50%;
-    transform: translateX(-50%) translateZ(0); /* 硬件加速 */
+    transform: translateX(-50%) translateZ(0); /* 纭欢鍔犻€?*/
     width: 90%;
     height: 56px;
     background: rgba(255, 255, 255, 0.03);
@@ -1727,11 +1727,11 @@ input[type="number"] {
     margin-bottom: 0;
 }
 
-/* 设置页面样式 */
+/* 璁剧疆椤甸潰鏍峰紡 */
 .settings-list {
     flex: 1;
     overflow-y: auto;
-    padding: 20px 20px 20px; /* 恢复正常底部间距 */
+    padding: 20px 20px 20px; /* 鎭㈠姝ｅ父搴曢儴闂磋窛 */
     display: flex;
     flex-direction: column;
     gap: 20px;
@@ -1742,7 +1742,7 @@ input[type="number"] {
     display: none; /* Chrome/Safari */
 }
 
-/* 仿微信个人资料区 */
+/* 浠垮井淇′釜浜鸿祫鏂欏尯 */
 .settings-profile {
     display: flex;
     align-items: center;
@@ -1856,7 +1856,7 @@ input[type="number"] {
     margin-top: 10px;
     height: 44px;
     background: rgba(255, 255, 255, 0.1);
-    /* 移除冗余的 backdrop-filter */
+    /* 绉婚櫎鍐椾綑鐨?backdrop-filter */
     border: 1px solid rgba(255, 255, 255, 0.2);
     color: white;
     border-radius: 12px;
@@ -1874,7 +1874,7 @@ input[type="number"] {
     transform: scale(0.98);
 }
 
-/* Toast 提示 */
+/* Toast 鎻愮ず */
 .toast-container {
     position: absolute;
     top: 80px;
@@ -1926,7 +1926,7 @@ input[type="number"] {
     font-size: 10px;
     font-weight: 600;
 }
-/* 新的朋友列表 & 滑动删除 */
+/* 鏂扮殑鏈嬪弸鍒楄〃 & 婊戝姩鍒犻櫎 */
 .contact-item-wrapper {
     position: relative;
     overflow: hidden;
@@ -1949,14 +1949,14 @@ input[type="number"] {
     font-weight: 600;
     z-index: 1;
     cursor: pointer;
-    transform: translateX(100%); /* 初始躲在右侧屏幕外 */
+    transform: translateX(100%); /* 鍒濆韬插湪鍙充晶灞忓箷澶?*/
     transition: transform 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
 }
 
 .contact-item {
     position: relative;
     z-index: 2;
-    background: rgba(255, 255, 255, 0.02); /* 恢复透明背景 */
+    background: rgba(255, 255, 255, 0.02); /* 鎭㈠閫忔槑鑳屾櫙 */
     padding: 12px 20px;
     display: flex;
     align-items: center;
@@ -1971,7 +1971,7 @@ input[type="number"] {
     transform: translateX(-70px);
 }
 
-/* 当联系人滑动时，后面的删除按钮跟着一起滑进来 */
+/* 褰撹仈绯讳汉婊戝姩鏃讹紝鍚庨潰鐨勫垹闄ゆ寜閽窡鐫€涓€璧锋粦杩涙潵 */
 .contact-item.swiped + .delete-btn {
     transform: translateX(0);
 }
@@ -2017,7 +2017,7 @@ input[type="number"] {
     background: rgba(255, 255, 255, 0.02);
 }
 
-/* 灵动岛通知样式 */
+/* 鐏靛姩宀涢€氱煡鏍峰紡 */
 .dynamic-island.notification {
     min-width: 220px;
     height: 44px;
@@ -2037,7 +2037,7 @@ input[type="number"] {
     display: block;
 }
 
-/* 开关样式 */
+/* 寮€鍏虫牱寮?*/
 .switch {
     position: relative;
     display: inline-block;
@@ -2127,7 +2127,7 @@ input:checked + .slider:before {
     padding-bottom: 20px;
 }
 
-/* 消息中的发送者名称 */
+/* 娑堟伅涓殑鍙戦€佽€呭悕绉?*/
 .msg-sender-name {
     font-size: 10px;
     color: var(--c-text-sec);
@@ -2146,10 +2146,10 @@ input:checked + .slider:before {
 .bubble-container {
     display: flex;
     flex-direction: column;
-    margin-top: 8px; /* 再次下沉，完美对齐头像中心 */
+    margin-top: 8px; /* 鍐嶆涓嬫矇锛屽畬缇庡榻愬ご鍍忎腑蹇?*/
 }
 
-/* 朋友圈样式 */
+/* 鏈嬪弸鍦堟牱寮?*/
 .moments-container {
     flex: 1;
     overflow-y: auto;
@@ -2252,10 +2252,10 @@ input:checked + .slider:before {
 }
 
 .ai-moment-btn:hover {
-    color: #fff !important; /* 白色提示 AI 魔法 */
+    color: #fff !important; /* 鐧借壊鎻愮ず AI 榄旀硶 */
 }
 
-/* 互动区域 (评论) */
+/* 浜掑姩鍖哄煙 (璇勮) */
 .moment-interactions {
     background: rgba(255, 255, 255, 0.03);
     border-radius: 6px;
@@ -2291,7 +2291,7 @@ input:checked + .slider:before {
 .ai-comment-trigger {
     background: none;
     border: none;
-    color: #fff; /* 白色微光 */
+    color: #fff; /* 鐧借壊寰厜 */
     cursor: pointer;
     padding: 2px 0 2px 8px;
     opacity: 0.6;
@@ -2322,7 +2322,7 @@ input:checked + .slider:before {
     color: rgba(255, 255, 255, 0.85);
 }
 
-/* 图片预览 */
+/* 鍥剧墖棰勮 */
 .preview-content {
     width: 100%;
     height: 100%;
@@ -2338,7 +2338,7 @@ input:checked + .slider:before {
     object-fit: contain;
 }
 
-/* 聊天设置相关样式 */
+/* 鑱婂ぉ璁剧疆鐩稿叧鏍峰紡 */
 .settings-group {
     margin-bottom: 20px;
     background: rgba(255, 255, 255, 0.03);
@@ -2408,7 +2408,7 @@ input:checked + .slider:before {
     font-family: var(--f-mono);
 }
 
-/* 聊天窗口背景层 */
+/* 鑱婂ぉ绐楀彛鑳屾櫙灞?*/
 #chat-bg-layer {
     position: absolute;
     top: 0;
@@ -2422,7 +2422,7 @@ input:checked + .slider:before {
     transition: all 0.3s ease;
 }
 
-/* 通用操作菜单 (Action Sheet) */
+/* 閫氱敤鎿嶄綔鑿滃崟 (Action Sheet) */
 .action-sheet {
     position: absolute;
     bottom: 20px;
@@ -2482,7 +2482,7 @@ input:checked + .slider:before {
     border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-/* 聊天详情页扩展样式 */
+/* 鑱婂ぉ璇︽儏椤垫墿灞曟牱寮?*/
 .chat-info-container {
     padding: 10px 15px 150px;
     overflow-y: auto;
@@ -2553,7 +2553,7 @@ input:checked + .slider:before {
     object-fit: cover;
 }
 
-/* 成员网格 */
+/* 鎴愬憳缃戞牸 */
 .member-grid {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
@@ -2607,7 +2607,7 @@ input:checked + .slider:before {
     color: rgba(255, 255, 255, 0.8);
 }
 
-/* 危险区域 */
+/* 鍗遍櫓鍖哄煙 */
 .danger-zone {
     background: transparent;
     border: none;
@@ -2668,7 +2668,7 @@ input:checked + .slider:before {
     padding-bottom: 20px;
 }
 
-/* 朋友圈头部 */
+/* 鏈嬪弸鍦堝ご閮?*/
 .moments-header-overlay {
     position: absolute;
     top: 0;
@@ -2716,7 +2716,7 @@ input:checked + .slider:before {
     font-size: 18px;
     font-weight: 600;
     text-shadow: 0 2px 4px rgba(0,0,0,0.5);
-    margin-bottom: 12px; /* 向上移动一点点，更符合微信比例 */
+    margin-bottom: 12px; /* 鍚戜笂绉诲姩涓€鐐圭偣锛屾洿绗﹀悎寰俊姣斾緥 */
 }
 
 .moments-avatar {
@@ -2727,7 +2727,7 @@ input:checked + .slider:before {
     object-fit: cover;
 }
 
-/* 切换账号加载动画 */
+/* 鍒囨崲璐﹀彿鍔犺浇鍔ㄧ敾 */
 .loading-spinner {
     width: 40px;
     height: 40px;
@@ -2749,4 +2749,29 @@ input:checked + .slider:before {
 .message-wrapper.pop-in {
     animation: messagePopIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
     opacity: 0; /* Base state before animation starts */
+}
+
+    40% { transform: scale(1); opacity: 1; }
+}
+
+/* Typing indicator */
+.typing-indicator-bubble {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 12px 16px;
+    min-height: 40px;
+}
+.typing-dot {
+    width: 6px;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.6);
+    border-radius: 50%;
+    animation: typingBounce 1.4s infinite ease-in-out both;
+}
+.typing-dot:nth-child(1) { animation-delay: -0.32s; }
+.typing-dot:nth-child(2) { animation-delay: -0.16s; }
+@keyframes typingBounce {
+    0%, 80%, 100% { transform: scale(0); }
+    40% { transform: scale(1); }
 }
