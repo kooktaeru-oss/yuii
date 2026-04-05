@@ -5013,13 +5013,13 @@ function initSillyPhoneUI() {
             if (state.currentChat) renderMessages(state.currentChat.id);
 
             window.processTypingQueue();
-        }, delay);
+                }, delay);
     };
 
     let currentEditingMsg = null;
     function openEditMessageModal(chatId, msgIndex) {
         const msg = state.messages[chatId][msgIndex];
-        if (msg.msgType && msg.msgType !== 'voice') return; // 只允许编辑文本和语音翻译文本
+        if (msg.msgType && msg.msgType !== 'voice') return; 
 
         currentEditingMsg = { chatId, msgIndex };
         const modal = document.getElementById('edit-message-modal');
@@ -5081,7 +5081,6 @@ function initSillyPhoneUI() {
         const st = getSTInterface();
         if (!st.getChatMessages || !st.setChatMessages) return;
 
-        // Group messages by sourceMsgId
         const messagesBySource = {};
         messagesToRemove.forEach(msg => {
             if (msg.isHistory && msg.sourceMsgId !== undefined) {
@@ -5092,7 +5091,6 @@ function initSillyPhoneUI() {
             }
         });
 
-        // Update each source message
         const updates = [];
         for (const sourceIdStr in messagesBySource) {
             const sourceId = parseInt(sourceIdStr, 10);
@@ -5283,15 +5281,21 @@ function initSillyPhoneUI() {
 
         const provider = customProvider || s.visionProvider || 'openai';
         
-        // 修正模型名称：确保使用有效的模型
+        // 修正模型名称：针对特定的中转站和错误输入进行自动对齐
         let model = s.visionModel || (provider === 'openai' ? 'gpt-4o' : (provider === 'claude' ? 'claude-3-5-sonnet' : 'gemini-1.5-pro'));
-        if (provider === 'gemini' && model.includes('2.5')) model = 'gemini-1.5-pro'; // 修正用户可能的输入错误
+        if (model.includes('2.5')) model = model.replace('2.5', '1.5'); 
 
         let endpoint = customEndpoint || s.visionEndpoint;
-        if (!endpoint) {
-            if (provider === 'openai') endpoint = 'https://api.openai.com/v1/chat/completions';
-            else if (provider === 'claude') endpoint = 'https://api.anthropic.com/v1/messages';
-            else if (provider === 'gemini') endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${s.visionKey}`;
+        if (provider === 'openai') {
+            if (!endpoint) endpoint = 'https://api.openai.com/v1/chat/completions';
+            // 自动修正中转地址路径
+            else if (!endpoint.includes('/v1') && !endpoint.includes('/chat/')) {
+                endpoint = endpoint.endsWith('/') ? endpoint + 'v1/chat/completions' : endpoint + '/v1/chat/completions';
+            }
+        } else if (provider === 'claude') {
+            if (!endpoint) endpoint = 'https://api.anthropic.com/v1/messages';
+        } else if (provider === 'gemini') {
+            if (!endpoint) endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${s.visionKey}`;
         }
 
         const systemPrompt = "你是一个识图助手。请简要描述这张图片中的内容，侧重于视觉细节和氛围（不超过50字）。请直接返回描述内容，不要有任何前缀。";
@@ -5304,25 +5308,23 @@ function initSillyPhoneUI() {
                 body = JSON.stringify({
                     model: model,
                     messages: [
-                        { role: "system", content: systemPrompt },
                         {
                             role: "user",
                             content: [
-                                { type: "text", text: "描述这张图。" },
+                                { type: "text", text: systemPrompt + "\n请根据以上要求进行识别：" },
                                 { type: "image_url", image_url: { url: base64Data } }
                             ]
                         }
                     ],
-                    max_tokens: 100
+                    max_tokens: 200
                 });
                 headers["Authorization"] = `Bearer ${s.visionKey}`;
             } else if (provider === 'claude') {
-                // Claude needs base64 without prefix
                 const base64Pure = base64Data.split(',')[1];
                 const mediaType = base64Data.split(';')[0].split(':')[1];
                 body = JSON.stringify({
                     model: model,
-                    max_tokens: 100,
+                    max_tokens: 200,
                     messages: [
                         {
                             role: "user",
@@ -5342,7 +5344,6 @@ function initSillyPhoneUI() {
                 });
                 headers["x-api-key"] = s.visionKey;
                 headers["anthropic-version"] = "2023-06-01";
-                // Note: Anthropic often requires a proxy or specific CORS handling
             } else if (provider === 'gemini') {
                 const base64Pure = base64Data.split(',')[1];
                 const mediaType = base64Data.split(';')[0].split(':')[1];
@@ -5355,11 +5356,17 @@ function initSillyPhoneUI() {
                         contents: [{
                             parts: [
                                 { text: systemPrompt },
-                                { inline_data: { mime_type: mediaType, data: base64Pure } }
+                                { inlineData: { mimeType: mediaType, data: base64Pure } }
                             ]
                         }]
                     })
                 });
+                if (!response.ok) {
+                    const err = await response.text();
+                    console.error('[Vision] Gemini Error:', err);
+                    showToast('Gemini 错误: ' + response.status, 'alert-circle');
+                    return null;
+                }
                 const result = await response.json();
                 return result.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
             }
@@ -5371,7 +5378,10 @@ function initSillyPhoneUI() {
             });
 
             if (!response.ok) {
-                console.error('[Vision] API Request failed:', response.statusText);
+                const errorBody = await response.text();
+                console.error('[Vision] API Request failed:', response.status, errorBody);
+                // 截取错误信息的前 20 个字符显示，方便用户知道是 401, 404 还是别的
+                showToast(`接口报错: ${response.status} ${errorBody.substring(0, 20)}`, 'alert-circle');
                 return null;
             }
 
@@ -5383,6 +5393,7 @@ function initSillyPhoneUI() {
             }
         } catch (error) {
             console.error('[Vision] Error identifying image:', error);
+            showToast('请求异常: ' + error.message, 'alert-circle');
             return null;
         }
         return null;
@@ -6100,10 +6111,12 @@ function initSillyPhoneUI() {
                     if (aiDesc) {
                         finalDescription = aiDesc;
                         showToast('识图完成: ' + aiDesc.substring(0, 10) + '...', 'check');
+                    } else {
+                        showToast('识图失败 (请检查 API 或模型名)', 'alert-triangle');
                     }
                 } catch (e) {
-                    console.error('[Vision] Identification failed:', e);
-                    showToast('识图失败', 'x-circle');
+                    console.error('[Vision] Identification exception:', e);
+                    showToast('识图异常: ' + e.message, 'alert-circle');
                 }
             }
         }
