@@ -5674,7 +5674,9 @@ function initSillyPhoneUI() {
 const visionSystemInfo = multimodalAttachment ? '[系统提示：用户发送了一张图片，请结合图片内容进行回复。]' : '';
 const latestImageDesc = [...recentMsgs].reverse().find(m => (m.msgType === 'photo' || m.msgType === 'image') && m.description)?.description || '';
 const visionTextInfo = latestImageDesc ? `\n[图片内容文字描述：${latestImageDesc}]` : '';
-
+console.log('[latestImageDesc]', latestImageDesc);
+console.log('[visionTextInfo]', visionTextInfo);
+console.log('[user_input]', userPrompt + stickerPrompt + globalConstraints + dynamicPresetPrompt + visionSystemInfo + visionTextInfo);
 const rawRequestData = {
     user_input: userPrompt + stickerPrompt + globalConstraints + dynamicPresetPrompt + visionSystemInfo + visionTextInfo,
     should_silence: true
