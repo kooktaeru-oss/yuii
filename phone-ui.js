@@ -169,9 +169,7 @@ function initSillyPhoneUI() {
 
             currentMessages.forEach(msg => {
                 const sender = msg.senderName || msg.senderId || msg.sender || '未知';
-                const avatar = msg.senderAvatar || msg.avatar || '';
                 const content = msg.text || msg.content || '';
-                const time = msg.time || '';
                 const msgType = msg.msgType || (msg.type === 'system' ? 'system' : 'text');
 
                 if (msg.quotedMsg) {
@@ -180,37 +178,17 @@ function initSillyPhoneUI() {
                 } else if (msgType === 'text') {
                     text += `[${sender}|${content}]\n`;
                 } else if (msgType === 'image' || msgType === 'photo') {
-                    text += `[${sender}|图片|${msg.url || content}]\n`;
+                    // 同步给 AI 和 ST 的文本中使用占位符，避免 Base64 泄露
+                    text += `[${sender}|图片]\n`;
                 } else if (msgType === 'sticker') {
                     text += `[${sender}|表情包|${msg.label || '表情包'}]\n`;
                 } else if (msgType === 'voice') {
-                    if (msg.duration) {
-                        text += `[${sender}|语音消息|${msg.duration}|${content}]\n`;
-                    } else {
-                        text += `[${sender}|语音消息|${content}]\n`;
-                    }
+                    text += `[${sender}|语音消息|${msg.duration || ''}|${content}]\n`;
                 } else if (msgType === 'transfer' || msgType === 'redpacket' || msgType === 'red-packet') {
-                    let outText = content;
-                    if (!outText || outText.trim() === '') {
-                        if (msgType === 'transfer') {
-                            if (msg.status === 'received') outText = `收账${msg.amount || '0.00'}元`;
-                            else if (msg.status === 'returned') outText = `已退回收账`;
-                            else outText = `转账${msg.amount || '0.00'}元`;
-                        } else {
-                            if (msg.status === 'received') outText = `领取了红包`;
-                            else if (msg.status === 'returned') outText = `退回了红包`;
-                            else outText = `发了一个红包`;
-                        }
-                    }
+                    let outText = content || (msgType === 'transfer' ? '转账' : '红包');
                     text += `[${sender}|${outText}]\n`;
-                } else if (msgType === 'call') {
-                    text += `[${sender}|语音通话|${content}]\n`;
-                } else if (msgType === 'call-end') {
-                    text += `[${sender}|语音通话已挂断|${msg.duration || content || '00:00'}]\n`;
-                } else if (msgType === 'recall') {
-                    text += `[${sender}|撤回消息|${content}]\n`;
-                } else if (msgType === 'call-missed') {
-                    text += `[${sender}|语音未接听|${content}]\n`;
+                } else {
+                    text += `[${sender}|${content}]\n`;
                 }
             });
             
@@ -300,42 +278,39 @@ function initSillyPhoneUI() {
             };
         });
 
-        // 序列化修剪后的状态
+        // 序列化极简状态用于持久化 (排除大体积的 userAccounts)
         const shoujiData = {
-            userAccounts: prunedAccounts,
             activeAccountId: state.activeAccountId,
             settings: state.settings,
-            stickers: state.stickers,
             presets: state.presets
         };
 
-        // 优先使用文本格式序列化当前账号的消息和朋友圈
+        // 获取纯净的文本同步内容（用于 AI 上下文）
         const activeAccount = prunedAccounts.find(a => a.id === state.activeAccountId) || prunedAccounts[0];
         let textContent = '';
         if (activeAccount) {
-            // 这里内部会调用 buildGenerationPrompt 逻辑（通过 filter(!isHistory)）
             textContent += serializeMessagesToText(activeAccount.messages, msgId);
             textContent += serializeMomentsToText(activeAccount.moments);
         }
 
-        // 保存 JSON 备份到 localStorage，以及打包进下方的 shouji 标签中（作为隐藏数据持久化）
         const shoujiJson = JSON.stringify(shoujiData);
         try {
-            localStorage.setItem(getStorageKey(), shoujiJson);
-        } catch (e) {
-            console.error("保存手机数据到本地失败", e);
-        }
+            localStorage.setItem(getStorageKey(), JSON.stringify({
+                ...shoujiData,
+                userAccounts: prunedAccounts,
+                stickers: state.stickers
+            }));
+        } catch (e) {}
 
-        // 将 JSON 数据作为隐藏注释打包，确保跨设备/会话时设置（如 API Key）能被恢复
-        const hiddenData = `\n<!-- SILLYPHONE_DATA_START\n${shoujiJson}\nSILLYPHONE_DATA_END -->`;
-        const shoujiTag = `\n<shouji>\n${textContent.trim()}\n${hiddenData}\n</shouji>`;
+        // 使用隐藏的 div 包裹，并精简 JSON 注释
+        const hiddenData = `<!-- SILLYPHONE_DATA_START ${shoujiJson} SILLYPHONE_DATA_END -->`;
+        const shoujiTag = `<div style="display:none" class="sillyphone-sync-tag"><shouji>\n${textContent.trim()}\n${hiddenData}\n</shouji></div>`;
         
         let updatedMessage;
         if (raw.includes('<shouji>')) {
-            // 兼容替换掉旧版的带有 div 的包裹，以及新版的干净 shouji 标签
-            updatedMessage = raw.replace(/(?:\n?<div[^>]*sillyphone-hidden-data[^>]*>\s*)?<shouji>[\s\S]*?(?:<\/shouji>|$)(?:\s*<\/div>)?/, shoujiTag);
+            updatedMessage = raw.replace(/<div[^>]*class="sillyphone-sync-tag"[^>]*>[\s\S]*?<\/div>|<shouji>[\s\S]*?<\/shouji>/, shoujiTag);
         } else {
-            updatedMessage = raw + shoujiTag;
+            updatedMessage = raw + "\n" + shoujiTag;
         }
 
         st.setChatMessages([{ message_id: msgId, message: updatedMessage }], { refresh: 'none' });
