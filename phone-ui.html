@@ -85,15 +85,23 @@
                         </div>
                     </div>
 
-                    <!-- 照片描述面板 -->
+                    <!-- 照片发送面板 -->
                     <div id="panel-photo" class="chat-panel">
                         <div class="panel-header">
-                            <span>照片描述</span>
+                            <span>发送照片</span>
                             <button class="close-panel"><i data-lucide="x" size="16"></i></button>
                         </div>
                         <div class="panel-body">
-                            <textarea id="photo-desc-input" placeholder="例如：窗边夜景自拍，暖灯光..."></textarea>
-                            <button id="send-photo-btn" class="panel-action-btn">发送照片</button>
+                            <div id="photo-preview-container" style="display: none; margin-bottom: 12px; position: relative; border-radius: 12px; overflow: hidden; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1);">
+                                <img id="photo-preview-img" src="" style="width: 100%; height: auto; display: block; max-height: 200px; object-fit: contain;">
+                                <button id="remove-photo-preview" style="position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; border-radius: 50%; background: rgba(0,0,0,0.5); color: white; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px);"><i data-lucide="x" size="14"></i></button>
+                            </div>
+                            <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                                <button id="select-photo-btn" class="secondary-btn" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 10px; cursor: pointer;"><i data-lucide="image" size="16"></i>选择图片</button>
+                                <input type="file" id="real-photo-input" accept="image/*" style="display: none;">
+                            </div>
+                            <textarea id="photo-desc-input" placeholder="输入文字描述（可选）..." style="width: 100%; height: 80px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; color: white; padding: 10px; margin-bottom: 15px; resize: none; overflow-y: auto; outline: none;"></textarea>
+                            <button id="send-photo-btn" class="panel-action-btn">发送</button>
                         </div>
                     </div>
 
@@ -407,7 +415,7 @@
 
             <!-- 创建群聊弹窗 -->
             <div id="create-group-modal" class="modal-overlay" style="display: none;">
-                <div class="modal-content" style="background: rgba(25, 25, 25, 0.95); backdrop-blur: 30px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 20px 40px rgba(0,0,0,0.4); width: 300px;">
+                <div class="modal-content" style="background: rgba(25, 25, 25, 0.95); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 20px 40px rgba(0,0,0,0.4); width: 300px;">
                     <div class="modal-header" style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 15px;">
                         <span class="modal-title" style="color: white; font-weight: 600; font-size: 16px; letter-spacing: 1px;">创建群聊</span>
                         <span class="close-btn" id="close-create-group-modal" style="color: var(--c-text-sec); cursor: pointer; font-size: 14px; font-weight: 500;">取消</span>
@@ -476,7 +484,7 @@
 
             <!-- 添加好友弹窗 -->
             <div id="add-friend-modal" class="modal-overlay" style="display: none;">
-                <div class="modal-content" style="background: rgba(25, 25, 25, 0.95); backdrop-blur: 30px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 20px 40px rgba(0,0,0,0.4);">
+                <div class="modal-content" style="background: rgba(25, 25, 25, 0.95); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 20px 40px rgba(0,0,0,0.4);">
                     <div class="modal-header" style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 15px;">
                         <span class="modal-title" style="color: white; font-weight: 600; font-size: 16px; letter-spacing: 1px;">添加好友</span>
                         <span class="close-btn" id="close-add-friend-modal" style="color: var(--c-text-sec); cursor: pointer; font-size: 14px; font-weight: 500;">完成</span>
@@ -577,6 +585,28 @@
                             <input type="checkbox" id="pure-mode-toggle">
                             <span class="slider round"></span>
                         </label>
+                    </div>
+
+                    <div class="setting-group-title" style="margin-top: 20px; font-size: 14px; color: var(--c-text-sec); padding-left: 5px;">识图 API 配置 (Vision)</div>
+                    <div class="setting-item">
+                        <label>识图服务商</label>
+                        <select id="vision-provider" style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: white; padding: 8px; outline: none;">
+                            <option value="openai">OpenAI (OpenAI-Compatible)</option>
+                            <option value="claude">Claude (Anthropic)</option>
+                            <option value="gemini">Gemini (Google)</option>
+                        </select>
+                    </div>
+                    <div class="setting-item">
+                        <label>API Key</label>
+                        <input type="password" id="vision-key" placeholder="sk-...">
+                    </div>
+                    <div class="setting-item">
+                        <label>识图模型</label>
+                        <input type="text" id="vision-model" placeholder="gpt-4o">
+                    </div>
+                    <div class="setting-item">
+                        <label>代理地址 (可选)</label>
+                        <input type="text" id="vision-endpoint" placeholder="https://api.openai.com/v1">
                     </div>
 
                     <div class="setting-group-title" style="margin-top: 20px; font-size: 14px; color: var(--c-text-sec); padding-left: 5px;">手机轻预设 (Prompt)</div>
