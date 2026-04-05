@@ -5547,6 +5547,80 @@ return null;
         console.log('=== 我改过的识图代码真的加载了 ===');
         // --- 识图逻辑结束 ---
 
+    async function fetchVisionModels() {
+    const provider = visionProviderSelect.value;
+    const key = visionKeyInput.value.trim();
+    const customEndpoint = visionEndpointInput.value.trim();
+
+    if (!key) {
+        showToast('请填写 API Key', 'alert-circle');
+        return;
+    }
+
+    showToast('正在拉取模型中...', 'loader');
+
+    try {
+        let url;
+        let headers = { "Content-Type": "application/json" };
+
+        if (provider === 'openai') {
+            let base = customEndpoint || 'https://api.openai.com/v1';
+            base = base.replace(/\/chat\/completions\/?$/, '');
+            url = base.endsWith('/models') ? base : (base.endsWith('/') ? base + 'models' : base + '/models');
+            headers["Authorization"] = `Bearer ${key}`;
+        } else if (provider === 'claude') {
+            let base = customEndpoint || 'https://api.anthropic.com/v1';
+            base = base.replace(/\/messages\/?$/, '');
+            url = base.endsWith('/models') ? base : (base.endsWith('/') ? base + 'models' : base + '/models');
+            headers["x-api-key"] = key;
+            headers["anthropic-version"] = "2023-06-01";
+            headers["Content-Type"] = "application/json";
+        } else if (provider === 'gemini') {
+            url = `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`;
+        }
+
+        const response = await fetch(url, { method: 'GET', headers: headers });
+        if (!response.ok) throw new Error('拉取失败: ' + response.statusText);
+
+        const data = await response.json();
+        let models = [];
+
+        if (provider === 'openai' || provider === 'claude') {
+            const list = data.data || data.models || data || [];
+            models = Array.isArray(list) ? list.map(m => m.id || m.name) : [];
+            models.sort((a, b) => {
+                const keywords = ['vision', 'gpt-4o', 'claude-3', 'gemini'];
+                const aHas = keywords.some(k => a.toLowerCase().includes(k));
+                const bHas = keywords.some(k => b.toLowerCase().includes(k));
+                if (aHas && !bHas) return -1;
+                if (!aHas && bHas) return 1;
+                return 0;
+            });
+        } else if (provider === 'gemini') {
+            models = (data.models || []).map(m => m.name.replace('models/', ''));
+        }
+
+        if (models.length === 0) {
+            showToast('未找到可用模型', 'alert-circle');
+            return;
+        }
+
+        const dataList = document.getElementById('vision-model-list');
+        if (dataList) {
+            dataList.innerHTML = '';
+            models.slice(0, 100).forEach(m => {
+                const option = document.createElement('option');
+                option.value = m;
+                dataList.appendChild(option);
+            });
+            showToast('模型列表已拉取，请在输入框选择', 'check-circle');
+        }
+    } catch (error) {
+        console.error('[Vision] Fetch models error:', error);
+        showToast('拉取失败，请检查 Key 或代理地址', 'alert-circle');
+    }
+}
+
         const mode = state.currentPage === 'moments' ? 'moments' : 'chat';
 
         // 注入全局系统约束
