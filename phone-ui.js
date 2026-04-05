@@ -2088,7 +2088,7 @@ function initSillyPhoneUI() {
         switchAccountBtn.onclick = switchAccount;
     }
 
-    function showToast(text, icon = 'check-circle') {
+    function showToast(text, icon = 'check-circle', duration = 2000) {
         const toast = document.createElement('div');
         toast.className = 'toast';
         toast.innerHTML = `
@@ -2103,7 +2103,7 @@ function initSillyPhoneUI() {
             setTimeout(() => {
                 toast.remove();
             }, 300);
-        }, 2000);
+        }, duration);
     }
 
     function showCustomPrompt(title, placeholder, callback) {
@@ -5374,6 +5374,7 @@ function initSillyPhoneUI() {
             }
         } catch (error) {
             console.error('[Vision] Error identifying image:', error);
+            showToast(`识图发生错误: ${error.message || '未知错误'}`, 'alert-triangle');
             return null;
         }
         return null;
@@ -6117,7 +6118,7 @@ function initSillyPhoneUI() {
 
         // --- 优化后的模式化识图逻辑 ---
         if (state.settings.visionMode === 'direct') {
-            // 直接模式：不执行内部识图，依赖酒馆多模态
+            // 直接模式：不执行内部预识图，依赖酒馆多模态 (静默发送)
         } else if (state.settings.visionMode !== 'none' && !finalDescription && base64Data) {
             // 根据不同模式选择识图 API
             let provider = state.settings.visionProvider;
@@ -6127,16 +6128,23 @@ function initSillyPhoneUI() {
                 provider = 'openai';
                 endpoint = 'https://api.moonshot.cn/v1'; // Kimi 预设
             } else if (state.settings.visionMode === 'custom') {
-                provider = 'openai'; // 自定义通常兼容 OpenAI 格式
+                provider = 'openai'; 
             }
 
             if (state.settings.visionKey || (state.settings.visionMode === 'kimi')) {
-                showToast('正在识图...', 'sparkles');
+                showToast('AI 正在观察图片...', 'eye');
                 setIslandState('loading');
-                const aiDesc = await identifyImage(base64Data, provider, endpoint);
-                if (aiDesc) {
-                    finalDescription = aiDesc;
-                    showToast('识图完成', 'check');
+                try {
+                    const aiDesc = await identifyImage(base64Data, provider, endpoint);
+                    if (aiDesc) {
+                        finalDescription = aiDesc;
+                        showToast(`识别成功: ${aiDesc}`, 'check-circle', 4000); // 延长显示时间让用户看清
+                    } else {
+                        showToast('识别失败: AI 没看清这张图', 'alert-circle');
+                        // 失败了就不强制填入 (IMG:...)，给用户留个白
+                    }
+                } catch (e) {
+                    showToast('识别中断: 接口请求失败', 'x-circle');
                 }
             }
         }
