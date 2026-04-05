@@ -5247,15 +5247,17 @@ function initSillyPhoneUI() {
                 return;
             }
 
-            const options = models.slice(0, 50).map(m => ({
-                text: m,
-                onClick: () => {
-                    visionModelInput.value = m;
-                    showToast('已选择: ' + m);
-                }
-            }));
-            
-            showActionSheet([{ text: `选择模型 (${provider})`, disabled: true }, ...options]);
+            // 更新 Datalist 供用户直接在输入框选择
+            const dataList = document.getElementById('vision-model-list');
+            if (dataList) {
+                dataList.innerHTML = '';
+                models.slice(0, 100).forEach(m => {
+                    const option = document.createElement('option');
+                    option.value = m;
+                    dataList.appendChild(option);
+                });
+                showToast('模型列表已拉取，请在输入框选择', 'check-circle');
+            }
         } catch (error) {
             console.error('[Vision] Fetch models error:', error);
             showToast('拉取失败，请检查 Key 或代理地址', 'alert-circle');
