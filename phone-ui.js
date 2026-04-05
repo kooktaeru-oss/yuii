@@ -321,29 +321,33 @@ function initSillyPhoneUI() {
         st.setChatMessages([{ message_id: msgId, message: updatedMessage }], { refresh: 'none' });
 
         // 尝试将关键设置同步到酒馆后端 API 存储
-        saveSettingsToST(shoujiData);
+        saveSettingsToST();
     }
 
     /**
      * C. 后端设置持久化 (Backend Persistence)
      * 尝试将 API Key 等设置存入酒馆服务器，而不是消息文本中
      */
-    async function saveSettingsToST(shoujiData) {
+    async function saveSettingsToST() {
+        const payload = {
+            extension: 'yuii-phone',
+            settings: state.settings
+        };
         try {
             const response = await fetch('/api/extensions/settings/v1', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    extension: 'sillyphone',
-                    settings: shoujiData
-                })
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': getCSRFToken()
+                },
+                body: JSON.stringify(payload)
             });
             if (response.ok) {
                 state._useBackendSync = true;
-                console.log('[SillyPhone] 设置已成功同步至酒馆后端');
+                console.log('[SillyPhone] 设置已同步至酒馆后台');
             }
-        } catch (e) {
-            // SillyTavern 可能版本较旧或环境限制，跳过后端同步入
+        } catch (error) {
+            console.error('[SillyPhone] 设置同步失败:', error);
         }
     }
 
