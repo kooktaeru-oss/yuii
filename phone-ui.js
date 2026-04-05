@@ -357,6 +357,17 @@ function initSillyPhoneUI() {
     }
 
     function parseAuthorFormat(rawText, defaultChatName = "未知会话", mode = "chat") {
+        if (!rawText) rawText = '';
+        
+        // 预处理 rawText：将各类 HTML 换行和分段替换回真实的 \n，并处理转义字符
+        rawText = rawText.replace(/<br\s*\/?>/gi, '\n')
+                         .replace(/<\/p>\s*<p>/gi, '\n')
+                         .replace(/<p>/gi, '')
+                         .replace(/<\/p>/gi, '\n')
+                         .replace(/&lt;/g, '<')
+                         .replace(/&gt;/g, '>')
+                         .replace(/&amp;/g, '&');
+
         const data = {
             messages: {},
             moments: []
