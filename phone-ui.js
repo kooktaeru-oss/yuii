@@ -5513,34 +5513,58 @@ function initSillyPhoneUI() {
 
                 // 核心：处理识图和附件挂载
                 if (!msg.description) {
-                   if (url.startsWith('data:')) {
-                        console.log('[Vision] 发现未识图 Base64，正在补拍...', msg.id);
-                        const description = await identifyImage(url);
-                        if (description) {
-                            msg.description = description;
-                            msg.text = `(IMG:${description})`; 
-                            saveMessagesToLocalStorage();
-                        }
-                    } else if (url.startsWith('IMGDATA:')) {
-                        console.log('[Vision] 发现服务器路径，尝试通过后端 Base64 转换...', url);
-                        try {
-                            const cleanPath = url.replace('IMGDATA:', '');
-                            const response = await fetch(`/api/images/get?path=${encodeURIComponent(cleanPath)}`);
-                            const blob = await response.blob();
-                            const base64 = await new Promise((resolve) => {
-                                const reader = new FileReader();
-                                reader.onloadend = () => resolve(reader.result);
-                                reader.readAsDataURL(blob);
-                            });
-                            const description = await identifyImage(base64);
-                            if (description) {
-                                msg.description = description;
-                                msg.text = `(IMG:${description})`; 
-                                saveMessagesToLocalStorage();
-                            }
-                            multimodalAttachment = base64;
-                        } catch (e) { console.error('[Vision] 转换失败:', e); }
-                    }
+    if (url.startsWith('data:')) {
+        console.log('[Vision] 发现未识图 Base64，正在补拍...', msg.id);
+        const description = await identifyImage(url);
+        if (description) {
+            msg.description = description;
+            msg.text = `(IMG:${description})`;
+            saveMessagesToLocalStorage();
+        }
+    } else if (url.startsWith('IMGDATA:')) {
+        console.log('[Vision] 发现服务器路径，尝试通过后端 Base64 转换...', url);
+        try {
+            const cleanPath = url.replace('IMGDATA:', '');
+            const response = await fetch(`/api/images/get?path=${encodeURIComponent(cleanPath)}`);
+            const blob = await response.blob();
+            const base64 = await new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.readAsDataURL(blob);
+            });
+
+            const description = await identifyImage(base64);
+            if (description) {
+                msg.description = description;
+                msg.text = `(IMG:${description})`;
+                saveMessagesToLocalStorage();
+            }
+
+            multimodalAttachment = base64;
+        } catch (e) { console.error('[Vision] 转换失败:', e); }
+    } else if (url.startsWith('/user/images/')) {
+        console.log('[Vision] 发现 /user/images/ 路径，直接抓取图片...', url);
+        try {
+            const response = await fetch(url);
+            const blob = await response.blob();
+            const base64 = await new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.readAsDataURL(blob);
+            });
+
+            const description = await identifyImage(base64);
+            if (description) {
+                msg.description = description;
+                msg.text = `(IMG:${description})`;
+                saveMessagesToLocalStorage();
+            }
+
+            multimodalAttachment = base64;
+        } catch (e) {
+            console.error('[Vision] /user/images/ 转换失败:', e);
+        }
+    }
                 } else {
                     // 已有描述，获取 Base64
                     if (url.startsWith('data:')) {
@@ -5556,12 +5580,25 @@ function initSillyPhoneUI() {
                                 reader.readAsDataURL(blob);
                             });
                         } catch (e) {}
+                    } else if (url.startsWith('/user/images/')) {
+                        try {
+                            const response = await fetch(url);
+                            const blob = await response.blob();
+                            multimodalAttachment = await new Promise((resolve) => {
+                                const reader = new FileReader();
+                                reader.onloadend = () => resolve(reader.result);
+                                reader.readAsDataURL(blob);
+                            });
+                        } catch (e) {
+                            console.error('[Vision] /user/images/ 转 Base64 失败:', e);
+                        }
                     }
                 }
             }
         }
-            console.log('[multimodalAttachment]', multimodalAttachment);
-    console.log('[recentMsgs]', recentMsgs);
+
+        console.log('[multimodalAttachment]', multimodalAttachment);
+        console.log('[recentMsgs]', recentMsgs);
         // --- 识图逻辑结束 ---
 
         const mode = state.currentPage === 'moments' ? 'moments' : 'chat';
