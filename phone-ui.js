@@ -5301,110 +5301,139 @@ function initSillyPhoneUI() {
     }
 
     async function identifyImage(base64Data) {
-        const s = state.settings;
-        if (!s.visionKey) {
-            console.warn('[Vision] API Key missing. Skipping identification.');
-            return null;
-        }
+    const s = state.settings;
+    if (!s.visionKey) {
+        console.warn('[Vision] API Key missing. Skipping identification.');
+        return null;
+    }
 
-        const provider = s.visionProvider || 'openai';
-        const model = s.visionModel || (provider === 'openai' ? 'gpt-4o' : (provider === 'claude' ? 'claude-3-5-sonnet' : 'gemini-1.5-pro'));
-        const endpoint = s.visionEndpoint || (provider === 'openai' ? 'https://api.openai.com/v1/chat/completions' : (provider === 'claude' ? 'https://api.anthropic.com/v1/messages' : 'https://generativelanguage.googleapis.com/v1beta/models/...'));
+    const provider = s.visionProvider || 'openai';
+    const model = s.visionModel || (
+        provider === 'openai'
+            ? 'gpt-4o'
+            : (provider === 'claude' ? 'claude-3-5-sonnet' : 'gemini-1.5-pro')
+    );
+    const endpoint = s.visionEndpoint || (
+        provider === 'openai'
+            ? 'https://api.openai.com/v1/chat/completions'
+            : (provider === 'claude'
+                ? 'https://api.anthropic.com/v1/messages'
+                : 'https://generativelanguage.googleapis.com/v1beta/models/...')
+    );
 
-        const systemPrompt = "你是一个识图助手。请简要描述这张图片中的内容，侧重于视觉细节和氛围（不超过50字）。请直接返回描述内容，不要有任何前缀。";
+    console.log('[Vision provider]', provider);
+    console.log('[Vision model]', model);
 
-        try {
-            let body;
-            let headers = { "Content-Type": "application/json" };
+    const systemPrompt = "你是一个识图助手。请先明确说出图片主体是什么，再补充1到2个最明显的视觉特征。必须具体，禁止只回答“这是一张照片”“一张图片”“某种动物”“看起来像……”这类模糊说法。优先识别主体类别、颜色、姿态、场景。示例：一只橘色短毛猫，正面趴着，眼神有点幽怨。只输出描述本身，不要加前缀，不要解释。";
 
-            if (provider === 'openai') {
-                body = JSON.stringify({
-                    model: model,
-                    messages: [
-                        { role: "system", content: systemPrompt },
-                        {
-                            role: "user",
-                            content: [
-                                { type: "text", text: "描述这张图。" },
-                                { type: "image_url", image_url: { url: base64Data } }
-                            ]
-                        }
-                    ],
-                    max_tokens: 100
-                });
-                headers["Authorization"] = `Bearer ${s.visionKey}`;
-            } else if (provider === 'claude') {
-                // Claude needs base64 without prefix
-                const base64Pure = base64Data.split(',')[1];
-                const mediaType = base64Data.split(';')[0].split(':')[1];
-                body = JSON.stringify({
-                    model: model,
-                    max_tokens: 100,
-                    messages: [
-                        {
-                            role: "user",
-                            content: [
-                                {
-                                    type: "image",
-                                    source: {
-                                        type: "base64",
-                                        media_type: mediaType,
-                                        data: base64Pure
-                                    }
-                                },
-                                { type: "text", text: systemPrompt }
-                            ]
-                        }
-                    ]
-                });
-                headers["x-api-key"] = s.visionKey;
-                headers["anthropic-version"] = "2023-06-01";
-                // Note: Anthropic often requires a proxy or specific CORS handling
-            } else if (provider === 'gemini') {
-                const base64Pure = base64Data.split(',')[1];
-                const mediaType = base64Data.split(';')[0].split(':')[1];
-                const geminiUrl = s.visionEndpoint || `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${s.visionKey}`;
+    try {
+        let body;
+        let headers = { "Content-Type": "application/json" };
 
-                const response = await fetch(geminiUrl, {
-                    method: 'POST',
-                    headers: headers,
-                    body: JSON.stringify({
-                        contents: [{
-                            parts: [
-                                { text: systemPrompt },
-                                { inline_data: { mime_type: mediaType, data: base64Pure } }
-                            ]
-                        }]
-                    })
-                });
-                const result = await response.json();
-                return result.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
-            }
+        if (provider === 'openai') {
+            body = JSON.stringify({
+                model: model,
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    {
+                        role: "user",
+                        content: [
+                            { type: "text", text: "请准确识别这张图里的主体与明显特征。" },
+                            { type: "image_url", image_url: { url: base64Data } }
+                        ]
+                    }
+                ],
+                max_tokens: 120
+            });
+            headers["Authorization"] = `Bearer ${s.visionKey}`;
+        } else if (provider === 'claude') {
+            const base64Pure = base64Data.split(',')[1];
+            const mediaType = base64Data.split(';')[0].split(':')[1];
+            body = JSON.stringify({
+                model: model,
+                max_tokens: 120,
+                messages: [
+                    {
+                        role: "user",
+                        content: [
+                            {
+                                type: "image",
+                                source: {
+                                    type: "base64",
+                                    media_type: mediaType,
+                                    data: base64Pure
+                                }
+                            },
+                            { type: "text", text: systemPrompt }
+                        ]
+                    }
+                ]
+            });
+            headers["x-api-key"] = s.visionKey;
+            headers["anthropic-version"] = "2023-06-01";
+        } else if (provider === 'gemini') {
+            const base64Pure = base64Data.split(',')[1];
+            const mediaType = base64Data.split(';')[0].split(':')[1];
+            const geminiUrl = s.visionEndpoint || `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${s.visionKey}`;
 
-            const response = await fetch(endpoint, {
+            const response = await fetch(geminiUrl, {
                 method: 'POST',
                 headers: headers,
-                body: body
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [
+                            { text: systemPrompt },
+                            { inline_data: { mime_type: mediaType, data: base64Pure } }
+                        ]
+                    }]
+                })
             });
 
             if (!response.ok) {
-                console.error('[Vision] API Request failed:', response.statusText);
+                console.error('[Vision] Gemini API Request failed:', response.status, response.statusText);
                 return null;
             }
 
             const result = await response.json();
-            if (provider === 'openai') {
-                return result.choices?.[0]?.message?.content?.trim();
-            } else if (provider === 'claude') {
-                return result.content?.[0]?.text?.trim();
-            }
-        } catch (error) {
-            console.error('[Vision] Error identifying image:', error);
-            showToast(`识图发生错误: ${error.message || '未知错误'}`, 'alert-triangle');
+            console.log('[Vision result]', result);
+
+            const text = result.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
+            if (!text) return null;
+            if (text === '一张照片' || text === '一张图片') return null;
+            return text;
+        }
+
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: headers,
+            body: body
+        });
+
+        if (!response.ok) {
+            console.error('[Vision] API Request failed:', response.status, response.statusText);
             return null;
         }
+
+        const result = await response.json();
+        console.log('[Vision result]', result);
+
+        let text = null;
+        if (provider === 'openai') {
+            text = result.choices?.[0]?.message?.content?.trim() || null;
+        } else if (provider === 'claude') {
+            text = result.content?.[0]?.text?.trim() || null;
+        }
+
+        if (!text) return null;
+        if (text === '一张照片' || text === '一张图片') return null;
+
+        return text;
+    } catch (error) {
+        console.error('[Vision] Error identifying image:', error);
+        showToast(`识图发生错误: ${error.message || '未知错误'}`, 'alert-triangle');
         return null;
     }
+}
 
     async function fetchVisionModels() {
         const provider = visionProviderSelect.value;
