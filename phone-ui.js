@@ -5013,13 +5013,13 @@ function initSillyPhoneUI() {
             if (state.currentChat) renderMessages(state.currentChat.id);
 
             window.processTypingQueue();
-                }, delay);
+        }, delay);
     };
 
     let currentEditingMsg = null;
     function openEditMessageModal(chatId, msgIndex) {
         const msg = state.messages[chatId][msgIndex];
-        if (msg.msgType && msg.msgType !== 'voice') return; 
+        if (msg.msgType && msg.msgType !== 'voice') return; // 只允许编辑文本和语音翻译文本
 
         currentEditingMsg = { chatId, msgIndex };
         const modal = document.getElementById('edit-message-modal');
@@ -5081,6 +5081,7 @@ function initSillyPhoneUI() {
         const st = getSTInterface();
         if (!st.getChatMessages || !st.setChatMessages) return;
 
+        // Group messages by sourceMsgId
         const messagesBySource = {};
         messagesToRemove.forEach(msg => {
             if (msg.isHistory && msg.sourceMsgId !== undefined) {
@@ -5091,6 +5092,7 @@ function initSillyPhoneUI() {
             }
         });
 
+        // Update each source message
         const updates = [];
         for (const sourceIdStr in messagesBySource) {
             const sourceId = parseInt(sourceIdStr, 10);
@@ -5272,41 +5274,16 @@ function initSillyPhoneUI() {
         }
     }
 
-    async function identifyImage(base64Data, customProvider = null, customEndpoint = null, customKey = null, customModel = null) {
+    async function identifyImage(base64Data) {
         const s = state.settings;
-        const activeKey = customKey || s.visionKey;
-        if (!activeKey && !customEndpoint) {
+        if (!s.visionKey) {
             console.warn('[Vision] API Key missing. Skipping identification.');
             return null;
         }
 
-        const provider = customProvider || s.visionProvider || 'openai';
-        
-        // 修正模型名称：针对特定的中转站和错误输入进行自动对齐
-        let model = customModel || s.visionModel || (provider === 'openai' ? 'gpt-4o' : (provider === 'claude' ? 'claude-3-5-sonnet' : 'gemini-1.5-pro'));
-        // 只有官方 Gemini 渠道才强制修正，站子中转的建议保持用户原样，除非用户填的是错误的 2.5
-        if (provider === 'gemini' && model.includes('2.5')) model = model.replace('2.5', '1.5'); 
-
-        let endpoint = customEndpoint || s.visionEndpoint;
-        if (provider === 'openai') {
-            if (!endpoint) endpoint = 'https://api.openai.com/v1/chat/completions';
-            else {
-                // 彻底解决 404: 只要不以 /chat/completions 结尾，就智能补全
-                endpoint = endpoint.replace(/\/+$/, ''); // 去掉结尾斜杠
-                if (!endpoint.endsWith('/chat/completions')) {
-                    if (endpoint.endsWith('/v1')) endpoint += '/chat/completions';
-                    else endpoint += '/v1/chat/completions';
-                }
-            }
-        } else if (provider === 'claude') {
-            if (!endpoint) endpoint = 'https://api.anthropic.com/v1/messages';
-            else {
-                endpoint = endpoint.replace(/\/+$/, '');
-                if (!endpoint.endsWith('/messages')) endpoint += '/v1/messages';
-            }
-        } else if (provider === 'gemini') {
-            if (!endpoint) endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${activeKey}`;
-        }
+        const provider = s.visionProvider || 'openai';
+        const model = s.visionModel || (provider === 'openai' ? 'gpt-4o' : (provider === 'claude' ? 'claude-3-5-sonnet' : 'gemini-1.5-pro'));
+        const endpoint = s.visionEndpoint || (provider === 'openai' ? 'https://api.openai.com/v1/chat/completions' : (provider === 'claude' ? 'https://api.anthropic.com/v1/messages' : 'https://generativelanguage.googleapis.com/v1beta/models/...'));
 
         const systemPrompt = "你是一个识图助手。请简要描述这张图片中的内容，侧重于视觉细节和氛围（不超过50字）。请直接返回描述内容，不要有任何前缀。";
 
@@ -5318,23 +5295,25 @@ function initSillyPhoneUI() {
                 body = JSON.stringify({
                     model: model,
                     messages: [
+                        { role: "system", content: systemPrompt },
                         {
                             role: "user",
                             content: [
-                                { type: "text", text: systemPrompt + "\n请根据以上要求进行识别：" },
+                                { type: "text", text: "描述这张图。" },
                                 { type: "image_url", image_url: { url: base64Data } }
                             ]
                         }
                     ],
-                    max_tokens: 200
+                    max_tokens: 100
                 });
-                headers["Authorization"] = `Bearer ${activeKey}`;
+                headers["Authorization"] = `Bearer ${s.visionKey}`;
             } else if (provider === 'claude') {
+                // Claude needs base64 without prefix
                 const base64Pure = base64Data.split(',')[1];
                 const mediaType = base64Data.split(';')[0].split(':')[1];
                 body = JSON.stringify({
                     model: model,
-                    max_tokens: 200,
+                    max_tokens: 100,
                     messages: [
                         {
                             role: "user",
@@ -5352,12 +5331,13 @@ function initSillyPhoneUI() {
                         }
                     ]
                 });
-                headers["x-api-key"] = activeKey;
+                headers["x-api-key"] = s.visionKey;
                 headers["anthropic-version"] = "2023-06-01";
+                // Note: Anthropic often requires a proxy or specific CORS handling
             } else if (provider === 'gemini') {
                 const base64Pure = base64Data.split(',')[1];
                 const mediaType = base64Data.split(';')[0].split(':')[1];
-                const geminiUrl = endpoint || `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${activeKey}`;
+                const geminiUrl = s.visionEndpoint || `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${s.visionKey}`;
 
                 const response = await fetch(geminiUrl, {
                     method: 'POST',
@@ -5366,17 +5346,11 @@ function initSillyPhoneUI() {
                         contents: [{
                             parts: [
                                 { text: systemPrompt },
-                                { inlineData: { mimeType: mediaType, data: base64Pure } }
+                                { inline_data: { mime_type: mediaType, data: base64Pure } }
                             ]
                         }]
                     })
                 });
-                if (!response.ok) {
-                    const err = await response.text();
-                    console.error('[Vision] Gemini Error:', err);
-                    showToast('Gemini 错误: ' + response.status, 'alert-circle');
-                    return null;
-                }
                 const result = await response.json();
                 return result.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
             }
@@ -5388,16 +5362,7 @@ function initSillyPhoneUI() {
             });
 
             if (!response.ok) {
-                const errorBody = await response.text();
-                console.error('[Vision] API Request failed:', response.status, errorBody);
-                // 404 时显示完整 URL 方便排错
-                let errorMsg = `识图请求失败: ${response.status}`;
-                if (response.status === 404) {
-                    errorMsg += `\n[404] 路径可能不对，插件请求地址为: ${endpoint}`;
-                } else {
-                    errorMsg += `\n详情: ${errorBody.substring(0, 50)}...`;
-                }
-                showToast(errorMsg, 'alert-circle');
+                console.error('[Vision] API Request failed:', response.statusText);
                 return null;
             }
 
@@ -5409,7 +5374,6 @@ function initSillyPhoneUI() {
             }
         } catch (error) {
             console.error('[Vision] Error identifying image:', error);
-            showToast('请求异常: ' + error.message, 'alert-circle');
             return null;
         }
         return null;
@@ -5492,105 +5456,6 @@ function initSillyPhoneUI() {
         }
     }
 
-    async function testVisionConnection() {
-        // 从当前 UI 输入框获取最新值，而不是从 state.settings 获取
-        const provider = visionProviderSelect.value;
-        const key = visionKeyInput.value.trim();
-        const model = visionModelInput.value.trim();
-        const endpoint = visionEndpointInput.value.trim();
-
-        if (!key) {
-            showToast('测试前请先填写 API Key', 'alert-circle');
-            return;
-        }
-
-        showToast('正在测试识图连接 (使用当前配置)...', 'loader');
-        // 一个 1x1 像素的黑色图片 Base64，用于测试流量非常小
-        const testImg = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
-        const result = await identifyImage(testImg, provider, endpoint, key, model);
-        
-        if (result) {
-            showToast('识图连接成功! AI回复: ' + result.substring(0, 30) + '...', 'check-circle');
-        } else {
-            // identifyImage 内部已经弹过具体的错误 status toast 了
-            console.warn('[Vision] Test connection returned no result.');
-        }
-    }
-
-    async function syncFromSillyTavern() {
-        try {
-            showToast('正在从酒馆后端同步配置...', 'loader');
-            // 彻底放弃 localStorage，直接请求酒馆后端接口
-            const response = await fetch('/api/settings/get', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({})
-            });
-
-            if (!response.ok) throw new Error('无法连接到酒馆后端');
-            const settings = await response.json();
-            
-            // 1. 获取当前生效的 API 来源
-            const apiSource = settings.main_api; // 'openai', 'claude', 'google' 等
-            
-            let targetUrl = '';
-            let targetKey = '';
-            let targetModel = '';
-
-            if (apiSource === 'openai') {
-                targetUrl = settings.api_url_openai || settings.api_custom_url || '';
-                targetKey = settings.api_key_openai || '';
-                targetModel = settings.model_openai || '';
-            } else if (apiSource === 'google') {
-                targetKey = settings.google_api_key || '';
-                targetModel = settings.google_model || '';
-                // Gemini 通常没自定义地址
-            } else if (apiSource === 'claude') {
-                targetKey = settings.api_key_claude || '';
-                targetModel = settings.model_claude || '';
-            }
-
-            if (!targetKey && !targetUrl) {
-                showToast('未在酒馆中检测到已激活的 API 配置', 'alert-circle');
-                return;
-            }
-
-            // 2. 填充 UI
-            visionProviderSelect.value = apiSource === 'google' ? 'gemini' : (apiSource === 'claude' ? 'claude' : 'openai');
-            if (targetUrl) visionEndpointInput.value = targetUrl;
-            if (targetKey) visionKeyInput.value = targetKey;
-            if (targetModel) visionModelInput.value = targetModel;
-
-            showToast(`已同步: ${apiSource} | ${targetModel}`, 'check-circle');
-            console.log('[Vision] Synced API settings from ST backend:', { apiSource, targetModel, targetUrl });
-        } catch (e) {
-            console.error('[Vision] Sync error:', e);
-            // 备选方案：尝试从 localStorage 兜底
-            const stUrl = localStorage.getItem('api_custom_url') || localStorage.getItem('api_url_openai') || '';
-            const stKey = localStorage.getItem('api_key_openai') || '';
-            const stModel = localStorage.getItem('model_openai') || '';
-            
-            if (stUrl || stKey) {
-                if (stUrl) visionEndpointInput.value = stUrl;
-                if (stKey) visionKeyInput.value = stKey;
-                if (stModel) visionModelInput.value = stModel;
-                showToast('已从本地缓存同步配置', 'check-circle');
-            } else {
-                showToast('同步失败，请手动填写 API 设置', 'alert-circle');
-            }
-        }
-    }
-
-    const testVisionBtn = document.getElementById('test-vision-conn-btn');
-    if (testVisionBtn) {
-        testVisionBtn.onclick = testVisionConnection;
-    }
-
-    const syncStBtn = document.getElementById('sync-from-st-btn');
-    if (syncStBtn) {
-        syncStBtn.onclick = syncFromSillyTavern;
-    }
-
     async function triggerAIResponse(customPrompt = null, targetId = null, chatId = null) {
         if (isAIRequestPending) return;
 
@@ -5601,45 +5466,64 @@ function initSillyPhoneUI() {
         if (!state.messages[activeChatId]) state.messages[activeChatId] = [];
 
         // --- 识图逻辑集成 (静默扫描补丁) ---
-        // 扫描最近的消息，寻找包含图片路径但没有描述的消息
+        // 扫描最近的消息，寻找最近的一张照片作为多模态附件
         const recentMsgs = state.messages[activeChatId].slice(-5);
-        for (const msg of recentMsgs) {
-            if ((msg.msgType === 'photo' || msg.msgType === 'image') && !msg.description) {
-                let visionSource = null;
+        let multimodalAttachment = null;
+        
+        for (let i = recentMsgs.length - 1; i >= 0; i--) {
+            const msg = recentMsgs[i];
+            if (msg.msgType === 'photo' || msg.msgType === 'image') {
                 const url = msg.url || msg.serverPath;
-                
-                if (url && url.startsWith('data:')) {
-                    visionSource = url;
-                } else if (url && (url.startsWith('IMGDATA:') || url.startsWith('/user/images/'))) {
-                    // 同步获取服务器图片的 Base64 用于识图
-                    try {
-                        const pathString = url.replace('IMGDATA:', '');
-                        const fetchUrl = pathString.startsWith('http') ? pathString : `/api/images/get?path=${encodeURIComponent(pathString)}`;
-                        const response = await fetch(fetchUrl);
-                        if (response.ok) {
-                            const blob = await response.blob();
-                            visionSource = await new Promise(resolve => {
-                                const r = new FileReader();
-                                r.onloadend = () => resolve(r.result);
-                                r.readAsDataURL(blob);
-                            });
-                        }
-                    } catch (e) {
-                        console.error('[Vision] 无法获取服务器图片进行识别:', e);
-                    }
-                }
+                if (!url) continue;
 
-                if (visionSource) {
-                    console.log('[Vision] 发现未识图图片，正在智能分析...', msg.id);
-                    const description = await identifyImage(visionSource);
-                    if (description) {
-                        msg.description = description;
-                        msg.text = `(IMG:${description})`; 
-                        saveMessagesToLocalStorage();
-                        // 触发重新渲染以更新 UI 显示的具体描述
-                        if (state.currentChat && state.currentChat.id === activeChatId) renderMessages(activeChatId);
+                // 核心：如果有本地 Base64 或已识别的描述，优先使用
+                if (!msg.description) {
+                   if (url.startsWith('data:')) {
+                        console.log('[Vision] 发现未识图 Base64，正在补拍...', msg.id);
+                        const description = await identifyImage(url);
+                        if (description) {
+                            msg.description = description;
+                            msg.text = `(IMG:${description})`; 
+                            saveMessagesToLocalStorage();
+                        }
+                    } else if (url.startsWith('IMGDATA:')) {
+                        console.log('[Vision] 发现服务器路径，尝试通过后端 Base64 转换...', url);
+                        try {
+                            const cleanPath = url.replace('IMGDATA:', '');
+                            const response = await fetch(`/api/images/get?path=${encodeURIComponent(cleanPath)}`);
+                            const blob = await response.blob();
+                            const base64 = await new Promise((resolve) => {
+                                const reader = new FileReader();
+                                reader.onloadend = () => resolve(reader.result);
+                                reader.readAsDataURL(blob);
+                            });
+                            const description = await identifyImage(base64);
+                            if (description) {
+                                msg.description = description;
+                                msg.text = `(IMG:${description})`; 
+                                saveMessagesToLocalStorage();
+                            }
+                            multimodalAttachment = base64; // 挂载 Base64 供多模态使用
+                        } catch (e) { console.error('[Vision] 转换失败:', e); }
+                    }
+                } else {
+                    // 已有描述，但需要获取 Base64 传给多模态生成引擎
+                    if (url.startsWith('data:')) {
+                        multimodalAttachment = url;
+                    } else if (url.startsWith('IMGDATA:')) {
+                        try {
+                            const cleanPath = url.replace('IMGDATA:', '');
+                            const response = await fetch(`/api/images/get?path=${encodeURIComponent(cleanPath)}`);
+                            const blob = await response.blob();
+                            multimodalAttachment = await new Promise((resolve) => {
+                                const reader = new FileReader();
+                                reader.onloadend = () => resolve(reader.result);
+                                reader.readAsDataURL(blob);
+                            });
+                        } catch (e) {}
                     }
                 }
+                break; // 只处理最新的一张图
             }
         }
         // --- 识图逻辑结束 ---
@@ -5715,6 +5599,21 @@ function initSillyPhoneUI() {
                     user_input: (customPrompt || (mode === 'moments' ? '请回复朋友圈...' : '请回复...')) + stickerPrompt + globalConstraints + dynamicPresetPrompt,
                     should_silence: true
                 };
+
+                // --- 注入多模态附件 ---
+                if (multimodalAttachment) {
+                    console.log('[SillyPhone] 注入多模态图片附件, Base64 长度:', multimodalAttachment.length);
+                    // 适配标准的酒馆生成接口：images 数组
+                    rawRequestData.images = [{
+                        data: multimodalAttachment.split(',')[1],
+                        mime: multimodalAttachment.split(';')[0].split(':')[1]
+                    }];
+                    // 备用方案：兼容某些旧版本的 attachments 字段
+                    rawRequestData.attachments = [{
+                        type: 'image',
+                        data: multimodalAttachment.split(',')[1]
+                    }];
+                }
 
                 if (state.settings.pureMode) {
                     rawRequestData.ordered_prompts = [
@@ -6204,8 +6103,10 @@ function initSillyPhoneUI() {
         let fileName = file ? file.name : null;
         let finalDescription = descriptionInput;
 
-        // --- 模式化识图逻辑 (优化：即便在 Direct 模式也会尝试获取文字描述作为双重保障) ---
-        if (state.settings.visionMode !== 'none' && !finalDescription && base64Data) {
+        // --- 优化后的模式化识图逻辑 ---
+        if (state.settings.visionMode === 'direct') {
+            // 直接模式：不执行内部识图，依赖酒馆多模态
+        } else if (state.settings.visionMode !== 'none' && !finalDescription && base64Data) {
             // 根据不同模式选择识图 API
             let provider = state.settings.visionProvider;
             let endpoint = state.settings.visionEndpoint;
@@ -6213,25 +6114,17 @@ function initSillyPhoneUI() {
             if (state.settings.visionMode === 'kimi') {
                 provider = 'openai';
                 endpoint = 'https://api.moonshot.cn/v1'; // Kimi 预设
-            } else if (state.settings.visionMode === 'custom' || state.settings.visionMode === 'direct') {
-                // 如果是直接传图模式，但用户配了 API，我们也调用它生成文本，防止 AI “眼瞎”
-                provider = state.settings.visionProvider || 'openai';
+            } else if (state.settings.visionMode === 'custom') {
+                provider = 'openai'; // 自定义通常兼容 OpenAI 格式
             }
 
             if (state.settings.visionKey || (state.settings.visionMode === 'kimi')) {
                 showToast('正在识图...', 'sparkles');
                 setIslandState('loading');
-                try {
-                    const aiDesc = await identifyImage(base64Data, provider, endpoint);
-                    if (aiDesc) {
-                        finalDescription = aiDesc;
-                        showToast('识图完成: ' + aiDesc.substring(0, 10) + '...', 'check');
-                    } else {
-                        showToast('识图失败 (请检查 API 或模型名)', 'alert-triangle');
-                    }
-                } catch (e) {
-                    console.error('[Vision] Identification exception:', e);
-                    showToast('识图异常: ' + e.message, 'alert-circle');
+                const aiDesc = await identifyImage(base64Data, provider, endpoint);
+                if (aiDesc) {
+                    finalDescription = aiDesc;
+                    showToast('识图完成', 'check');
                 }
             }
         }
