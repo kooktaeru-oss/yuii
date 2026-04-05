@@ -320,21 +320,14 @@ function initSillyPhoneUI() {
             console.error("保存手机数据到本地失败", e);
         }
 
-        let presetText = '';
-        if (state.presets && state.presets.length > 0) {
-            const activePresets = state.presets.filter(p => p.enabled);
-            if (activePresets.length > 0) {
-                presetText = `<shouji_preset>\n${activePresets.map(p => p.content).join('\n\n')}\n</shouji_preset>\n`;
-            }
-        }
-
-        const shoujiTag = `<div class="sillyphone-hidden-data" style="display: none;">\n<shouji>\n${textContent.trim()}\n${presetText}</shouji>\n</div>`;
+        const shoujiTag = `\n<shouji>\n${textContent.trim()}\n</shouji>`;
         
         let updatedMessage;
         if (raw.includes('<shouji>')) {
-            updatedMessage = raw.replace(/(?:<div[^>]*sillyphone-hidden-data[^>]*>\s*)?<shouji>[\s\S]*?(?:<\/shouji>|$)(?:\s*<\/div>)?/, shoujiTag);
+            // 兼容替换掉旧版的带有 div 的包裹，以及新版的干净 shouji 标签
+            updatedMessage = raw.replace(/(?:\n?<div[^>]*sillyphone-hidden-data[^>]*>\s*)?<shouji>[\s\S]*?(?:<\/shouji>|$)(?:\s*<\/div>)?/, shoujiTag);
         } else {
-            updatedMessage = raw + '\n' + shoujiTag;
+            updatedMessage = raw + shoujiTag;
         }
 
         st.setChatMessages([{ message_id: msgId, message: updatedMessage }], { refresh: 'none' });
@@ -5154,13 +5147,23 @@ function initSillyPhoneUI() {
         }
         
         // 尝试使用同层原生 API 进行生成
+        // 动态读取轻预设，在生成时临时注入，绝不污染聊天记录
+        let dynamicPresetPrompt = '';
+        if (state.presets && state.presets.length > 0) {
+            const activePresets = state.presets.filter(p => p.enabled);
+            if (activePresets.length > 0) {
+                dynamicPresetPrompt = `\n[系统底层约束，请严格遵守以下规则：]\n${activePresets.map(p => p.content).join('\n\n')}\n`;
+            }
+        }
+
+        // 尝试使用同层原生 API 进行生成
         if (st.generateRaw) {
             try {
                 // 确保在生成前同步最新状态到聊天记录
                 syncToSillyTavern();
                 
                 const rawRequestData = {
-                    user_input: (customPrompt || (mode === 'moments' ? '请回复朋友圈...' : '请回复...')) + stickerPrompt + globalConstraints,
+                    user_input: (customPrompt || (mode === 'moments' ? '请回复朋友圈...' : '请回复...')) + stickerPrompt + globalConstraints + dynamicPresetPrompt,
                     should_silence: true,
                 };
 
@@ -5204,11 +5207,10 @@ function initSillyPhoneUI() {
         } else if (st.executeSlashCommands) {
             try {
                 syncToSillyTavern();
-                if (customPrompt && String(customPrompt).trim()) {
-                    await st.executeSlashCommands(`/gen ${String(customPrompt).replace(/\n/g, " ")}`);
-                } else {
-                    await st.executeSlashCommands(`/generate`);
-                }
+                let genPrompt = customPrompt || (mode === 'moments' ? '请回复朋友圈...' : '请回复...');
+                genPrompt += stickerPrompt + globalConstraints + dynamicPresetPrompt;
+                
+                await st.executeSlashCommands(`/gen ${String(genPrompt).replace(/\n/g, " ")}`);
                 // Slash 命令生成后，通常会通过其他机制（如监听 DOM 或轮询）获取结果
                 // 这里为了兼容性，我们仍然发送 postMessage 兜底
             } catch (error) {
@@ -5216,6 +5218,11 @@ function initSillyPhoneUI() {
                 isAIRequestPending = false;
                 setIslandState('default');
             }
+        }
+
+        // 兜底：如果没有同层 API，则发送 postMessage 给桥接脚本
+        if (dynamicPresetPrompt) {
+            requestData.customPrompt = (requestData.customPrompt || '') + dynamicPresetPrompt;
         }
 
         // 兜底：如果没有同层 API，则发送 postMessage 给桥接脚本
