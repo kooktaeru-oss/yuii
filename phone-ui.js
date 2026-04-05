@@ -170,12 +170,15 @@ function initSillyPhoneUI() {
                 const time = msg.time || '';
                 const msgType = msg.msgType || (msg.type === 'system' ? 'system' : 'text');
 
-                if (msgType === 'text') {
+                if (msg.quotedMsg) {
+                    const quotedContent = msg.quotedMsg.text || msg.quotedMsg.content || '';
+                    text += `<${sender}|${quotedContent}|${content}>\n`;
+                } else if (msgType === 'text') {
                     text += `[${sender}|${content}]\n`;
                 } else if (msgType === 'image' || msgType === 'photo') {
                     text += `[${sender}|图片|${msg.url || content}]\n`;
                 } else if (msgType === 'sticker') {
-                    text += `[${sender}|表情包|${msg.url || content}]\n`;
+                    text += `[${sender}|表情包|${msg.label || '表情包'}]\n`;
                 } else if (msgType === 'voice') {
                     if (msg.duration) {
                         text += `[${sender}|语音消息|${msg.duration}|${content}]\n`;
@@ -202,8 +205,6 @@ function initSillyPhoneUI() {
                     text += `[${sender}|语音通话已挂断|${msg.duration || content || '00:00'}]\n`;
                 } else if (msgType === 'recall') {
                     text += `[${sender}|撤回消息|${content}]\n`;
-                } else if (msgType === 'quote') {
-                    text += `<${sender}|${msg.quote || ''}|${content}>\n`;
                 } else if (msgType === 'call-missed') {
                     text += `[${sender}|语音未接听|${content}]\n`;
                 }
@@ -4383,61 +4384,8 @@ function initSillyPhoneUI() {
             }
         }
 
-        // 检查过期红包/转账 (24小时自动退还)
-        msgs.forEach((m) => {
-            if (m.msgType === 'transfer' && m.status === 'unreceived') {
-                const timestampMatch = m.id.match(/\d+/);
-                const timestamp = timestampMatch ? parseInt(timestampMatch[0]) : 0;
-                if (timestamp > 0 && now - timestamp > 24 * 60 * 60 * 1000) {
-                    m.status = 'returned';
-                    hasChanges = true;
-                    
-                    const expireTime = new Date(timestamp + 24 * 60 * 60 * 1000);
-                    newSysMsgs.push({
-                        id: 'msg_' + Date.now() + Math.random().toString(36).substr(2, 5),
-                        type: 'system',
-                        text: '转账已超过24小时，已退还',
-                        time: expireTime.getHours() + ':' + expireTime.getMinutes().toString().padStart(2, '0')
-                    });
-                }
-            } else if (m.msgType === 'red-packet' && (m.status === 'unreceived' || (m.status === 'received' && m.remainingCount > 0))) {
-                const timestampMatch = m.id.match(/\d+/);
-                const timestamp = timestampMatch ? parseInt(timestampMatch[0]) : 0;
-                if (timestamp > 0 && now - timestamp > 24 * 60 * 60 * 1000) {
-                    hasChanges = true;
-                    const expireTime = new Date(timestamp + 24 * 60 * 60 * 1000);
-                    
-                    if (m.status === 'unreceived') {
-                        m.status = 'returned';
-                        if (m.senderId === 'user') {
-                            newSysMsgs.push({
-                                id: 'msg_' + Date.now() + Math.random().toString(36).substr(2, 5),
-                                type: 'system',
-                                text: `红包已超过24小时，剩余 ${m.remainingAmount || m.amount} 元已退还`,
-                                time: expireTime.getHours() + ':' + expireTime.getMinutes().toString().padStart(2, '0')
-                            });
-                        } else {
-                            newSysMsgs.push({
-                                id: 'msg_' + Date.now() + Math.random().toString(36).substr(2, 5),
-                                type: 'system',
-                                text: '红包已超过24小时。如已领取，可在红包记录中查看',
-                                time: expireTime.getHours() + ':' + expireTime.getMinutes().toString().padStart(2, '0')
-                            });
-                        }
-                    } else if (m.status === 'received' && m.remainingCount > 0) {
-                        m.remainingCount = 0; // 防止继续领取
-                        if (m.senderId === 'user') {
-                            newSysMsgs.push({
-                                id: 'msg_' + Date.now() + Math.random().toString(36).substr(2, 5),
-                                type: 'system',
-                                text: `红包已超过24小时，剩余 ${m.remainingAmount} 元已退还`,
-                                time: expireTime.getHours() + ':' + expireTime.getMinutes().toString().padStart(2, '0')
-                            });
-                        }
-                    }
-                }
-            }
-        });
+        // 移除过期红包/转账 (24小时自动退款) 逻辑，由用户手动控制状态。
+
 
         if (hasChanges) {
             msgs = msgs.concat(newSysMsgs);
@@ -5162,9 +5110,23 @@ function initSillyPhoneUI() {
                 // 确保在生成前同步最新状态到聊天记录
                 syncToSillyTavern();
                 
+                // 提取最近的表情包作为视觉附件
+                const attachments = [];
+                const recentStickers = currentSessionMessages
+                    .filter(m => m.msgType === 'sticker' && m.url)
+                    .slice(-3); // 只取最近3个，避免由于附件过多导致请求失败
+                
+                recentStickers.forEach(s => {
+                    attachments.push({ type: 'image', data: s.url });
+                });
+
+                // 为识图插件增加隐藏的 Markdown 图片链接注入（作为双保险）
+                const visualPrompt = recentStickers.map(s => `![${s.label || 'sticker'}](${s.url})`).join(' ');
+
                 const rawRequestData = {
-                    user_input: (customPrompt || (mode === 'moments' ? '请回复朋友圈...' : '请回复...')) + stickerPrompt + globalConstraints + dynamicPresetPrompt,
+                    user_input: (customPrompt || (mode === 'moments' ? '请回复朋友圈...' : '请回复...')) + stickerPrompt + globalConstraints + dynamicPresetPrompt + (visualPrompt ? '\n' + visualPrompt : ''),
                     should_silence: true,
+                    attachments: attachments.length > 0 ? attachments : undefined
                 };
 
                 if (state.settings.pureMode) {
