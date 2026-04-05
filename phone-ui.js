@@ -77,11 +77,7 @@ function initSillyPhoneUI() {
             navBlur: 15,
             glassOpacity: 5,
             pureMode: false,
-            visionMode: 'direct',
-            visionProvider: 'openai',
-            visionKey: '',
-            visionModel: 'gpt-4o',
-            visionEndpoint: ''
+            visionMode: 'direct'
         },
         presets: [], // 手机轻预设
         call: {
@@ -430,23 +426,6 @@ function initSillyPhoneUI() {
      * D. 图片后端上传 (Image Backend Upload)
      */
     async function uploadImageToST(file) {
-        if (window.parent && window.parent.__uploadImageByPlugin) {
-    console.log('[SillyPhone] 正在通过 Smart Media Assistant 上传...');
-    try {
-        const result = await window.parent.__uploadImageByPlugin(file, {
-            path: 'phone',
-            sendToChat: false
-        });
-
-        console.log('[upload result]', result);
-        console.log('[upload success]', result?.success);
-        console.log('[upload url]', result?.url);
-
-        if (result && result.success && result.url) return result.url;
-    } catch (e) {
-        console.error('[SillyPhone] 桥接上传异常:', e);
-    }
-}
         // --- 方案 1: 借道 kencuo/chajian (识图插件) 桥接器 ---
         if (window.parent && window.parent.__uploadImageByPlugin) {
             console.log('[SillyPhone] 正在通过 Smart Media Assistant 上传...');
@@ -1707,20 +1686,6 @@ function initSillyPhoneUI() {
         glassOpacityValueDisplay.textContent = s.glassOpacity / 100;
         if (pureModeToggle) pureModeToggle.checked = !!s.pureMode;
 
-        // 更新识图设置
-        if (settingsUserNameInput) settingsUserNameInput.value = state.userName;
-        if (settingsWechatIdInput) settingsWechatIdInput.value = state.wechatId;
-        if (settingsUserAvatarImg) settingsUserAvatarImg.src = state.userAvatar;
-
-        // 隐藏已移除的识图设置 UI
-        const visionSettingsSection = document.querySelector('.vision-settings-group'); // 假设有这个包裹类
-        if (visionSettingsSection) visionSettingsSection.style.display = 'none';
-        // 备选方案：直接隐藏相关输入框
-        if (visionProviderSelect) visionProviderSelect.parentElement.style.display = 'none';
-        if (visionKeyInput) visionKeyInput.parentElement.style.display = 'none';
-        if (visionModelInput) visionModelInput.parentElement.style.display = 'none';
-        if (visionEndpointInput) visionEndpointInput.parentElement.style.display = 'none';
-        if (document.getElementById('fetch-vision-models-btn')) document.getElementById('fetch-vision-models-btn').style.display = 'none';
 
 
         // 更新朋友圈头部显示
@@ -1844,12 +1809,6 @@ function initSillyPhoneUI() {
     const saveSettingsBtn = document.getElementById('save-settings-btn');
     const toastContainer = document.getElementById('toast-container');
 
-    // Vision API 设置
-    const visionProviderSelect = document.getElementById('vision-provider');
-    const visionKeyInput = document.getElementById('vision-key');
-    const visionModelInput = document.getElementById('vision-model');
-    const visionEndpointInput = document.getElementById('vision-endpoint');
-    const fetchVisionModelsBtn = document.getElementById('fetch-vision-models-btn');
 
     // 照片面板增强
     const photoPreviewContainer = document.getElementById('photo-preview-container');
@@ -2484,21 +2443,20 @@ function initSillyPhoneUI() {
         if (!text) return '';
 
         // 1. 处理 @ 提及高亮 (类似 QQ 空间/微信)
-        // 匹配 @ 后面跟非空白字符，直到遇到空格或标点符号
         text = text.replace(/@([^\s@\n\r\t,.:;!?，。：；！？]+)/g, '<span class="mention-highlight">@$1</span>');
 
-        // 2. 匹配 (IMG:描述内容)
-        const imgRegex = /\(IMG:(.*?)\)/g;
+        // 2. 匹配 (IMG) 或 (IMG:描述内容)
+        const imgRegex = /\(IMG(?::(.*?))?\)/g;
         if (imgRegex.test(text)) {
             return text.replace(imgRegex, (match, desc) => {
-                // 将描述内容存入 data 属性，方便点击时获取
-                const safeDesc = desc.replace(/"/g, '&quot;');
+                const finalDesc = desc || '已发送图片';
+                const safeDesc = finalDesc.replace(/"/g, '&quot;');
                 return `<div class="text-img-card" data-full-text="${safeDesc}" onclick="window.openTextImgDetail(this)">
                     <div class="text-img-header">
                         <i data-lucide="image" size="10"></i>
-                        <span>IMAGE DESCRIPTION</span>
+                        <span>IMAGE</span>
                     </div>
-                    <div class="text-img-body">${desc}</div>
+                    <div class="text-img-body">${finalDesc}</div>
                 </div>`;
             });
         }
@@ -2557,11 +2515,6 @@ function initSillyPhoneUI() {
         state.settings.momentsBg = newMomentsBg;
         state.settings.pureMode = isPureMode;
 
-        // 保存识图设置
-        state.settings.visionProvider = visionProviderSelect.value;
-        state.settings.visionKey = visionKeyInput.value.trim();
-        state.settings.visionModel = visionModelInput.value.trim();
-        state.settings.visionEndpoint = visionEndpointInput.value.trim();
 
         state.userName = newUserName;
         state.userAvatar = newUserAvatar;
@@ -5191,328 +5144,6 @@ function initSillyPhoneUI() {
         }
     }
 
-    function deleteMessage(chatId, index) {
-        const msg = state.messages[chatId][index];
-        state.messages[chatId].splice(index, 1);
-        removeMessagesFromRawCode([msg]);
-        saveMessagesToLocalStorage();
-        renderMessages(chatId);
-        showToast('已永久删除消息');
-    }
-
-    function enableMultiSelect(chatId, initialIndex) {
-        state.multiSelectMode = true;
-        state.selectedMessageIds = [];
-        const msg = state.messages[chatId][initialIndex];
-        state.selectedMessageIds.push(msg.id || `msg_${initialIndex}`);
-
-        document.getElementById('chat-multi-select-toolbar').style.display = 'flex';
-        document.querySelector('.input-bar').style.display = 'none';
-        updateMultiSelectToolbar();
-        renderMessages(chatId);
-    }
-
-    function updateMultiSelectToolbar() {
-        document.getElementById('chat-selected-count').textContent = `已选择 ${state.selectedMessageIds.length} 项`;
-    }
-
-    document.getElementById('cancel-chat-multi-select').onclick = () => {
-        state.multiSelectMode = false;
-        state.selectedMessageIds = [];
-        document.getElementById('chat-multi-select-toolbar').style.display = 'none';
-        document.querySelector('.input-bar').style.display = 'flex';
-        renderMessages(state.currentChat.id);
-    };
-
-    document.getElementById('confirm-chat-multi-delete').onclick = () => {
-        if (state.selectedMessageIds.length === 0) return;
-
-        showActionSheet([
-            {
-                text: `永久删除 ${state.selectedMessageIds.length} 条消息`,
-                danger: true,
-                onClick: () => {
-                    const chatId = state.currentChat.id;
-                    const msgsToRemove = state.messages[chatId].filter((m, index) => {
-                        const msgId = m.id || `msg_${index}`;
-                        return state.selectedMessageIds.includes(msgId);
-                    });
-
-                    state.messages[chatId] = state.messages[chatId].filter((m, index) => {
-                        const msgId = m.id || `msg_${index}`;
-                        return !state.selectedMessageIds.includes(msgId);
-                    });
-
-                    removeMessagesFromRawCode(msgsToRemove);
-
-                    state.multiSelectMode = false;
-                    state.selectedMessageIds = [];
-                    saveMessagesToLocalStorage();
-                    document.getElementById('chat-multi-select-toolbar').style.display = 'none';
-                    document.querySelector('.input-bar').style.display = 'flex';
-                    renderMessages(chatId);
-                    showToast('已永久删除选中消息');
-                }
-            }
-        ]);
-    };
-
-    function sendMessage(msgData, targetId = null) {
-        const chatId = state.currentChat ? state.currentChat.id : (msgData.isSilent ? 'system_queue' : null);
-        if (!chatId) return;
-        if (!state.messages[chatId]) state.messages[chatId] = [];
-
-        const newMessage = {
-            id: 'msg_' + Date.now(),
-            type: 'user',
-            senderId: 'user',
-            senderName: state.userName,
-            senderAvatar: state.userAvatar,
-            time: new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0'),
-            ...msgData
-        };
-
-        // 处理引用
-        if (state.quotedMessage) {
-            newMessage.quotedMsg = { ...state.quotedMessage };
-            state.quotedMessage = null;
-            updateQuotePreview();
-        }
-
-        state.messages[chatId].push(newMessage);
-        saveMessagesToLocalStorage();
-        renderMessages(chatId);
-        closeAllPanels();
-
-        // 如果在通话中，将消息加入通话记录
-        if (state.call.active) {
-            state.call.transcript.push({
-                sender: '我',
-                text: newMessage.text,
-                time: newMessage.time
-            });
-            renderCallTranscript();
-        }
-
-        // 只有系统消息才自动触发 AI，用户发送的消息需要手动点击灵动岛或通话头像
-        if (msgData.isSilent && !msgData.noTrigger) {
-            triggerAIResponse(msgData.text, targetId);
-        }
-    }
-
-    async function identifyImage(base64Data) {
-    const s = state.settings;
-    if (!s.visionKey) {
-        console.warn('[Vision] API Key missing. Skipping identification.');
-        return null;
-    }
-
-    const provider = s.visionProvider || 'openai';
-    const model = s.visionModel || (
-        provider === 'openai'
-            ? 'gpt-4o'
-            : (provider === 'claude' ? 'claude-3-5-sonnet' : 'gemini-1.5-pro')
-    );
-    const endpoint = s.visionEndpoint || (
-        provider === 'openai'
-            ? 'https://api.openai.com/v1/chat/completions'
-            : (provider === 'claude'
-                ? 'https://api.anthropic.com/v1/messages'
-                : 'https://generativelanguage.googleapis.com/v1beta/models/...')
-    );
-
-console.log('[Vision provider]', provider);
-console.log('[Vision model]', model);
-console.log('[Vision endpoint]', endpoint);
-
-    const systemPrompt = "你是一个识图助手。请先明确说出图片主体是什么，再补充1到2个最明显的视觉特征。必须具体，禁止只回答“这是一张照片”“一张图片”“某种动物”“看起来像……”这类模糊说法。优先识别主体类别、颜色、姿态、场景。示例：一只橘色短毛猫，正面趴着，眼神有点幽怨。只输出描述本身，不要加前缀，不要解释。";
-
-    try {
-        let body;
-        let headers = { "Content-Type": "application/json" };
-
-        if (provider === 'openai') {
-            body = JSON.stringify({
-                model: model,
-                messages: [
-                    { role: "system", content: systemPrompt },
-                    {
-                        role: "user",
-                        content: [
-                            { type: "text", text: "请准确识别这张图里的主体与明显特征。" },
-                            { type: "image_url", image_url: { url: base64Data } }
-                        ]
-                    }
-                ],
-                max_tokens: 120
-            });
-            headers["Authorization"] = `Bearer ${s.visionKey}`;
-        } else if (provider === 'claude') {
-            const base64Pure = base64Data.split(',')[1];
-            const mediaType = base64Data.split(';')[0].split(':')[1];
-            body = JSON.stringify({
-                model: model,
-                max_tokens: 120,
-                messages: [
-                    {
-                        role: "user",
-                        content: [
-                            {
-                                type: "image",
-                                source: {
-                                    type: "base64",
-                                    media_type: mediaType,
-                                    data: base64Pure
-                                }
-                            },
-                            { type: "text", text: systemPrompt }
-                        ]
-                    }
-                ]
-            });
-            headers["x-api-key"] = s.visionKey;
-            headers["anthropic-version"] = "2023-06-01";
-        } else if (provider === 'gemini') {
-            const base64Pure = base64Data.split(',')[1];
-            const mediaType = base64Data.split(';')[0].split(':')[1];
-            const geminiUrl = s.visionEndpoint || `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${s.visionKey}`;
-
-            const response = await fetch(geminiUrl, {
-                method: 'POST',
-                headers: headers,
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [
-                            { text: systemPrompt },
-                            { inline_data: { mime_type: mediaType, data: base64Pure } }
-                        ]
-                    }]
-                })
-            });
-
-            if (!response.ok) {
-                console.error('[Vision] Gemini API Request failed:', response.status, response.statusText);
-                return null;
-            }
-
-            const result = await response.json();
-            console.log('[Vision result]', result);
-
-            const text = result.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
-            if (!text) return null;
-            if (text === '一张照片' || text === '一张图片') return null;
-            return text;
-        }
-
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: headers,
-            body: body
-        });
-
-        if (!response.ok) {
-            console.error('[Vision] API Request failed:', response.status, response.statusText);
-            return null;
-        }
-
-        const result = await response.json();
-        console.log('[Vision result]', result);
-
-        let text = null;
-        if (provider === 'openai') {
-            text = result.choices?.[0]?.message?.content?.trim() || null;
-        } else if (provider === 'claude') {
-            text = result.content?.[0]?.text?.trim() || null;
-        }
-
-        if (!text) return null;
-        if (text === '一张照片' || text === '一张图片') return null;
-
-        return text;
-    } catch (error) {
-        console.error('[Vision] Error identifying image:', error);
-console.log('[Vision error message]', error?.message);
-showToast(`识图发生错误: ${error.message || '未知错误'}`, 'alert-triangle');
-return null;
-    }
-}
- async function fetchVisionModels() {
-        const provider = visionProviderSelect.value;
-        const key = visionKeyInput.value.trim();
-        const customEndpoint = visionEndpointInput.value.trim();
-
-        if (!key) {
-            showToast('请填写 API Key', 'alert-circle');
-            return;
-        }
-
-        showToast('正在拉取模型中...', 'loader');
-
-        try {
-            let url;
-            let headers = { "Content-Type": "application/json" };
-
-            if (provider === 'openai') {
-                // 处理中转地址常见的 /v1/chat/completions 结尾
-                let base = customEndpoint || 'https://api.openai.com/v1';
-                base = base.replace(/\/chat\/completions\/?$/, '');
-                url = base.endsWith('/models') ? base : (base.endsWith('/') ? base + 'models' : base + '/models');
-                headers["Authorization"] = `Bearer ${key}`;
-            } else if (provider === 'claude') {
-                let base = customEndpoint || 'https://api.anthropic.com/v1';
-                base = base.replace(/\/messages\/?$/, '');
-                url = base.endsWith('/models') ? base : (base.endsWith('/') ? base + 'models' : base + '/models');
-                headers["x-api-key"] = key;
-                headers["anthropic-version"] = "2023-06-01";
-                headers["Content-Type"] = "application/json";
-            } else if (provider === 'gemini') {
-                url = `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`;
-            }
-
-            const response = await fetch(url, { method: 'GET', headers: headers });
-            if (!response.ok) throw new Error('拉取失败: ' + response.statusText);
-
-            const data = await response.json();
-            let models = [];
-
-            if (provider === 'openai' || provider === 'claude') {
-                const list = data.data || data.models || data || [];
-                models = Array.isArray(list) ? list.map(m => m.id || m.name) : [];
-                // 简单过滤：包含视觉关键词的排在前面
-                models.sort((a, b) => {
-                    const keywords = ['vision', 'gpt-4o', 'claude-3', 'gemini'];
-                    const aHas = keywords.some(k => a.toLowerCase().includes(k));
-                    const bHas = keywords.some(k => b.toLowerCase().includes(k));
-                    if (aHas && !bHas) return -1;
-                    if (!aHas && bHas) return 1;
-                    return 0;
-                });
-            } else if (provider === 'gemini') {
-                models = (data.models || []).map(m => m.name.replace('models/', ''));
-            }
-
-            if (models.length === 0) {
-                showToast('未找到可用模型', 'alert-circle');
-                return;
-            }
-
-            // 更新 Datalist 供用户直接在输入框选择
-            const dataList = document.getElementById('vision-model-list');
-            if (dataList) {
-                dataList.innerHTML = '';
-                models.slice(0, 100).forEach(m => {
-                    const option = document.createElement('option');
-                    option.value = m;
-                    dataList.appendChild(option);
-                });
-                showToast('模型列表已拉取，请在输入框选择', 'check-circle');
-            }
-        } catch (error) {
-            console.error('[Vision] Fetch models error:', error);
-            showToast('拉取失败，请检查 Key 或代理地址', 'alert-circle');
-        }
-    }
-
     async function triggerAIResponse(customPrompt = null, targetId = null, chatId = null) {
         if (isAIRequestPending) return;
 
@@ -5520,9 +5151,9 @@ return null;
         setIslandState('loading');
 
         const activeChatId = chatId || (state.currentChat ? state.currentChat.id : 'system_queue');
-        if (!state.messages[activeChatId]) state.messages[activeChatId] = [];   
+        if (!state.messages[activeChatId]) state.messages[activeChatId] = [];
 
-        // --- 识图逻辑集成 (静默扫描补丁) ---
+        // --- 多模态识图附件集成 ---
         // 扫描最近的消息，寻找最近的一张照片作为多模态附件
         const recentMsgs = state.messages[activeChatId].slice(-8);
         let multimodalAttachment = null;
@@ -5539,98 +5170,29 @@ return null;
 
             if (!multimodalAttachment && (msg.msgType === 'photo' || msg.msgType === 'image')) {
                 const url = msg.url || msg.serverPath;
-                if (!url) continue;                
+                if (!url) continue;
 
-                // 核心：处理识图和附件挂载
-                if (!msg.description) {
-    if (url.startsWith('data:')) {
-        console.log('[Vision] 发现未识图 Base64，正在补拍...', msg.id);
-        const description = await identifyImage(url);
-        if (description) {
-            msg.description = description;
-            msg.text = `(IMG:${description})`;
-            saveMessagesToLocalStorage();
-        }
-    } else if (url.startsWith('IMGDATA:')) {
-        console.log('[Vision] 发现服务器路径，尝试通过后端 Base64 转换...', url);
-        try {
-            const cleanPath = url.replace('IMGDATA:', '');
-            const response = await fetch(`/api/images/get?path=${encodeURIComponent(cleanPath)}`);
-            const blob = await response.blob();
-            const base64 = await new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result);
-                reader.readAsDataURL(blob);
-            });
-
-            const description = await identifyImage(base64);
-            if (description) {
-                msg.description = description;
-                msg.text = `(IMG:${description})`;
-                saveMessagesToLocalStorage();
-            }
-
-            multimodalAttachment = base64;
-        } catch (e) { console.error('[Vision] 转换失败:', e); }
-    } else if (url.startsWith('/user/images/')) {
-        console.log('[Vision] 发现 /user/images/ 路径，直接抓取图片...', url);
-        try {
-            const response = await fetch(url);
-            const blob = await response.blob();
-            const base64 = await new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result);
-                reader.readAsDataURL(blob);
-            });
-
-            const description = await identifyImage(base64);
-            if (description) {
-                msg.description = description;
-                msg.text = `(IMG:${description})`;
-                saveMessagesToLocalStorage();
-            }
-
-            multimodalAttachment = base64;
-        } catch (e) {
-            console.error('[Vision] /user/images/ 转换失败:', e);
-        }
-    }
-                } else {
-                    // 已有描述，获取 Base64
-                    if (url.startsWith('data:')) {
-                        multimodalAttachment = url;
-                    } else if (url.startsWith('IMGDATA:')) {
-                        try {
-                            const cleanPath = url.replace('IMGDATA:', '');
-                            const response = await fetch(`/api/images/get?path=${encodeURIComponent(cleanPath)}`);
-                            const blob = await response.blob();
-                            multimodalAttachment = await new Promise((resolve) => {
-                                const reader = new FileReader();
-                                reader.onloadend = () => resolve(reader.result);
-                                reader.readAsDataURL(blob);
-                            });
-                        } catch (e) {}
-                    } else if (url.startsWith('/user/images/')) {
-                        try {
-                            const response = await fetch(url);
-                            const blob = await response.blob();
-                            multimodalAttachment = await new Promise((resolve) => {
-                                const reader = new FileReader();
-                                reader.onloadend = () => resolve(reader.result);
-                                reader.readAsDataURL(blob);
-                            });
-                        } catch (e) {
-                            console.error('[Vision] /user/images/ 转 Base64 失败:', e);
-                        }
+                // 核心：直接获取图片 Base64 并挂载为多模态附件
+                if (url.startsWith('data:')) {
+                    multimodalAttachment = url;
+                } else if (url.startsWith('IMGDATA:')) {
+                    try {
+                        const cleanPath = url.replace('IMGDATA:', '');
+                        const response = await fetch(`/api/images/get?path=${encodeURIComponent(cleanPath)}`);
+                        const blob = await response.blob();
+                        multimodalAttachment = await new Promise((resolve) => {
+                            const reader = new FileReader();
+                            reader.onloadend = () => resolve(reader.result);
+                            reader.readAsDataURL(blob);
+                        });
+                    } catch (e) {
+                        console.error('[SillyPhone] 获取图片附件失败:', e);
                     }
                 }
             }
         }
-
-        console.log('[multimodalAttachment]', multimodalAttachment);
-        console.log('[recentMsgs]', recentMsgs);
-        console.log('=== 我改过的识图代码真的加载了 ===');
         // --- 识图逻辑结束 ---
+
         const mode = state.currentPage === 'moments' ? 'moments' : 'chat';
 
         // 注入全局系统约束
@@ -5654,7 +5216,8 @@ return null;
             targetId: targetId || activeChatId,
             mode: mode,
             context: lastMessages,
-            chatId: activeChatId
+            chatId: activeChatId,
+            multimodalAttachment: multimodalAttachment
         };
 
         lastAIRequest = requestData;
@@ -5700,16 +5263,12 @@ return null;
 
                 // 核心 Prompt 构建优化：如果 customPrompt 为空，尝试使用最后一条用户消息
                 const userPrompt = customPrompt || lastUserMsgText || (mode === 'moments' ? '请回复朋友圈...' : '请回复...');
-const visionSystemInfo = multimodalAttachment ? '[系统提示：用户发送了一张图片，请结合图片内容进行回复。]' : '';
-const latestImageDesc = [...recentMsgs].reverse().find(     m => (m.msgType === 'photo' || m.msgType === 'image') && m.description && m.description !== '一张照片' )?.description || '';
-const visionTextInfo = latestImageDesc ? `\n[图片内容文字描述：${latestImageDesc}]` : '';
-console.log('[latestImageDesc]', latestImageDesc);
-console.log('[visionTextInfo]', visionTextInfo);
-console.log('[user_input]', userPrompt + stickerPrompt + globalConstraints + dynamicPresetPrompt + visionSystemInfo + visionTextInfo);
-const rawRequestData = {
-    user_input: userPrompt + stickerPrompt + globalConstraints + dynamicPresetPrompt + visionSystemInfo + visionTextInfo,
-    should_silence: true
-};
+                const visionSystemInfo = multimodalAttachment ? '[系统提示：用户发送了一张图片，请结合图片内容进行回复。]' : '';
+
+                const rawRequestData = {
+                    user_input: userPrompt + stickerPrompt + globalConstraints + dynamicPresetPrompt + visionSystemInfo,
+                    should_silence: true
+                };
 
                 // --- 注入多模态附件 ---
                 if (multimodalAttachment) {
