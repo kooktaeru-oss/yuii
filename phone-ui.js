@@ -184,6 +184,11 @@ function initSillyPhoneUI() {
                     const path = msg.serverPath ? `|IMGDATA:${msg.serverPath}` : '';
                     const fileName = msg.fileName ? `|FILENAME:${msg.fileName}` : '';
                     text += `[${sender}|图片|${desc}${path}${fileName}|${time}]\n`;
+                    
+                    // --- 核心视觉桥接：即便看起来重复，但这是 AI “看见”图片的物理链路 ---
+                    if (msg.serverPath) {
+                        text += `![](IMGDATA:${msg.serverPath})\n`;
+                    }
                 } else if (msgType === 'sticker') {
                     text += `[${sender}|图片|发送了一个表情包|${msg.label || '表情包'}|${time}]\n`;
                 } else if (msgType === 'voice') {
@@ -6073,10 +6078,8 @@ function initSillyPhoneUI() {
         let fileName = file ? file.name : null;
         let finalDescription = descriptionInput;
 
-        // --- 优化后的模式化识图逻辑 ---
-        if (state.settings.visionMode === 'direct') {
-            // 直接模式：不执行内部识图，依赖酒馆多模态
-        } else if (state.settings.visionMode !== 'none' && !finalDescription && base64Data) {
+        // --- 模式化识图逻辑 (优化：即便在 Direct 模式也会尝试获取文字描述作为双重保障) ---
+        if (state.settings.visionMode !== 'none' && !finalDescription && base64Data) {
             // 根据不同模式选择识图 API
             let provider = state.settings.visionProvider;
             let endpoint = state.settings.visionEndpoint;
@@ -6084,8 +6087,9 @@ function initSillyPhoneUI() {
             if (state.settings.visionMode === 'kimi') {
                 provider = 'openai';
                 endpoint = 'https://api.moonshot.cn/v1'; // Kimi 预设
-            } else if (state.settings.visionMode === 'custom') {
-                provider = 'openai'; // 自定义通常兼容 OpenAI 格式
+            } else if (state.settings.visionMode === 'custom' || state.settings.visionMode === 'direct') {
+                // 如果是直接传图模式，但用户配了 API，我们也调用它生成文本，防止 AI “眼瞎”
+                provider = state.settings.visionProvider || 'openai';
             }
 
             if (state.settings.visionKey || (state.settings.visionMode === 'kimi')) {
