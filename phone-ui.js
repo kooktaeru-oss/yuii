@@ -326,7 +326,30 @@ function initSillyPhoneUI() {
             updatedMessage = raw + "\n" + shoujiTag;
         }
 
-        st.setChatMessages([{ message_id: msgId, message: updatedMessage }], { refresh: 'none' });
+        // --- 深度多模态接驳：构建附件元数据 ---
+        let attachments = [];
+        if (state.messages) {
+            for (const chatId in state.messages) {
+                const msgs = state.messages[chatId];
+                if (!Array.isArray(msgs)) continue;
+                msgs.forEach(m => {
+                    // 仅同步非历史消息且有服务器路径的图片
+                    if (m.msgType === 'photo' && !m.isHistory && m.serverPath) {
+                        attachments.push({
+                            type: 'image',
+                            path: m.serverPath
+                        });
+                    }
+                });
+            }
+        }
+
+        // 更新酒馆原代码，并携带多模态附件
+        st.setChatMessages([{ 
+            message_id: msgId, 
+            message: updatedMessage,
+            extra: attachments.length > 0 ? { attachments: attachments } : {}
+        }], { refresh: 'none' });
 
         // 尝试将关键设置同步到酒馆后端 API 存储
         saveSettingsToST();
@@ -336,25 +359,30 @@ function initSillyPhoneUI() {
     function getCSRFToken() {
         try {
             const targetDoc = window.parent ? window.parent.document : document;
-            // 路径 1: 酒馆标准隐藏域
+            // 1. 尝试从 DOM 直接获取
             let token = targetDoc.getElementById('csrf_token')?.value;
             if (token) return token;
-            // 路径 2: Meta 标签
+            
+            // 2. 尝试从 meta 标签获取
             token = targetDoc.querySelector('meta[name="csrf-token"]')?.content ||
                     targetDoc.querySelector('meta[name="csrf-token-value"]')?.content;
             if (token) return token;
-            // 路径 3: 尝试从 Cookie 获取
+            
+            // 3. 尝试从 Cookie 获取
             const cookieMatch = targetDoc.cookie.match(/csrf_token=([^;]+)/);
             if (cookieMatch) return cookieMatch[1];
-            // 路径 4: 从父窗口 jQuery 头部获取
+            
+            // 4. 尝试从 localStorage 获取 (某些版本会存这里)
+            const localToken = localStorage.getItem('csrf_token') || targetDoc.defaultView?.localStorage?.getItem('csrf_token');
+            if (localToken) return localToken;
+
+            // 5. 尝试从父窗口的 jQuery 默认设置中顺藤摸瓜
             if (window.parent && window.parent.jQuery && window.parent.jQuery.ajaxSettings) {
                 const headers = window.parent.jQuery.ajaxSettings.headers;
                 if (headers && headers['X-CSRF-Token']) return headers['X-CSRF-Token'];
             }
             return '';
-        } catch (e) {
-            return '';
-        }
+        } catch (e) { return ''; }
     }
 
     /**
@@ -365,6 +393,28 @@ function initSillyPhoneUI() {
             extension: 'yuii-phone',
             settings: state.settings
         };
+        
+        // --- 核心方案 (Native Bridge): 借道父窗口 jQuery 避开跨域和 CSRF ---
+        if (window.parent && window.parent.jQuery) {
+            window.parent.jQuery.ajax({
+                url: '/api/extensions/settings/v1',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(payload),
+                // 显式携带头部作为二次保险
+                headers: { 'X-CSRF-Token': getCSRFToken() },
+                success: () => {
+                    state._useBackendSync = true;
+                    console.log('[SillyPhone] 通过 jQuery 原生桥接同步设置成功');
+                },
+                error: (xhr) => {
+                    console.warn('[SillyPhone] 设置同步失败:', xhr.status, xhr.responseText);
+                }
+            });
+            return;
+        }
+
+        // --- 方案 2: 标准 Fetch (作为本地/独立模式回退) ---
         try {
             const response = await fetch('/api/extensions/settings/v1', {
                 method: 'POST',
@@ -376,16 +426,17 @@ function initSillyPhoneUI() {
             });
             if (response.ok) {
                 state._useBackendSync = true;
-                console.log('[SillyPhone] 设置已同步至酒馆后台');
+                console.log('[SillyPhone] Fetch 模式同步成功');
             }
-        } catch (error) {
-            console.error('[SillyPhone] 设置同步失败:', error);
+        } catch (e) {
+            console.warn('[SillyPhone] 后端连接已断开');
         }
     }
 
     async function loadSettingsFromST() {
         try {
-            const response = await fetch('/api/extensions/settings/v1?extension=sillyphone');
+            // 统一使用 yuii-phone 以免数据存取路径不一致
+            const response = await fetch('/api/extensions/settings/v1?extension=yuii-phone');
             if (response.ok) {
                 const data = await response.json();
                 if (data && data.settings) {
@@ -393,7 +444,9 @@ function initSillyPhoneUI() {
                     return data.settings;
                 }
             }
-        } catch (e) {}
+        } catch (e) {
+            console.error('[SillyPhone] 从后端加载设置失败', e);
+        }
         return null;
     }
 
@@ -401,29 +454,58 @@ function initSillyPhoneUI() {
      * D. 图片后端上传 (Image Backend Upload)
      */
     async function uploadImageToST(file) {
+        // --- 方案 1: 借道 kencuo/chajian (识图插件) 桥接器 (终极方案) ---
+        if (window.parent && window.parent.__uploadImageByPlugin) {
+            console.log('[SillyPhone] 正在通过 Smart Media Assistant 桥接上传...');
+            try {
+                // 如果 file 是个字符串 (Base64), 该插件也能处理
+                const result = await window.parent.__uploadImageByPlugin(file, {
+                    path: 'phone',
+                    sendToChat: false // 仅落盘，不直接发送到聊天
+                });
+                if (result && result.success && (result.url || result.imgText)) {
+                    return result.url || result.imgText;
+                }
+            } catch (e) { console.error('[SillyPhone] 识图插件桥接上传异常:', e); }
+        }
+
+        // --- 方案 2: 使用父窗口 jQuery.ajax (自带 CSRF 且绕过沙盒限制) ---
+        if (window.parent && window.parent.jQuery) {
+            return new Promise((resolve) => {
+                const formData = new FormData();
+                formData.append('image', file);
+                formData.append('path', 'phone');
+                window.parent.jQuery.ajax({
+                    url: '/api/images/upload',
+                    method: 'POST',
+                    processData: false,
+                    contentType: false,
+                    headers: { 'X-CSRF-Token': getCSRFToken() }, // 手动注入保险
+                    data: formData,
+                    success: (res) => resolve(res && res.imgText ? res.imgText : (res.url || null)),
+                    error: (xhr) => {
+                        console.error('[SillyPhone] jQuery 上传图异常:', xhr.status);
+                        resolve(null);
+                    }
+                });
+            });
+        }
+
+        // --- 方案 3: 回退到 Fetch (带令牌) ---
         try {
             const formData = new FormData();
             formData.append('image', file);
-            formData.append('path', 'phone'); // 存入 /user/images/phone/
-
+            formData.append('path', 'phone');
             const response = await fetch('/api/images/upload', {
                 method: 'POST',
-                headers: {
-                    'X-CSRF-Token': getCSRFToken()
-                },
+                headers: { 'X-CSRF-Token': getCSRFToken() },
                 body: formData
             });
-
             if (response.ok) {
                 const result = await response.json();
-                if (result && result.imgText) {
-                    // ST 返回的路径通常是完整路径，我们提取出相对路径或直接使用
-                    return result.imgText; 
-                }
+                return result.imgText || result.url || null;
             }
-        } catch (e) {
-            console.error('[SillyPhone] 图片上传失败，回退至 Base64', e);
-        }
+        } catch (e) {}
         return null;
     }
 
