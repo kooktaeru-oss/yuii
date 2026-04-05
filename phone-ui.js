@@ -332,9 +332,33 @@ function initSillyPhoneUI() {
         saveSettingsToST();
     }
 
+    // --- 后端通讯增强：多维 CSRF 令牌探测器 ---
+    function getCSRFToken() {
+        try {
+            const targetDoc = window.parent ? window.parent.document : document;
+            // 路径 1: 酒馆标准隐藏域
+            let token = targetDoc.getElementById('csrf_token')?.value;
+            if (token) return token;
+            // 路径 2: Meta 标签
+            token = targetDoc.querySelector('meta[name="csrf-token"]')?.content ||
+                    targetDoc.querySelector('meta[name="csrf-token-value"]')?.content;
+            if (token) return token;
+            // 路径 3: 尝试从 Cookie 获取
+            const cookieMatch = targetDoc.cookie.match(/csrf_token=([^;]+)/);
+            if (cookieMatch) return cookieMatch[1];
+            // 路径 4: 从父窗口 jQuery 头部获取
+            if (window.parent && window.parent.jQuery && window.parent.jQuery.ajaxSettings) {
+                const headers = window.parent.jQuery.ajaxSettings.headers;
+                if (headers && headers['X-CSRF-Token']) return headers['X-CSRF-Token'];
+            }
+            return '';
+        } catch (e) {
+            return '';
+        }
+    }
+
     /**
      * C. 后端设置持久化 (Backend Persistence)
-     * 尝试将 API Key 等设置存入酒馆服务器，而不是消息文本中
      */
     async function saveSettingsToST() {
         const payload = {
@@ -384,6 +408,9 @@ function initSillyPhoneUI() {
 
             const response = await fetch('/api/images/upload', {
                 method: 'POST',
+                headers: {
+                    'X-CSRF-Token': getCSRFToken()
+                },
                 body: formData
             });
 
