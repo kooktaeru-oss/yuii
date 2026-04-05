@@ -5467,16 +5467,24 @@ function initSillyPhoneUI() {
 
         // --- 识图逻辑集成 (静默扫描补丁) ---
         // 扫描最近的消息，寻找最近的一张照片作为多模态附件
-        const recentMsgs = state.messages[activeChatId].slice(-5);
+        const recentMsgs = state.messages[activeChatId].slice(-8);
         let multimodalAttachment = null;
-        
+        let lastUserMsgText = null;
+
+        // 倒序找图和找最后一条用户文本
         for (let i = recentMsgs.length - 1; i >= 0; i--) {
             const msg = recentMsgs[i];
-            if (msg.msgType === 'photo' || msg.msgType === 'image') {
+            
+            // 找最后一条用户消息的内容作为 Prompt (如果 customPrompt 为空)
+            if (!customPrompt && msg.type === 'user' && msg.text && !lastUserMsgText) {
+                lastUserMsgText = msg.text;
+            }
+
+            if (!multimodalAttachment && (msg.msgType === 'photo' || msg.msgType === 'image')) {
                 const url = msg.url || msg.serverPath;
                 if (!url) continue;
 
-                // 核心：如果有本地 Base64 或已识别的描述，优先使用
+                // 核心：处理识图和附件挂载
                 if (!msg.description) {
                    if (url.startsWith('data:')) {
                         console.log('[Vision] 发现未识图 Base64，正在补拍...', msg.id);
@@ -5503,11 +5511,11 @@ function initSillyPhoneUI() {
                                 msg.text = `(IMG:${description})`; 
                                 saveMessagesToLocalStorage();
                             }
-                            multimodalAttachment = base64; // 挂载 Base64 供多模态使用
+                            multimodalAttachment = base64;
                         } catch (e) { console.error('[Vision] 转换失败:', e); }
                     }
                 } else {
-                    // 已有描述，但需要获取 Base64 传给多模态生成引擎
+                    // 已有描述，获取 Base64
                     if (url.startsWith('data:')) {
                         multimodalAttachment = url;
                     } else if (url.startsWith('IMGDATA:')) {
@@ -5523,7 +5531,6 @@ function initSillyPhoneUI() {
                         } catch (e) {}
                     }
                 }
-                break; // 只处理最新的一张图
             }
         }
         // --- 识图逻辑结束 ---
@@ -5595,24 +5602,29 @@ function initSillyPhoneUI() {
                 // 确保在生成前同步最新状态到聊天记录
                 syncToSillyTavern();
 
+                // 核心 Prompt 构建优化：如果 customPrompt 为空，尝试使用最后一条用户消息
+                const userPrompt = customPrompt || lastUserMsgText || (mode === 'moments' ? '请回复朋友圈...' : '请回复...');
+                const visionSystemInfo = multimodalAttachment ? '[系统提示：用户发送了一张图片，请结合图片内容进行回复。]' : '';
+
                 const rawRequestData = {
-                    user_input: (customPrompt || (mode === 'moments' ? '请回复朋友圈...' : '请回复...')) + stickerPrompt + globalConstraints + dynamicPresetPrompt,
+                    user_input: userPrompt + stickerPrompt + globalConstraints + dynamicPresetPrompt + visionSystemInfo,
                     should_silence: true
                 };
 
                 // --- 注入多模态附件 ---
                 if (multimodalAttachment) {
-                    console.log('[SillyPhone] 注入多模态图片附件, Base64 长度:', multimodalAttachment.length);
-                    // 适配标准的酒馆生成接口：images 数组
-                    rawRequestData.images = [{
-                        data: multimodalAttachment.split(',')[1],
-                        mime: multimodalAttachment.split(';')[0].split(':')[1]
-                    }];
-                    // 备用方案：兼容某些旧版本的 attachments 字段
-                    rawRequestData.attachments = [{
-                        type: 'image',
-                        data: multimodalAttachment.split(',')[1]
-                    }];
+                    console.log('[SillyPhone] 正在挂载多模态附件, 文本内容:', userPrompt);
+                    try {
+                        const base64Parts = multimodalAttachment.split(',');
+                        const data = base64Parts[1];
+                        const mime = base64Parts[0].split(';')[0].split(':')[1] || 'image/jpeg';
+                        
+                        // 1. 标准 images 数组 (后端 api/generate 识别)
+                        rawRequestData.images = [{ data, mime }];
+                        
+                        // 2. 备用 attachments 字段 (某些前端接口识别)
+                        rawRequestData.attachments = [{ type: 'image', data, mime }];
+                    } catch (e) { console.error('[SillyPhone] 附件格式化失败:', e); }
                 }
 
                 if (state.settings.pureMode) {
