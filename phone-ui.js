@@ -184,11 +184,6 @@ function initSillyPhoneUI() {
                     const path = msg.serverPath ? `|IMGDATA:${msg.serverPath}` : '';
                     const fileName = msg.fileName ? `|FILENAME:${msg.fileName}` : '';
                     text += `[${sender}|图片|${desc}${path}${fileName}|${time}]\n`;
-                    
-                    // --- 核心视觉桥接：即便看起来重复，但这是 AI “看见”图片的物理链路 ---
-                    if (msg.serverPath) {
-                        text += `![](IMGDATA:${msg.serverPath})\n`;
-                    }
                 } else if (msgType === 'sticker') {
                     text += `[${sender}|图片|发送了一个表情包|${msg.label || '表情包'}|${time}]\n`;
                 } else if (msgType === 'voice') {
@@ -5287,11 +5282,16 @@ function initSillyPhoneUI() {
         }
 
         const provider = customProvider || s.visionProvider || 'openai';
-        const model = s.visionModel || (provider === 'openai' ? 'gpt-4o' : (provider === 'claude' ? 'claude-3-5-sonnet' : 'gemini-1.5-pro'));
         
+        // 修正模型名称：确保使用有效的模型
+        let model = s.visionModel || (provider === 'openai' ? 'gpt-4o' : (provider === 'claude' ? 'claude-3-5-sonnet' : 'gemini-1.5-pro'));
+        if (provider === 'gemini' && model.includes('2.5')) model = 'gemini-1.5-pro'; // 修正用户可能的输入错误
+
         let endpoint = customEndpoint || s.visionEndpoint;
         if (!endpoint) {
-            endpoint = (provider === 'openai' ? 'https://api.openai.com/v1/chat/completions' : (provider === 'claude' ? 'https://api.anthropic.com/v1/messages' : 'https://generativelanguage.googleapis.com/v1beta/models/...'));
+            if (provider === 'openai') endpoint = 'https://api.openai.com/v1/chat/completions';
+            else if (provider === 'claude') endpoint = 'https://api.anthropic.com/v1/messages';
+            else if (provider === 'gemini') endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${s.visionKey}`;
         }
 
         const systemPrompt = "你是一个识图助手。请简要描述这张图片中的内容，侧重于视觉细节和氛围（不超过50字）。请直接返回描述内容，不要有任何前缀。";
@@ -6095,10 +6095,15 @@ function initSillyPhoneUI() {
             if (state.settings.visionKey || (state.settings.visionMode === 'kimi')) {
                 showToast('正在识图...', 'sparkles');
                 setIslandState('loading');
-                const aiDesc = await identifyImage(base64Data, provider, endpoint);
-                if (aiDesc) {
-                    finalDescription = aiDesc;
-                    showToast('识图完成', 'check');
+                try {
+                    const aiDesc = await identifyImage(base64Data, provider, endpoint);
+                    if (aiDesc) {
+                        finalDescription = aiDesc;
+                        showToast('识图完成: ' + aiDesc.substring(0, 10) + '...', 'check');
+                    }
+                } catch (e) {
+                    console.error('[Vision] Identification failed:', e);
+                    showToast('识图失败', 'x-circle');
                 }
             }
         }
