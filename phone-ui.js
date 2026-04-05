@@ -5390,8 +5390,14 @@ function initSillyPhoneUI() {
             if (!response.ok) {
                 const errorBody = await response.text();
                 console.error('[Vision] API Request failed:', response.status, errorBody);
-                // 截取错误信息的前 20 个字符显示，方便用户知道是 401, 404 还是别的
-                showToast(`接口报错: ${response.status} ${errorBody.substring(0, 20)}`, 'alert-circle');
+                // 404 时显示完整 URL 方便排错
+                let errorMsg = `接口报错: ${response.status}`;
+                if (response.status === 404) {
+                    errorMsg += `\n路径不对? 尝试地址: ${endpoint.substring(0, 50)}...`;
+                } else {
+                    errorMsg += ` ${errorBody.substring(0, 20)}`;
+                }
+                showToast(errorMsg, 'alert-circle');
                 return null;
             }
 
@@ -5511,9 +5517,42 @@ function initSillyPhoneUI() {
         }
     }
 
+    function syncFromSillyTavern() {
+        try {
+            // 尝试获取酒馆主配置
+            // 优先级：custom_url -> openai_url -> 默认
+            const stUrl = localStorage.getItem('api_custom_url') || localStorage.getItem('api_url_openai') || '';
+            const stKey = localStorage.getItem('api_key_openai') || '';
+            const stModel = localStorage.getItem('model_openai') || '';
+
+            if (!stUrl && !stKey) {
+                showToast('未在酒馆中找到有效的 OpenAI 兼容配置', 'alert-circle');
+                return;
+            }
+
+            // 填充到 UI
+            if (stUrl) {
+                visionEndpointInput.value = stUrl;
+                visionProviderSelect.value = 'openai'; // 酒馆填这类地址通常是 OpenAI 兼容
+            }
+            if (stKey) visionKeyInput.value = stKey;
+            if (stModel) visionModelInput.value = stModel;
+
+            showToast('已从酒馆主配置同步 API 信息', 'check-circle');
+        } catch (e) {
+            console.error('[Vision] Sync error:', e);
+            showToast('同步失败，请检查浏览器权限', 'alert-circle');
+        }
+    }
+
     const testVisionBtn = document.getElementById('test-vision-conn-btn');
     if (testVisionBtn) {
         testVisionBtn.onclick = testVisionConnection;
+    }
+
+    const syncStBtn = document.getElementById('sync-from-st-btn');
+    if (syncStBtn) {
+        syncStBtn.onclick = syncFromSillyTavern;
     }
 
     async function triggerAIResponse(customPrompt = null, targetId = null, chatId = null) {
