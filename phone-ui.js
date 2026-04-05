@@ -5201,10 +5201,16 @@ function initSillyPhoneUI() {
                 if (!isAIRequestPending) return;
                 
                 isAIRequestPending = false;
-                setIslandState('default');
                 if (replyText) {
                     processAIReply(replyText, activeChatId, mode, targetId || activeChatId);
+                    // 启动打字队列，逐条弹出消息
+                    if (state.typingQueue && state.typingQueue.length > 0 && typeof window.processTypingQueue === 'function') {
+                        window.processTypingQueue();
+                    } else {
+                        setIslandState('default');
+                    }
                 } else {
+                    setIslandState('default');
                     showToast('生成返回为空', 'x-circle');
                 }
             } catch (error) {
@@ -6365,12 +6371,19 @@ function initSillyPhoneUI() {
                     const chatId = data.chatId || (lastAIRequest ? lastAIRequest.chatId : null);
                     
                     processAIReply(data.replyText, chatId, mode, targetId);
-                }
-                
-                loadFromSillyTavern();
-                
-                if (!state.typingQueue || state.typingQueue.length === 0) {
-                    setIslandState('default');
+                    
+                    // 启动打字队列，逐条弹出消息
+                    if (state.typingQueue && state.typingQueue.length > 0 && typeof window.processTypingQueue === 'function') {
+                        window.processTypingQueue();
+                    } else {
+                        setIslandState('default');
+                    }
+                } else {
+                    // 没有回复文本，尝试从 SillyTavern 加载
+                    loadFromSillyTavern();
+                    if (!state.typingQueue || state.typingQueue.length === 0) {
+                        setIslandState('default');
+                    }
                 }
             }
         }
@@ -6683,7 +6696,7 @@ function initSillyPhoneUI() {
                         senderName = state.currentChat.name;
                     }
 
-                    return {
+                    const formattedMsg = {
                         id: m.id || 'msg_' + Math.random().toString(36).substr(2, 9),
                         type: isUser ? 'user' : 'ai',
                         senderId: isUser ? 'user' : (getContactIdByName(senderName) || senderName),
