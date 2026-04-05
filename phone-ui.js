@@ -5509,7 +5509,7 @@ function initSillyPhoneUI() {
 
             if (!multimodalAttachment && (msg.msgType === 'photo' || msg.msgType === 'image')) {
                 const url = msg.url || msg.serverPath;
-                if (!url) continue;
+                if (!url) continue;                
 
                 // 核心：处理识图和附件挂载
                 if (!msg.description) {
@@ -5560,6 +5560,8 @@ function initSillyPhoneUI() {
                 }
             }
         }
+            console.log('[multimodalAttachment]', multimodalAttachment);
+    console.log('[recentMsgs]', recentMsgs);
         // --- 识图逻辑结束 ---
 
         const mode = state.currentPage === 'moments' ? 'moments' : 'chat';
