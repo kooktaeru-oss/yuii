@@ -1206,43 +1206,24 @@ function initSillyPhoneUI() {
                 });
             }
 
-            if (!state.typingQueue) state.typingQueue = [];
-            
-            // 找出新消息放入打字队列
-            for (const cid in combinedMessages) {
-                const oldMsgs = state.messages[cid] || [];
-                const oldIds = new Set(oldMsgs.map(m => m.id));
-                const oldSignatures = new Set(oldMsgs.map(m => `${m.time}|${m.text||m.content}`));
-
-                combinedMessages[cid].forEach(m => {
-                    const sig = `${m.time}|${m.text||m.content}`;
-                    // 判断是否是真正的“新”产生的 AI 消息
-                    if (!m.isHistory && m.type !== 'user' && !oldIds.has(m.id) && !oldSignatures.has(sig)) {
-                        m.isTypingPending = true;
-                        state.typingQueue.push(m);
-                    } else if (oldMsgs.find(oldM => (oldM.id === m.id || `${oldM.time}|${oldM.text||oldM.content}` === sig))?.isTypingPending) {
-                        // 继承老的 pending 状态，并更新打字队列中的引用防止孤立
-                        m.isTypingPending = true;
-                        if (!state.typingQueue) state.typingQueue = [];
-                        const queueIndex = state.typingQueue.findIndex(q => q.id === m.id || `${q.time}|${q.text||q.content}` === sig);
-                        if (queueIndex !== -1) {
-                            state.typingQueue[queueIndex] = m;
-                        } else {
-                            state.typingQueue.push(m);
+            // loadFromSillyTavern 只负责数据恢复，不往打字队列添加新消息。
+            // 打字队列仅由 processAIReply 在收到真正的新 AI 回复时填充。
+            // 如果当前有正在处理的打字队列，保留它们的 pending 状态。
+            if (state.typingQueue && state.typingQueue.length > 0) {
+                const pendingIds = new Set(state.typingQueue.map(q => q.id));
+                for (const cid in combinedMessages) {
+                    combinedMessages[cid].forEach(m => {
+                        if (pendingIds.has(m.id)) {
+                            m.isTypingPending = true;
+                            const qIdx = state.typingQueue.findIndex(q => q.id === m.id);
+                            if (qIdx !== -1) state.typingQueue[qIdx] = m;
                         }
-                    } else {
-                        m.isTypingPending = false;
-                    }
-                });
+                    });
+                }
             }
 
             state.messages = combinedMessages;
             state.moments = combinedMoments;
-            
-            // 触发打字机队列处理
-            if (typeof window.processTypingQueue === 'function') {
-                window.processTypingQueue();
-            }
             
             // 处理 raw AI message
             if (latestRawAIMessage && state.currentChat) {
