@@ -2098,12 +2098,15 @@ function initSillyPhoneUI() {
         toastContainer.appendChild(toast);
         if (typeof lucide !== 'undefined') lucide.createIcons();
 
-        setTimeout(() => {
-            toast.classList.add('fade-out');
+        if (duration > 0) {
             setTimeout(() => {
-                toast.remove();
-            }, 300);
-        }, duration);
+                toast.classList.add('fade-out');
+                setTimeout(() => {
+                    toast.remove();
+                }, 300);
+            }, duration);
+        }
+        return toast;
     }
 
     function showCustomPrompt(title, placeholder, callback) {
@@ -6132,19 +6135,21 @@ function initSillyPhoneUI() {
             }
 
             if (state.settings.visionKey || (state.settings.visionMode === 'kimi')) {
-                showToast('AI 正在观察图片...', 'eye');
+                const loadingToast = showToast('AI 正在观察图片...', 'eye', -1); // 传入 -1 表示永久显示，直到手动移除
                 setIslandState('loading');
                 try {
                     const aiDesc = await identifyImage(base64Data, provider, endpoint);
+                    loadingToast.remove(); // 得到结果后立刻移除“识别中”
+                    
                     if (aiDesc) {
                         finalDescription = aiDesc;
-                        showToast(`识别成功: ${aiDesc}`, 'check-circle', 4000); // 延长显示时间让用户看清
+                        showToast(`识别成功: ${aiDesc}`, 'check-circle', 6000); // 延长到6秒
                     } else {
-                        showToast('识别失败: AI 没看清这张图', 'alert-circle');
-                        // 失败了就不强制填入 (IMG:...)，给用户留个白
+                        showToast('识别失败: AI 没看清这张图', 'alert-circle', 5000);
                     }
                 } catch (e) {
-                    showToast('识别中断: 接口请求失败', 'x-circle');
+                    loadingToast.remove();
+                    showToast('识别中断: 接口请求失败', 'x-circle', 5000);
                 }
             }
         }
