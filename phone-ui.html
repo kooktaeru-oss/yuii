@@ -589,6 +589,16 @@
 
                     <div class="setting-group-title" style="margin-top: 20px; font-size: 14px; color: var(--c-text-sec); padding-left: 5px;">识图 API 配置 (Vision)</div>
                     <div class="setting-item">
+                        <label>识图方式</label>
+                        <select id="vision-mode" style="width: 100%; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: white; padding: 8px; outline: none; appearance: none; -webkit-appearance: none; cursor: pointer;">
+                            <option value="direct" style="background: #1a1a1a; color: white;">直接传图给 AI (推荐)</option>
+                            <option value="proxy" style="background: #1a1a1a; color: white;">插件助手识图 (预识图描述)</option>
+                            <option value="kimi" style="background: #1a1a1a; color: white;">先用 Kimi API 识图</option>
+                            <option value="custom" style="background: #1a1a1a; color: white;">先用自定义 API 识图</option>
+                            <option value="none" style="background: #1a1a1a; color: white;">不识图 (仅发送)</option>
+                        </select>
+                    </div>
+                    <div class="setting-item">
                         <label>识图服务商</label>
                         <select id="vision-provider" style="width: 100%; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: white; padding: 8px; outline: none; appearance: none; -webkit-appearance: none; cursor: pointer;">
                             <option value="openai" style="background: #1a1a1a; color: white;">OpenAI (OpenAI-Compatible)</option>
