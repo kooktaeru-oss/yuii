@@ -5274,16 +5274,20 @@ function initSillyPhoneUI() {
         }
     }
 
-    async function identifyImage(base64Data) {
+    async function identifyImage(base64Data, customProvider = null, customEndpoint = null) {
         const s = state.settings;
-        if (!s.visionKey) {
+        if (!s.visionKey && !customEndpoint) {
             console.warn('[Vision] API Key missing. Skipping identification.');
             return null;
         }
 
-        const provider = s.visionProvider || 'openai';
+        const provider = customProvider || s.visionProvider || 'openai';
         const model = s.visionModel || (provider === 'openai' ? 'gpt-4o' : (provider === 'claude' ? 'claude-3-5-sonnet' : 'gemini-1.5-pro'));
-        const endpoint = s.visionEndpoint || (provider === 'openai' ? 'https://api.openai.com/v1/chat/completions' : (provider === 'claude' ? 'https://api.anthropic.com/v1/messages' : 'https://generativelanguage.googleapis.com/v1beta/models/...'));
+        
+        let endpoint = customEndpoint || s.visionEndpoint;
+        if (!endpoint) {
+            endpoint = (provider === 'openai' ? 'https://api.openai.com/v1/chat/completions' : (provider === 'claude' ? 'https://api.anthropic.com/v1/messages' : 'https://generativelanguage.googleapis.com/v1beta/models/...'));
+        }
 
         const systemPrompt = "你是一个识图助手。请简要描述这张图片中的内容，侧重于视觉细节和氛围（不超过50字）。请直接返回描述内容，不要有任何前缀。";
 
@@ -5466,18 +5470,43 @@ function initSillyPhoneUI() {
         if (!state.messages[activeChatId]) state.messages[activeChatId] = [];
 
         // --- 识图逻辑集成 (静默扫描补丁) ---
-        // 扫描最近的消息，寻找包含 Base64 数据但没有描述的照片（兼容手动拖入或异常情况）
+        // 扫描最近的消息，寻找包含图片路径但没有描述的消息
         const recentMsgs = state.messages[activeChatId].slice(-5);
         for (const msg of recentMsgs) {
-            if (msg.msgType === 'photo' && !msg.description) {
-                // 如果是服务器路径，外网 API 看不见，只能靠发送时的实时识别
-                if (msg.url && msg.url.startsWith('data:')) {
-                    console.log('[Vision] 发现未识图 Base64，正在补拍...', msg.id);
-                    const description = await identifyImage(msg.url);
+            if ((msg.msgType === 'photo' || msg.msgType === 'image') && !msg.description) {
+                let visionSource = null;
+                const url = msg.url || msg.serverPath;
+                
+                if (url && url.startsWith('data:')) {
+                    visionSource = url;
+                } else if (url && (url.startsWith('IMGDATA:') || url.startsWith('/user/images/'))) {
+                    // 同步获取服务器图片的 Base64 用于识图
+                    try {
+                        const pathString = url.replace('IMGDATA:', '');
+                        const fetchUrl = pathString.startsWith('http') ? pathString : `/api/images/get?path=${encodeURIComponent(pathString)}`;
+                        const response = await fetch(fetchUrl);
+                        if (response.ok) {
+                            const blob = await response.blob();
+                            visionSource = await new Promise(resolve => {
+                                const r = new FileReader();
+                                r.onloadend = () => resolve(r.result);
+                                r.readAsDataURL(blob);
+                            });
+                        }
+                    } catch (e) {
+                        console.error('[Vision] 无法获取服务器图片进行识别:', e);
+                    }
+                }
+
+                if (visionSource) {
+                    console.log('[Vision] 发现未识图图片，正在智能分析...', msg.id);
+                    const description = await identifyImage(visionSource);
                     if (description) {
                         msg.description = description;
-                        msg.text = `(IMG:${description})`;
+                        msg.text = `(IMG:${description})`; 
                         saveMessagesToLocalStorage();
+                        // 触发重新渲染以更新 UI 显示的具体描述
+                        if (state.currentChat && state.currentChat.id === activeChatId) renderMessages(activeChatId);
                     }
                 }
             }
