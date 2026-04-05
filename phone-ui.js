@@ -1691,14 +1691,20 @@ function initSillyPhoneUI() {
         if (pureModeToggle) pureModeToggle.checked = !!s.pureMode;
 
         // 更新识图设置
-        if (visionProviderSelect) visionProviderSelect.value = s.visionProvider || 'openai';
-        if (visionKeyInput) visionKeyInput.value = s.visionKey || '';
-        if (visionModelInput) visionModelInput.value = s.visionModel || '';
-        if (visionEndpointInput) visionEndpointInput.value = s.visionEndpoint || '';
-
         if (settingsUserNameInput) settingsUserNameInput.value = state.userName;
         if (settingsWechatIdInput) settingsWechatIdInput.value = state.wechatId;
         if (settingsUserAvatarImg) settingsUserAvatarImg.src = state.userAvatar;
+
+        // 隐藏已移除的识图设置 UI
+        const visionSettingsSection = document.querySelector('.vision-settings-group'); // 假设有这个包裹类
+        if (visionSettingsSection) visionSettingsSection.style.display = 'none';
+        // 备选方案：直接隐藏相关输入框
+        if (visionProviderSelect) visionProviderSelect.parentElement.style.display = 'none';
+        if (visionKeyInput) visionKeyInput.parentElement.style.display = 'none';
+        if (visionModelInput) visionModelInput.parentElement.style.display = 'none';
+        if (visionEndpointInput) visionEndpointInput.parentElement.style.display = 'none';
+        if (document.getElementById('fetch-vision-models-btn')) document.getElementById('fetch-vision-models-btn').style.display = 'none';
+
 
         // 更新朋友圈头部显示
         const momentsUserName = document.getElementById('moments-user-name');
@@ -6119,45 +6125,13 @@ function initSillyPhoneUI() {
         let fileName = file ? file.name : null;
         let finalDescription = descriptionInput;
 
-        // --- 优化后的模式化识图逻辑 ---
-        if (state.settings.visionMode === 'direct') {
-            // 直接模式：不执行内部预识图，依赖酒馆多模态 (静默发送)
-        } else if (state.settings.visionMode !== 'none' && !finalDescription && base64Data) {
-            // 根据不同模式选择识图 API
-            let provider = state.settings.visionProvider;
-            let endpoint = state.settings.visionEndpoint;
-
-            if (state.settings.visionMode === 'kimi') {
-                provider = 'openai';
-                endpoint = 'https://api.moonshot.cn/v1'; // Kimi 预设
-            } else if (state.settings.visionMode === 'custom') {
-                provider = 'openai'; 
-            }
-
-            if (state.settings.visionKey || (state.settings.visionMode === 'kimi')) {
-                const loadingToast = showToast('AI 正在观察图片...', 'eye', -1); // 传入 -1 表示永久显示，直到手动移除
-                setIslandState('loading');
-                try {
-                    const aiDesc = await identifyImage(base64Data, provider, endpoint);
-                    loadingToast.remove(); // 得到结果后立刻移除“识别中”
-                    
-                    if (aiDesc) {
-                        finalDescription = aiDesc;
-                        showToast(`识别成功: ${aiDesc}`, 'check-circle', 6000); // 延长到6秒
-                    } else {
-                        showToast('识别失败: AI 没看清这张图', 'alert-circle', 5000);
-                    }
-                } catch (e) {
-                    loadingToast.remove();
-                    showToast('识别中断: 接口请求失败', 'x-circle', 5000);
-                }
-            }
-        }
-
+        // --- 识图逻辑已移除 (改为直接发送) ---
+        // 插件已不再独立调用外部 API 进行识图，现在由酒馆后台原生多模态支持。
         if (file) {
-            showToast('正在发送...', 'loader');
+            showToast('正在发送图片...', 'loader');
             serverPath = await uploadImageToST(file);
         }
+
 
         const photoMsg = {
             msgType: 'photo',
