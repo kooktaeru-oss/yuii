@@ -16,7 +16,7 @@ function initSillyPhoneUI() {
             window.frameElement.style.display = 'block';
             window.frameElement.style.margin = '0 auto';
         }
-        
+
         // 尝试向父窗口注入 CSS，隐藏 <shouji> 标签并防止长文本撑破屏幕
         const targetDoc = window.parent ? window.parent.document : document;
         if (targetDoc && !targetDoc.getElementById('sillyphone-global-style')) {
@@ -43,13 +43,13 @@ function initSillyPhoneUI() {
         userName: '我',
         wechatId: 'wxid_sillyphone',
         userAccounts: [
-            { 
-                id: 'user_main', 
-                name: '我', 
-                avatar: 'https://files.catbox.moe/blaehb.jpg', 
-                wechatId: 'wxid_sillyphone', 
-                momentsBg: 'https://files.catbox.moe/smqrt7.jpg', 
-                contacts: [], 
+            {
+                id: 'user_main',
+                name: '我',
+                avatar: 'https://files.catbox.moe/blaehb.jpg',
+                wechatId: 'wxid_sillyphone',
+                momentsBg: 'https://files.catbox.moe/smqrt7.jpg',
+                contacts: [],
                 groups: [],
                 messages: {},
                 moments: []
@@ -102,11 +102,11 @@ function initSillyPhoneUI() {
     };
 
     // --- SillyTavern 同层同步逻辑 ---
-    
+
     function getSTInterface() {
         // 尝试从 window 或 window.parent 获取酒馆的 API
         const target = window.getCurrentMessageId ? window : window.parent;
-        
+
         // 尝试从 DOM 中获取 messageId (用于修复切换原始代码后 script 不执行导致找不到 ID 的 bug)
         let domMsgId = null;
         try {
@@ -135,7 +135,7 @@ function initSillyPhoneUI() {
 
     function serializeMessagesToText(messages, currentMsgId) {
         let text = '';
-        
+
         // 辅助函数：通过ID查找联系人名字
         const getContactNameById = (id) => {
             if (state.contacts) {
@@ -151,10 +151,10 @@ function initSillyPhoneUI() {
 
         for (const chatId in messages) {
             if (!messages[chatId] || messages[chatId].length === 0) continue;
-            
+
             // 序列化消息：保留非历史消息、属于当前回合的消息，以及没有 sourceMsgId 的消息（从文本解析恢复的）
-            const currentMessages = messages[chatId].filter(msg => 
-                !msg.isHistory || 
+            const currentMessages = messages[chatId].filter(msg =>
+                !msg.isHistory ||
                 (currentMsgId !== undefined && msg.sourceMsgId === currentMsgId) ||
                 msg.sourceMsgId === undefined
             );
@@ -162,7 +162,7 @@ function initSillyPhoneUI() {
 
             const chatName = getContactNameById(chatId);
             const isGroup = state.groups && state.groups.some(g => g.id === chatId || g.name === chatId);
-            
+
             if (isGroup) {
                 text += `<multi>\n【和 ${chatName}的聊天】\n`;
             } else {
@@ -184,12 +184,6 @@ function initSillyPhoneUI() {
                     const path = msg.serverPath ? `|IMGDATA:${msg.serverPath}` : '';
                     const fileName = msg.fileName ? `|FILENAME:${msg.fileName}` : '';
                     text += `[${sender}|图片|${desc}${path}${fileName}|${time}]\n`;
-                    
-                    // --- 多模态触发补丁 ---
-                    // 虽然我们在 meta 中挂载了附件，但在 Raw code 结尾放一个极简的标记能更稳妥触发 ST 扫描
-                    if (msg.serverPath) {
-                        text += `![](IMGDATA:${msg.serverPath})\n`;
-                    }
                 } else if (msgType === 'sticker') {
                     text += `[${sender}|图片|发送了一个表情包|${msg.label || '表情包'}|${time}]\n`;
                 } else if (msgType === 'voice') {
@@ -202,7 +196,7 @@ function initSillyPhoneUI() {
                     text += `[${sender}|${content}|${time}]\n`;
                 }
             });
-            
+
             if (isGroup) {
                 text += `</multi>\n`;
             } else {
@@ -244,7 +238,7 @@ function initSillyPhoneUI() {
             if (target.this_chid !== undefined) {
                 return 'sillyphone_data_char_' + target.this_chid;
             }
-        } catch (e) {}
+        } catch (e) { }
         return 'sillyphone_backup_data';
     }
 
@@ -262,7 +256,7 @@ function initSillyPhoneUI() {
         if (!chat) return;
 
         const raw = chat.message || '';
-        
+
         // 在同步前，确保当前激活账号的消息完整保留，保留当前会话的全部消息，不再截断
         const active = state.userAccounts.find(a => a.id === state.activeAccountId);
         if (active) {
@@ -312,12 +306,12 @@ function initSillyPhoneUI() {
         };
         try {
             localStorage.setItem(getStorageKey(), JSON.stringify(storageData));
-        } catch (e) {}
+        } catch (e) { }
 
         // --- 至简同步模式 ---
         // 直接输出纯净的 <shouji> 标签，不再包含任何隐藏 JSON 或 DIV 干扰原代码
         const shoujiTag = `<shouji>\n${textContent.trim()}\n</shouji>`;
-        
+
         let updatedMessage;
         if (raw.includes('<shouji>')) {
             // 兼容替换掉旧版的带有 div 的包裹，以及新版的干净 shouji 标签
@@ -345,8 +339,8 @@ function initSillyPhoneUI() {
         }
 
         // 更新酒馆原代码，并携带多模态附件
-        st.setChatMessages([{ 
-            message_id: msgId, 
+        st.setChatMessages([{
+            message_id: msgId,
             message: updatedMessage,
             extra: attachments.length > 0 ? { attachments: attachments } : {}
         }], { refresh: 'none' });
@@ -362,7 +356,7 @@ function initSillyPhoneUI() {
             let token = targetDoc.getElementById('csrf_token')?.value;
             if (token) return token;
             token = targetDoc.querySelector('meta[name="csrf-token"]')?.content ||
-                    targetDoc.querySelector('meta[name="csrf-token-value"]')?.content;
+                targetDoc.querySelector('meta[name="csrf-token-value"]')?.content;
             if (token) return token;
             const cookieMatch = targetDoc.cookie.match(/csrf_token=([^;]+)/);
             if (cookieMatch) return cookieMatch[1];
@@ -382,7 +376,7 @@ function initSillyPhoneUI() {
             extension: 'yuii-phone',
             settings: state.settings
         };
-        
+
         // 方案 1: 优先尝试调用父窗口的 jQuery.ajax (自带 CSRF)
         if (window.parent && window.parent.jQuery) {
             window.parent.jQuery.ajax({
@@ -405,7 +399,7 @@ function initSillyPhoneUI() {
         try {
             await fetch('/api/extensions/settings/v1', {
                 method: 'POST',
-                headers: { 
+                headers: {
                     'Content-Type': 'application/json',
                     'X-CSRF-Token': getCSRFToken()
                 },
@@ -480,7 +474,7 @@ function initSillyPhoneUI() {
                 const result = await response.json();
                 return result.imgText || null;
             }
-        } catch (e) {}
+        } catch (e) { }
         return null;
     }
 
@@ -502,15 +496,15 @@ function initSillyPhoneUI() {
 
     function parseAuthorFormat(rawText, defaultChatName = "未知会话", mode = "chat") {
         if (!rawText) rawText = '';
-        
+
         // 预处理 rawText：将各类 HTML 换行和分段替换回真实的 \n，并处理转义字符
         rawText = rawText.replace(/<br\s*\/?>/gi, '\n')
-                         .replace(/<\/p>\s*<p>/gi, '\n')
-                         .replace(/<p>/gi, '')
-                         .replace(/<\/p>/gi, '\n')
-                         .replace(/&lt;/g, '<')
-                         .replace(/&gt;/g, '>')
-                         .replace(/&amp;/g, '&');
+            .replace(/<\/p>\s*<p>/gi, '\n')
+            .replace(/<p>/gi, '')
+            .replace(/<\/p>/gi, '\n')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&amp;/g, '&');
 
         const data = {
             messages: {},
@@ -530,7 +524,7 @@ function initSillyPhoneUI() {
             let sender = parts[0];
             let time = '';
             let dataParts = [];
-            
+
             const lastPart = parts[parts.length - 1];
             if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(lastPart)) {
                 time = lastPart;
@@ -540,7 +534,7 @@ function initSillyPhoneUI() {
                 dataParts = parts.slice(1);
             }
 
-            let type = 'text';
+            let msgType = 'text';
             let content = '';
             let duration = '';
             let amount = undefined;
@@ -551,9 +545,9 @@ function initSillyPhoneUI() {
 
             if (dataParts.length === 1) {
                 const body = dataParts[0];
-                if (body.includes('转账') || body.includes('收账')) { 
-                    type = 'transfer'; 
-                    content = body; 
+                if (body.includes('转账') || body.includes('收账')) {
+                    msgType = 'transfer';
+                    content = body;
                     const amountMatch = body.match(/[\d.]+/);
                     amount = amountMatch ? parseFloat(amountMatch[0]).toFixed(2) : "0.00";
                     remark = '转账给你';
@@ -565,9 +559,9 @@ function initSillyPhoneUI() {
                         status = 'unreceived';
                     }
                 }
-                else if (body.includes('红包')) { 
-                    type = 'redpacket'; 
-                    content = body; 
+                else if (body.includes('红包')) {
+                    msgType = 'redpacket';
+                    content = body;
                     const amountMatch = body.match(/[\d.]+/);
                     amount = amountMatch ? parseFloat(amountMatch[0]).toFixed(2) : "0.00";
                     remark = '恭喜发财，大吉大利';
@@ -580,14 +574,23 @@ function initSillyPhoneUI() {
                     }
                 }
                 else { content = body; }
-            } else if (dataParts.length === 2) {
+            } else if (dataParts.length >= 2) {
                 const body = dataParts[0];
-                if (body === '图片') { type = 'image'; content = dataParts[1]; url = dataParts[1]; }
-                else if (body === '表情包') { 
-                    type = 'sticker'; 
+                if (body === '图片') { 
+                    msgType = 'photo'; 
+                    content = dataParts[1]; 
+                    url = dataParts[1]; 
+                    // 更加健壮的解析：识别 IMGDATA 和 FILENAME
+                    dataParts.forEach(p => {
+                        if (p.startsWith('IMGDATA:')) url = p;
+                        if (p.startsWith('FILENAME:')) label = p.replace('FILENAME:', '');
+                    });
+                }
+                else if (body === '表情包') {
+                    msgType = 'sticker';
                     label = dataParts[1] || '表情包';
-                    content = label; 
-                    
+                    content = label;
+
                     // 尝试根据标签名反向查找 URL，恢复视觉显示
                     let foundUrl = '';
                     if (state.stickers) {
@@ -599,12 +602,12 @@ function initSillyPhoneUI() {
                             }
                         }
                     }
-                    url = foundUrl; 
+                    url = foundUrl;
                 }
-                else if (body === '语音消息') { type = 'voice'; content = dataParts[1]; }
-                else if (body.includes('转账') || body.includes('收账')) { 
-                    type = 'transfer'; 
-                    content = body; 
+                else if (body === '语音消息') { msgType = 'voice'; content = dataParts[1]; }
+                else if (body.includes('转账') || body.includes('收账')) {
+                    msgType = 'transfer';
+                    content = body;
                     const amountMatch = body.match(/[\d.]+/);
                     amount = amountMatch ? parseFloat(amountMatch[0]).toFixed(2) : "0.00";
                     remark = dataParts[1] || '转账给你';
@@ -616,9 +619,9 @@ function initSillyPhoneUI() {
                         status = 'unreceived';
                     }
                 }
-                else if (body.includes('红包')) { 
-                    type = 'redpacket'; 
-                    content = body; 
+                else if (body.includes('红包')) {
+                    msgType = 'redpacket';
+                    content = body;
                     const amountMatch = body.match(/[\d.]+/);
                     amount = amountMatch ? parseFloat(amountMatch[0]).toFixed(2) : "0.00";
                     remark = dataParts[1] || '恭喜发财，大吉大利';
@@ -630,25 +633,21 @@ function initSillyPhoneUI() {
                         status = 'unreceived';
                     }
                 }
-                else if (body === '语音通话') { type = 'call'; content = dataParts[1]; }
-                else if (body === '语音未接听') { type = 'call-missed'; content = dataParts[1]; }
-                else if (body === '语音通话已挂断') { type = 'call-end'; duration = dataParts[1]; }
-                else if (body === '撤回消息') { type = 'recall'; content = dataParts[1]; }
-                else { content = dataParts[1]; }
-            } else if (dataParts.length === 3) {
-                const body = dataParts[0];
-                if (body === '语音消息') {
-                    type = 'voice';
+                else if (body === '语音通话') { msgType = 'call'; content = dataParts[1]; }
+                else if (body === '语音未接听') { msgType = 'call-missed'; content = dataParts[1]; }
+                else if (body === '语音通话已挂断') { msgType = 'call-end'; duration = dataParts[1]; }
+                else if (body === '撤回消息') { msgType = 'recall'; content = dataParts[1]; }
+                else { content = dataParts.length > 2 ? dataParts.slice(1).join('|') : dataParts[1]; }
+                
+                if (dataParts.length >= 3 && body === '语音消息') {
                     duration = dataParts[1];
-                    content = dataParts[2];
-                } else {
                     content = dataParts[2];
                 }
             } else {
                 content = dataParts.join('|');
             }
 
-            return { sender, time, type, content, duration, amount, remark, status, url, label };
+            return { sender, time, msgType, content, duration, amount, remark, status, url, label };
         };
 
         // 辅助函数：解析引用消息
@@ -662,7 +661,7 @@ function initSillyPhoneUI() {
             let time = '';
             let quote = '';
             let content = '';
-            
+
             const lastPart = parts[parts.length - 1];
             if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(lastPart)) {
                 time = lastPart;
@@ -692,9 +691,9 @@ function initSillyPhoneUI() {
             const content = pMatch[1];
             const titleMatch = content.match(/【和(.*?)的聊天】/);
             const chatName = titleMatch ? titleMatch[1].trim() : defaultChatName;
-            
+
             if (!data.messages[chatName]) data.messages[chatName] = [];
-            
+
             // 匹配各种消息格式
             const msgLines = content.split('\n');
             msgLines.forEach(line => {
@@ -723,9 +722,9 @@ function initSillyPhoneUI() {
             const content = qMatch[1];
             const titleMatch = content.match(/【和 (.*?)的聊天】/);
             const groupName = titleMatch ? titleMatch[1].trim() : defaultChatName;
-            
+
             if (!data.messages[groupName]) data.messages[groupName] = [];
-            
+
             // 群聊逻辑与私聊类似，只是多了成员识别
             const msgLines = content.split('\n');
             msgLines.forEach(line => {
@@ -736,7 +735,7 @@ function initSillyPhoneUI() {
                         ...msgData
                     });
                 }
-                
+
                 const quoteData = parseQuoteLine(line);
                 if (quoteData && quoteData.sender !== '群成员') {
                     data.messages[groupName].push({
@@ -762,7 +761,7 @@ function initSillyPhoneUI() {
                         let content = '';
                         let time = '';
                         let userAvatar = '';
-                        
+
                         const lastPart = parts[parts.length - 1];
                         if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(lastPart)) {
                             time = lastPart;
@@ -808,7 +807,7 @@ function initSillyPhoneUI() {
                                 const commentAuthor = cParts[0];
                                 // 过滤掉角色自己评论自己，以及 AI 扮演“我”进行评论的情况
                                 const isUser = commentAuthor === state.userName || commentAuthor === state.stUserName || commentAuthor === '我' || commentAuthor === 'user';
-                                
+
                                 let commentTime = '';
                                 const cLastPart = cParts[cParts.length - 1];
                                 if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(cLastPart)) {
@@ -850,9 +849,9 @@ function initSillyPhoneUI() {
         if (!hasTags) {
             const lines = rawText.split('\n').map(l => l.trim()).filter(l => l);
             let hasParsedAny = false;
-            
+
             if (!data.messages[defaultChatName]) data.messages[defaultChatName] = [];
-            
+
             let currentMoment = null;
 
             lines.forEach(line => {
@@ -863,7 +862,7 @@ function initSillyPhoneUI() {
                         const cParts = c[1].split('|');
                         const commentAuthor = cParts[0];
                         const isUser = commentAuthor === state.userName || commentAuthor === state.stUserName || commentAuthor === '我' || commentAuthor === 'user';
-                        
+
                         let commentTime = '';
                         const cLastPart = cParts[cParts.length - 1];
                         if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(cLastPart)) {
@@ -899,7 +898,7 @@ function initSillyPhoneUI() {
                             let content = '';
                             let time = '';
                             let userAvatar = '';
-                            
+
                             const lastPart = parts[parts.length - 1];
                             if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(lastPart)) {
                                 time = lastPart;
@@ -926,7 +925,7 @@ function initSillyPhoneUI() {
                                     }
                                 }
                             }
-                            
+
                             currentMoment = {
                                 id: 'mom_' + Math.random().toString(36).substr(2, 9),
                                 authorId: getContactIdByName(userName),
@@ -989,7 +988,7 @@ function initSillyPhoneUI() {
                             ...msgData
                         });
                     }
-                    
+
                     const quoteData = parseQuoteLine(line);
                     if (quoteData) {
                         hasParsedAny = true;
@@ -1000,7 +999,7 @@ function initSillyPhoneUI() {
                     }
                 }
             });
-            
+
             // Re-process comments to ensure they have IDs
             if (data.moments) {
                 data.moments.forEach(m => {
@@ -1012,7 +1011,7 @@ function initSillyPhoneUI() {
                     }
                 });
             }
-            
+
             if (!hasParsedAny) {
                 delete data.messages[defaultChatName];
             }
@@ -1045,7 +1044,7 @@ function initSillyPhoneUI() {
         let combinedMoments = [];
         let settings = null;
         let userAccounts = null;
-        
+
         let foundShouji = false;
         let latestRawAIMessage = null;
 
@@ -1087,14 +1086,14 @@ function initSillyPhoneUI() {
 
             if (shoujiContent !== null) {
                 foundShouji = true;
-                
+
                 // 判断当前扫描的层是否属于“历史记录”（即在本次打开手机之前的层）
                 const isHistoryTurn = targetId < state.sessionStartMsgId;
-                
+
                 // 尝试提取隐藏的 JSON 备份 (兼容老数据)
                 const backupMatch = shoujiContent.match(/<!-- SILLYPHONE_DATA_START\n([\s\S]*?)\nSILLYPHONE_DATA_END -->/);
                 let data = null;
-                
+
                 if (backupMatch) {
                     try {
                         data = JSON.parse(backupMatch[1]);
@@ -1103,7 +1102,7 @@ function initSillyPhoneUI() {
                     // 兼容旧版本：整个内容都是 JSON
                     try {
                         data = JSON.parse(shoujiContent);
-                    } catch (e) {}
+                    } catch (e) { }
                 }
 
                 if (data) {
@@ -1114,7 +1113,7 @@ function initSillyPhoneUI() {
                         state.activeAccountId = data.activeAccountId;
                         state.stickers = data.stickers || state.stickers;
                     }
-                    
+
                     // 标记加载的消息为历史记录
                     if (data.userAccounts) {
                         data.userAccounts.forEach(acc => {
@@ -1153,7 +1152,7 @@ function initSillyPhoneUI() {
 
                 // 无论有没有 JSON 备份，都尝试解析文本格式的消息和朋友圈
                 const textData = parseAuthorFormat(shoujiContent);
-                
+
                 // 辅助函数：通过名字查找联系人ID
                 const getContactIdByName = (name) => {
                     if (userAccounts) {
@@ -1173,7 +1172,7 @@ function initSillyPhoneUI() {
                 for (const cid in textData.messages) {
                     let effectiveCid = cid;
                     let realCid = getContactIdByName(effectiveCid);
-                    
+
                     // 如果 cid 是用户自己，说明 AI 搞反了视角（比如生成了【和林钰如的聊天】）
                     if (effectiveCid === state.userName || effectiveCid === '我' || effectiveCid === 'user' || effectiveCid === 'me' || effectiveCid === state.wechatId || (state.stUserName && effectiveCid === state.stUserName)) {
                         // 寻找不是用户的发送者
@@ -1189,20 +1188,20 @@ function initSillyPhoneUI() {
                             realCid = state.currentChat.id;
                         }
                     }
-                    
+
                     // 判断是否是群聊
                     const isGroup = effectiveCid.includes('群聊') || textData.messages[cid].some(m => m.sender && m.sender !== effectiveCid && m.sender !== '我' && m.sender !== '我方消息' && m.sender !== '系统消息' && m.sender !== state.userName && m.sender !== state.wechatId);
-                    
+
                     const formattedMsgs = textData.messages[cid].map(m => {
                         let senderName = m.sender || effectiveCid;
                         // 严谨逻辑：仅匹配当前昵称、微信号、酒馆用户名或系统默认标识
-                        const isUser = senderName === state.userName || 
-                                       senderName === '我' || 
-                                       senderName === 'user' || 
-                                       senderName === 'me' || 
-                                       senderName === state.wechatId || 
-                                       (state.stUserName && senderName === state.stUserName);
-                        
+                        const isUser = senderName === state.userName ||
+                            senderName === '我' ||
+                            senderName === 'user' ||
+                            senderName === 'me' ||
+                            senderName === state.wechatId ||
+                            (state.stUserName && senderName === state.stUserName);
+
                         if (isUser) {
                             senderName = state.userName; // 统一使用当前用户名
                         } else if (!isGroup) {
@@ -1257,7 +1256,7 @@ function initSillyPhoneUI() {
                         });
                         combinedMessages[realCid] = [...historyToAdd, ...combinedMessages[realCid]];
                     }
-                    
+
                     // 自动从解析的文本数据中恢复联系人和群组（如果本地没有）
                     if (isGroup) {
                         if (!state.groups.find(g => g.name === cid || g.id === realCid)) {
@@ -1338,7 +1337,7 @@ function initSillyPhoneUI() {
                 state.userName = active.name;
                 state.userAvatar = active.avatar;
                 state.wechatId = active.wechatId;
-                
+
                 // 继承合并后的联系人和群组
                 state.contacts = active.contacts || [];
                 state.groups = active.groups || [];
@@ -1349,18 +1348,18 @@ function initSillyPhoneUI() {
             // 那么在身份更新后，我们需要确保 combinedMessages 里的 isUser 判定是准确的。
             // 实际上，更稳妥的做法是在解析循环前就完成身份确立。
             // 我们已经在循环前通过 localStorage 尝试确立了，但 JSON 备份里的可能更新。
-            
+
             // 重新扫描一遍 combinedMessages 纠正 type
             for (const cid in combinedMessages) {
                 combinedMessages[cid].forEach(m => {
                     const senderName = m.originalSender || m.senderName;
-                    const isUser = senderName === state.userName || 
-                                   senderName === '我' || 
-                                   senderName === 'user' || 
-                                   senderName === 'me' || 
-                                   senderName === state.wechatId || 
-                                   (state.stUserName && senderName === state.stUserName);
-                    
+                    const isUser = senderName === state.userName ||
+                        senderName === '我' ||
+                        senderName === 'user' ||
+                        senderName === 'me' ||
+                        senderName === state.wechatId ||
+                        (state.stUserName && senderName === state.stUserName);
+
                     if (isUser) {
                         m.type = 'user';
                         m.senderId = 'user';
@@ -1387,15 +1386,15 @@ function initSillyPhoneUI() {
 
             state.messages = combinedMessages;
             state.moments = combinedMoments;
-            
+
             // 处理 raw AI message
             if (latestRawAIMessage && state.currentChat) {
                 const chatId = state.currentChat.id;
                 if (!state.messages[chatId]) state.messages[chatId] = [];
-                
+
                 let reply = latestRawAIMessage.message.trim();
                 let aiSenderId = state.currentChat.id;
-                
+
                 if (state.currentChat.isGroup && latestRawAIMessage.name) {
                     const member = state.currentChat.members.find(m => m.name === latestRawAIMessage.name);
                     if (member) {
@@ -1404,10 +1403,10 @@ function initSillyPhoneUI() {
                         aiSenderId = state.currentChat.members[0]?.id || state.currentChat.id;
                     }
                 }
-                
+
                 const msgLines = reply.split('\n');
                 let textBuffer = [];
-                
+
                 const flushTextBuffer = () => {
                     if (textBuffer.length > 0) {
                         let text = textBuffer.join('\n').trim();
@@ -1420,11 +1419,11 @@ function initSillyPhoneUI() {
                             const leaveMatch = text.match(/\[ACTION:LEAVE\]/);
 
                             text = text.replace(/\[TRANSFER:[\d.]+\]/g, '')
-                                         .replace(/\[REDPACKET:[\d.]+\]/g, '')
-                                         .replace(/\[ACCEPT_TRANSFER\]/g, '')
-                                         .replace(/\[RETURN_TRANSFER\]/g, '')
-                                         .replace(/\[ACTION:LEAVE\]/g, '')
-                                         .trim();
+                                .replace(/\[REDPACKET:[\d.]+\]/g, '')
+                                .replace(/\[ACCEPT_TRANSFER\]/g, '')
+                                .replace(/\[RETURN_TRANSFER\]/g, '')
+                                .replace(/\[ACTION:LEAVE\]/g, '')
+                                .trim();
 
                             if (text) {
                                 const newMsg = {
@@ -1524,14 +1523,14 @@ function initSillyPhoneUI() {
                                     formattedSenderId = state.currentChat.members[0]?.id || state.currentChat.id;
                                 }
                             }
-                            
+
                             // 严谨逻辑：仅匹配当前昵称、微信号、酒馆用户名或系统默认标识
-                            const isUser = senderName === state.userName || 
-                                           senderName === '我' || 
-                                           senderName === 'user' || 
-                                           senderName === 'me' || 
-                                           senderName === state.wechatId || 
-                                           (state.stUserName && senderName === state.stUserName);
+                            const isUser = senderName === state.userName ||
+                                senderName === '我' ||
+                                senderName === 'user' ||
+                                senderName === 'me' ||
+                                senderName === state.wechatId ||
+                                (state.stUserName && senderName === state.stUserName);
 
                             const lastPart = parts[parts.length - 1];
                             let timeStr;
@@ -1551,11 +1550,11 @@ function initSillyPhoneUI() {
                                 time: timeStr,
                                 type: isUser ? 'user' : 'ai'
                             };
-                            
+
                             let typeStr = 'text';
                             let contentStr = '';
                             let durationStr = '';
-                            
+
                             if (dataParts.length === 1) {
                                 contentStr = dataParts[0];
                             } else if (dataParts.length === 2) {
@@ -1567,73 +1566,73 @@ function initSillyPhoneUI() {
                                 durationStr = dataParts[2];
                             }
 
-                        if (typeStr === '图片') {
-                            msg.msgType = 'photo';
-                            msg.url = contentStr;
-                        } else if (typeStr === '表情包') {
-                            msg.msgType = 'sticker';
-                            msg.url = contentStr;
-                        } else if (typeStr === '语音消息' || typeStr === '语音') {
-                            msg.msgType = 'voice';
-                            msg.duration = parseInt(contentStr) || 0;
-                        } else if (typeStr.includes('转账') || typeStr.includes('收账') || contentStr.includes('转账') || contentStr.includes('收账')) {
-                            msg.msgType = 'transfer';
-                            msg.text = typeStr === 'text' ? contentStr : typeStr;
-                            const amountMatch = (typeStr + ' ' + contentStr).match(/[\d.]+/);
-                            msg.amount = amountMatch ? parseFloat(amountMatch[0]).toFixed(2) : "0.00";
-                            
-                            // Check if contentStr is a time string like "23:44"
-                            const isTimeStr = /^\d{1,2}:\d{2}$/.test(contentStr);
-                            msg.remark = typeStr === 'text' ? '转账给你' : (isTimeStr ? '转账给你' : (contentStr || '转账给你'));
-                            
-                            const fullText = typeStr + ' ' + contentStr;
-                            if (fullText.includes('退回')) {
-                                msg.status = 'returned';
-                            } else if (fullText.includes('收账')) {
-                                msg.status = 'received';
+                            if (typeStr === '图片') {
+                                msg.msgType = 'photo';
+                                msg.url = contentStr;
+                            } else if (typeStr === '表情包') {
+                                msg.msgType = 'sticker';
+                                msg.url = contentStr;
+                            } else if (typeStr === '语音消息' || typeStr === '语音') {
+                                msg.msgType = 'voice';
+                                msg.duration = parseInt(contentStr) || 0;
+                            } else if (typeStr.includes('转账') || typeStr.includes('收账') || contentStr.includes('转账') || contentStr.includes('收账')) {
+                                msg.msgType = 'transfer';
+                                msg.text = typeStr === 'text' ? contentStr : typeStr;
+                                const amountMatch = (typeStr + ' ' + contentStr).match(/[\d.]+/);
+                                msg.amount = amountMatch ? parseFloat(amountMatch[0]).toFixed(2) : "0.00";
+
+                                // Check if contentStr is a time string like "23:44"
+                                const isTimeStr = /^\d{1,2}:\d{2}$/.test(contentStr);
+                                msg.remark = typeStr === 'text' ? '转账给你' : (isTimeStr ? '转账给你' : (contentStr || '转账给你'));
+
+                                const fullText = typeStr + ' ' + contentStr;
+                                if (fullText.includes('退回')) {
+                                    msg.status = 'returned';
+                                } else if (fullText.includes('收账')) {
+                                    msg.status = 'received';
+                                } else {
+                                    msg.status = 'unreceived';
+                                }
+                            } else if (typeStr.includes('红包') || contentStr.includes('红包')) {
+                                msg.msgType = 'red-packet';
+                                msg.text = typeStr === 'text' ? contentStr : typeStr;
+                                const amountMatch = (typeStr + ' ' + contentStr).match(/[\d.]+/);
+                                msg.amount = amountMatch ? parseFloat(amountMatch[0]).toFixed(2) : "0.00";
+
+                                const isTimeStr = /^\d{1,2}:\d{2}$/.test(contentStr);
+                                msg.remark = typeStr === 'text' ? '恭喜发财，大吉大利' : (isTimeStr ? '恭喜发财，大吉大利' : (contentStr || '恭喜发财，大吉大利'));
+
+                                msg.count = 1;
+                                msg.grabRecords = [];
+                                msg.remainingAmount = 0;
+                                msg.remainingCount = 0;
+                                const fullText = typeStr + ' ' + contentStr;
+                                if (fullText.includes('退回')) {
+                                    msg.status = 'returned';
+                                } else if (fullText.includes('领') || fullText.includes('收')) {
+                                    msg.status = 'received';
+                                } else {
+                                    msg.status = 'unreceived';
+                                }
+                            } else if (typeStr === '语音通话') {
+                                msg.msgType = 'call';
+                                msg.text = contentStr;
+                            } else if (typeStr === '语音通话已挂断') {
+                                msg.msgType = 'call-end';
+                                msg.duration = durationStr || contentStr;
+                            } else if (typeStr === '撤回消息') {
+                                msg.msgType = 'recall';
+                                msg.text = contentStr;
                             } else {
-                                msg.status = 'unreceived';
+                                msg.text = contentStr;
                             }
-                        } else if (typeStr.includes('红包') || contentStr.includes('红包')) {
-                            msg.msgType = 'red-packet';
-                            msg.text = typeStr === 'text' ? contentStr : typeStr;
-                            const amountMatch = (typeStr + ' ' + contentStr).match(/[\d.]+/);
-                            msg.amount = amountMatch ? parseFloat(amountMatch[0]).toFixed(2) : "0.00";
-                            
-                            const isTimeStr = /^\d{1,2}:\d{2}$/.test(contentStr);
-                            msg.remark = typeStr === 'text' ? '恭喜发财，大吉大利' : (isTimeStr ? '恭喜发财，大吉大利' : (contentStr || '恭喜发财，大吉大利'));
-                            
-                            msg.count = 1;
-                            msg.grabRecords = [];
-                            msg.remainingAmount = 0;
-                            msg.remainingCount = 0;
-                            const fullText = typeStr + ' ' + contentStr;
-                            if (fullText.includes('退回')) {
-                                msg.status = 'returned';
-                            } else if (fullText.includes('领') || fullText.includes('收')) {
-                                msg.status = 'received';
-                            } else {
-                                msg.status = 'unreceived';
+
+                            if (msg.type !== 'user') {
+                                msg.isTypingPending = true;
+                                if (!state.typingQueue) state.typingQueue = [];
+                                state.typingQueue.push(msg);
                             }
-                        } else if (typeStr === '语音通话') {
-                            msg.msgType = 'call';
-                            msg.text = contentStr;
-                        } else if (typeStr === '语音通话已挂断') {
-                            msg.msgType = 'call-end';
-                            msg.duration = durationStr || contentStr;
-                        } else if (typeStr === '撤回消息') {
-                            msg.msgType = 'recall';
-                            msg.text = contentStr;
-                        } else {
-                            msg.text = contentStr;
-                        }
-                        
-                        if (msg.type !== 'user') {
-                            msg.isTypingPending = true;
-                            if (!state.typingQueue) state.typingQueue = [];
-                            state.typingQueue.push(msg);
-                        }
-                        state.messages[chatId].push(msg);
+                            state.messages[chatId].push(msg);
                         } else {
                             textBuffer.push(line);
                         }
@@ -1643,7 +1642,7 @@ function initSillyPhoneUI() {
                 });
 
                 flushTextBuffer();
-                
+
                 saveMessagesToLocalStorage();
                 deferredSync();
             }
@@ -1652,7 +1651,7 @@ function initSillyPhoneUI() {
             renderChatList();
             renderContactsList();
             renderMomentsList();
-            
+
             if (typeof window.processTypingQueue === 'function') {
                 window.processTypingQueue();
             }
@@ -1668,10 +1667,10 @@ function initSillyPhoneUI() {
         const s = state.settings;
         if (s.globalBg) screen.style.backgroundImage = `url(${s.globalBg})`;
         document.getElementById('chat-bg-layer').style.backgroundImage = s.chatBg ? `url(${s.chatBg})` : '';
-        
+
         const activeAccount = state.userAccounts.find(acc => acc.id === state.activeAccountId) || state.userAccounts[0];
         document.getElementById('moments-user-bg').src = s.momentsBg || activeAccount.momentsBg || 'https://files.catbox.moe/smqrt7.jpg';
-        
+
         screen.style.setProperty('--blur-intensity', `${s.blur}px`);
         screen.style.setProperty('--bubble-blur', `${s.bubbleBlur}px`);
         screen.style.setProperty('--nav-blur', `${s.navBlur}px`);
@@ -1704,13 +1703,13 @@ function initSillyPhoneUI() {
         // 更新朋友圈头部显示
         const momentsUserName = document.getElementById('moments-user-name');
         const momentsUserAvatar = document.getElementById('moments-user-avatar');
-        
+
         if (momentsUserName) momentsUserName.textContent = state.userName;
         if (momentsUserAvatar) momentsUserAvatar.src = state.userAvatar;
 
         renderPresetList();
 
-        if(typeof lucide !== 'undefined') lucide.createIcons();
+        if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 
     // 防抖同步
@@ -1723,7 +1722,7 @@ function initSillyPhoneUI() {
     // 获取头像 HTML (支持微信风格群头像)
     function getAvatarHtml(chat, size = 41) {
         if (!chat) return '';
-        
+
         const isGroup = chat.isGroup;
         const avatar = chat.avatar;
         const isDefaultGroupAvatar = avatar === 'https://files.catbox.moe/blaehb.jpg';
@@ -1738,7 +1737,7 @@ function initSillyPhoneUI() {
         const members = chat.members || [];
         const displayMembers = members.slice(0, 9);
         const count = displayMembers.length;
-        
+
         if (count === 0) {
             return `<img src="${avatar}" referrerpolicy="no-referrer" class="avatar" style="width: ${size}px; height: ${size}px; border-radius: 8px; object-fit: cover;">`;
         }
@@ -1746,16 +1745,16 @@ function initSillyPhoneUI() {
         // 根据成员数量决定布局
         let gridCols = 2;
         if (count > 4) gridCols = 3;
-        
+
         const gap = 1;
         const padding = 1;
-        
+
         let html = `<div class="group-avatar-composite" style="width: ${size}px; height: ${size}px; background: #e0e0e0; border-radius: 8px; display: grid; grid-template-columns: repeat(${gridCols}, 1fr); gap: ${gap}px; padding: ${padding}px; box-sizing: border-box; align-content: center; justify-items: center; overflow: hidden;">`;
-        
+
         displayMembers.forEach(m => {
             html += `<img src="${m.avatar}" referrerpolicy="no-referrer" style="width: 100%; height: 100%; object-fit: cover; border-radius: 1px;">`;
         });
-        
+
         html += `</div>`;
         return html;
     }
@@ -1780,7 +1779,7 @@ function initSillyPhoneUI() {
     const toggleVoiceBtn = document.getElementById('toggle-voice');
     const chatPanels = document.querySelectorAll('.chat-panel');
     const closePanelBtns = document.querySelectorAll('.close-panel');
-    
+
     const panelFunctions = document.getElementById('panel-functions');
     const panelPhoto = document.getElementById('panel-photo');
     const panelSticker = document.getElementById('panel-sticker');
@@ -1885,7 +1884,7 @@ function initSillyPhoneUI() {
             item.style.display = 'flex';
             item.style.alignItems = 'center';
             item.style.justifyContent = 'center';
-            
+
             item.onclick = () => {
                 if (opt.disabled) return;
                 modal.style.display = 'none';
@@ -1901,12 +1900,12 @@ function initSillyPhoneUI() {
         content.appendChild(cancelBtn);
 
         modal.style.display = 'flex';
-        if (typeof lucide !== 'undefined') if(typeof lucide !== 'undefined') lucide.createIcons();
+        if (typeof lucide !== 'undefined') if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 
     function switchAccount() {
         const options = [];
-        
+
         // 1. 当前账号 (只显示，不可点击)
         const currentAcc = state.userAccounts.find(acc => acc.id === state.activeAccountId);
         if (currentAcc) {
@@ -1929,7 +1928,7 @@ function initSillyPhoneUI() {
 
         // 3. 分隔线
         options.push({ isSeparator: true });
-        
+
         // 4. 管理操作
         options.push({
             text: '+ 新建小号',
@@ -1991,7 +1990,7 @@ function initSillyPhoneUI() {
         setTimeout(() => {
             state.activeAccountId = accountId;
             const active = state.userAccounts.find(a => a.id === accountId);
-            
+
             state.userName = active.name;
             state.userAvatar = active.avatar;
             state.wechatId = active.wechatId;
@@ -2030,13 +2029,13 @@ function initSillyPhoneUI() {
     function factoryReset() {
         // 清除所有数据
         state.userAccounts = [
-            { 
-                id: 'user_main', 
-                name: '我', 
-                avatar: 'https://files.catbox.moe/blaehb.jpg', 
-                wechatId: 'wxid_sillyphone', 
-                momentsBg: 'https://files.catbox.moe/smqrt7.jpg', 
-                contacts: [], 
+            {
+                id: 'user_main',
+                name: '我',
+                avatar: 'https://files.catbox.moe/blaehb.jpg',
+                wechatId: 'wxid_sillyphone',
+                momentsBg: 'https://files.catbox.moe/smqrt7.jpg',
+                contacts: [],
                 groups: [],
                 messages: {},
                 moments: []
@@ -2097,7 +2096,7 @@ function initSillyPhoneUI() {
             <span>${text}</span>
         `;
         toastContainer.appendChild(toast);
-        if(typeof lucide !== 'undefined') lucide.createIcons();
+        if (typeof lucide !== 'undefined') lucide.createIcons();
 
         setTimeout(() => {
             toast.classList.add('fade-out');
@@ -2147,7 +2146,7 @@ function initSillyPhoneUI() {
     function renderPresetList() {
         if (!presetList) return;
         presetList.innerHTML = '';
-        
+
         if (!state.presets || state.presets.length === 0) {
             presetList.innerHTML = '<div style="color: rgba(255,255,255,0.5); font-size: 12px; text-align: center; padding: 10px;">暂无预设，点击上方添加</div>';
             return;
@@ -2180,7 +2179,7 @@ function initSillyPhoneUI() {
             toggleBtn.style.position = 'relative';
             toggleBtn.style.cursor = 'pointer';
             toggleBtn.style.transition = 'background 0.3s';
-            
+
             const toggleKnob = document.createElement('div');
             toggleKnob.style.width = '16px';
             toggleKnob.style.height = '16px';
@@ -2242,7 +2241,7 @@ function initSillyPhoneUI() {
             item.appendChild(rightDiv);
             presetList.appendChild(item);
         });
-        if(typeof lucide !== 'undefined') lucide.createIcons();
+        if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 
     function openPresetModal(presetId = null) {
@@ -2270,7 +2269,7 @@ function initSillyPhoneUI() {
     function savePreset() {
         const name = presetNameInput.value.trim();
         const content = presetContentInput.value.trim();
-        
+
         if (!name) {
             showToast('请输入预设名称', 'alert-circle');
             return;
@@ -2327,7 +2326,7 @@ function initSillyPhoneUI() {
             try {
                 const importedData = JSON.parse(e.target.result);
                 let presetsToImport = [];
-                
+
                 if (Array.isArray(importedData)) {
                     presetsToImport = importedData;
                 } else if (importedData && Array.isArray(importedData.items)) {
@@ -2336,7 +2335,7 @@ function initSillyPhoneUI() {
 
                 if (presetsToImport.length > 0) {
                     if (!state.presets) state.presets = [];
-                    
+
                     // 简单的合并逻辑，避免ID冲突
                     presetsToImport.forEach(imported => {
                         if (imported.name && imported.content) {
@@ -2350,7 +2349,7 @@ function initSillyPhoneUI() {
                             });
                         }
                     });
-                    
+
                     syncToSillyTavern();
                     renderPresetList();
                     showToast('预设导入成功');
@@ -2394,7 +2393,7 @@ function initSillyPhoneUI() {
         // 合并联系人和世界书角色
         const friends = state.contacts.filter(c => c.status === 'added').map(c => ({ ...c, isContact: true }));
         const worldChars = state.worldBook.map(c => ({ ...c, isContact: false }));
-        
+
         let allChars = [];
         if (filterType === 'friends') {
             allChars = friends;
@@ -2457,7 +2456,7 @@ function initSillyPhoneUI() {
     // 格式化消息内容，识别 (IMG:...) 格式并渲染为卡片，同时处理 @ 提及高亮
     function formatContent(text) {
         if (!text) return '';
-        
+
         // 1. 处理 @ 提及高亮 (类似 QQ 空间/微信)
         // 匹配 @ 后面跟非空白字符，直到遇到空格或标点符号
         text = text.replace(/@([^\s@\n\r\t,.:;!?，。：；！？]+)/g, '<span class="mention-highlight">@$1</span>');
@@ -2487,7 +2486,7 @@ function initSillyPhoneUI() {
         const content = document.getElementById('text-img-full-content');
         content.textContent = fullText;
         modal.style.display = 'flex';
-        if(typeof lucide !== 'undefined') lucide.createIcons();
+        if (typeof lucide !== 'undefined') lucide.createIcons();
     };
 
     document.getElementById('close-text-img-modal').onclick = () => {
@@ -2557,7 +2556,7 @@ function initSillyPhoneUI() {
         const momentsUserName = document.getElementById('moments-user-name');
         const momentsUserAvatar = document.getElementById('moments-user-avatar');
         const momentsUserBg = document.getElementById('moments-user-bg');
-        
+
         if (momentsUserName) momentsUserName.textContent = state.userName;
         if (momentsUserAvatar) momentsUserAvatar.src = state.userAvatar;
         if (momentsUserBg) momentsUserBg.src = newMomentsBg;
@@ -2594,21 +2593,21 @@ function initSillyPhoneUI() {
             state.currentChat = null;
             try {
                 sessionStorage.removeItem('sillyphone-currentChatId');
-            } catch (e) {}
+            } catch (e) { }
         }
         pages.forEach(p => p.classList.remove('active'));
         const target = document.getElementById(`page-${pageId}`);
         if (target) target.classList.add('active');
-        
+
         navItems.forEach(item => {
             item.classList.toggle('active', item.dataset.page === pageId);
         });
         state.currentPage = pageId;
-        
+
         // 保存当前页面状态，防止切换原始代码后重置
         try {
             sessionStorage.setItem('sillyphone-currentPage', pageId);
-        } catch (e) {}
+        } catch (e) { }
 
         if (pageId === 'contacts') {
             renderContactsList();
@@ -2629,7 +2628,7 @@ function initSillyPhoneUI() {
         if (pageId === 'chat-window' || pageId === 'chat-info' || pageId === 'my-friends') {
             bottomNav.style.display = 'none';
             mainContent.classList.remove('has-bottom-nav');
-            
+
             // 处理上帝视角 (仅聊天窗口)
             if (pageId === 'chat-window') {
                 if (state.currentChat && state.currentChat.isGroup && state.currentChat.godMode) {
@@ -2669,7 +2668,7 @@ function initSillyPhoneUI() {
             directBtn.style.color = 'white';
             confirmBtn.textContent = '发送申请';
         }
-        
+
         document.getElementById('search-result-container').innerHTML = '';
     }
 
@@ -2703,7 +2702,7 @@ function initSillyPhoneUI() {
                     }
                 });
             });
-            
+
             // 如果没有匹配到，或者为了让用户可以直接添加任意名字，我们始终提供一个基于输入名字的选项
             if (!matched) {
                 results.push({
@@ -2737,7 +2736,7 @@ function initSillyPhoneUI() {
         results.forEach(res => {
             const isAlreadyAdded = state.contacts.find(c => c.id === res.id && c.status === 'added');
             const isAlreadyRequested = state.contacts.find(c => c.id === res.id && c.status === 'pending');
-            
+
             const div = document.createElement('div');
             div.className = 'search-result-item';
             div.style.cssText = 'background: rgba(255,255,255,0.05); border-radius: 14px; padding: 12px; display: flex; align-items: center; margin-top: 10px; border: 1px solid rgba(255,255,255,0.1); cursor: pointer; transition: all 0.2s;';
@@ -2752,13 +2751,13 @@ function initSillyPhoneUI() {
                 </div>
             `;
             container.appendChild(div);
-            
+
             div.onclick = () => {
                 document.querySelectorAll('.search-result-item').forEach(i => i.style.borderColor = 'rgba(255,255,255,0.1)');
                 div.style.borderColor = 'rgba(255,255,255,0.5)';
                 state.selectedSearchRes = res;
             };
-            
+
             if (results.length === 1) {
                 div.style.borderColor = 'rgba(255,255,255,0.5)';
                 state.selectedSearchRes = res;
@@ -2775,7 +2774,7 @@ function initSillyPhoneUI() {
                 showToast('请输入角色姓名', 'alert-circle');
                 return;
             }
-            
+
             let res = state.selectedSearchRes;
             // 如果没有选中任何结果，直接使用输入框的内容创建一个自定义角色
             if (!res) {
@@ -2806,7 +2805,7 @@ function initSillyPhoneUI() {
                 lastMsg: '我们已经是好友了，开始聊天吧！'
             });
             showToast(`已成功添加 ${res.name}`, 'user-check');
-            
+
             document.getElementById('add-friend-modal').style.display = 'none';
             document.getElementById('friend-search-input').value = '';
             state.selectedSearchRes = null;
@@ -2895,11 +2894,11 @@ function initSillyPhoneUI() {
                     item.classList.add('selected');
                     item.querySelector('.check-icon').style.display = 'block';
                 }
-                if(typeof lucide !== 'undefined') lucide.createIcons();
+                if (typeof lucide !== 'undefined') lucide.createIcons();
             };
             memberSelectList.appendChild(item);
         });
-        if(typeof lucide !== 'undefined') lucide.createIcons();
+        if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 
     confirmCreateGroupBtn.onclick = () => {
@@ -2915,7 +2914,7 @@ function initSillyPhoneUI() {
 
         const groupId = 'group_' + Date.now();
         const members = selectedMembers.map(id => state.contacts.find(c => c.id === id));
-        
+
         // 将自己加入群聊成员列表 (上帝视角不加入)
         if (!godModeToggle.checked) {
             members.push({
@@ -2925,7 +2924,7 @@ function initSillyPhoneUI() {
                 isUser: true
             });
         }
-        
+
         const newGroup = {
             id: groupId,
             name: name,
@@ -2998,12 +2997,12 @@ function initSillyPhoneUI() {
             item.onclick = () => openChat(g);
             list.appendChild(item);
         });
-        if(typeof lucide !== 'undefined') lucide.createIcons();
+        if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 
     function renderChatList() {
         chatList.innerHTML = '';
-        
+
         // 合并单聊和群聊
         const allChats = [
             ...state.contacts.filter(c => c.status === 'added'),
@@ -3061,13 +3060,13 @@ function initSillyPhoneUI() {
     function renderMomentsList() {
         const momentsList = document.getElementById('moments-list');
         if (!momentsList) return;
-        
+
         momentsList.innerHTML = '';
-        
+
         state.moments.forEach(moment => {
             const item = document.createElement('div');
             item.className = 'moment-item';
-            
+
             // 长按删除朋友圈
             let momentPressTimer;
             const startMomentPress = (e) => {
@@ -3088,12 +3087,12 @@ function initSillyPhoneUI() {
             const imagesHtml = (moment.images && moment.images.length > 0) ? `
                 <div class="moment-images ${moment.images.length === 1 ? 'single' : ''}">
                     ${moment.images.map(img => {
-                        const isData = img.startsWith('data:') || img.startsWith('http');
-                        if (isData) {
-                            return `<img src="${img}" referrerpolicy="no-referrer" class="previewable-img">`;
-                        } else {
-                            const safeDesc = img.replace(/"/g, '&quot;');
-                            return `
+                const isData = img.startsWith('data:') || img.startsWith('http');
+                if (isData) {
+                    return `<img src="${img}" referrerpolicy="no-referrer" class="previewable-img">`;
+                } else {
+                    const safeDesc = img.replace(/"/g, '&quot;');
+                    return `
                                 <div class="text-img-card" data-full-text="${safeDesc}" onclick="window.openTextImgDetail(this)">
                                     <div class="text-img-header">
                                         <i data-lucide="image" size="10"></i>
@@ -3102,17 +3101,17 @@ function initSillyPhoneUI() {
                                     <div class="text-img-body">${img}</div>
                                 </div>
                             `;
-                        }
-                    }).join('')}
+                }
+            }).join('')}
                 </div>
             ` : '';
-            
+
             const commentsHtml = (moment.comments && moment.comments.length > 0) ? `
                 <div class="comments-list">
                     ${moment.comments.map(c => {
-                        const name = c.authorName || c.name || '未知';
-                        const replyTo = c.replyToName || c.replyTo || '';
-                        return `
+                const name = c.authorName || c.name || '未知';
+                const replyTo = c.replyToName || c.replyTo || '';
+                return `
                         <div class="comment-item" data-moment-id="${moment.id}" data-comment-id="${c.id}" data-author-id="${c.authorId}" data-author-name="${name}" data-reply-to="${replyTo}">
                             <div class="comment-content-wrapper">
                                 <span class="comment-author">${name}</span>
@@ -3128,7 +3127,7 @@ function initSillyPhoneUI() {
                     `}).join('')}
                 </div>
             ` : '';
-            
+
             const interactionsHtml = commentsHtml ? `
                 <div class="moment-interactions">
                     ${commentsHtml}
@@ -3167,7 +3166,7 @@ function initSillyPhoneUI() {
                     ${interactionsHtml}
                 </div>
             `;
-            
+
             momentsList.appendChild(item);
 
             // 为评论添加点击事件
@@ -3179,7 +3178,7 @@ function initSillyPhoneUI() {
 
                 commentEl.onclick = (e) => {
                     e.stopPropagation();
-                    
+
                     if (authorId === 'user') {
                         // 点击自己的评论：弹出修改/删除菜单
                         showActionSheet([
@@ -3189,24 +3188,24 @@ function initSillyPhoneUI() {
                     } else {
                         // 点击他人的评论：弹出回复框
                         const moment = state.moments.find(m => m.id === momentId);
-                        
+
                         // 检查评论作者是否是好友
                         // 朋友圈发布者默认是好友，或者评论者在通讯录中且已添加
                         const contact = state.contacts.find(c => c.name === authorName || c.id === authorName);
                         const isFriend = (authorName === moment.authorName) || (contact && contact.status === 'added');
-                        
+
                         if (!isFriend) {
                             showToast('只有好友才能回复哦', 'info');
                             return;
                         }
-                        
+
                         openCommentModal(momentId, authorName);
                     }
                 };
             });
         });
-        
-        if(typeof lucide !== 'undefined') lucide.createIcons();
+
+        if (typeof lucide !== 'undefined') lucide.createIcons();
         attachMomentEvents();
     }
 
@@ -3243,7 +3242,7 @@ function initSillyPhoneUI() {
         title.textContent = '修改评论';
         input.value = comment.text;
         btn.textContent = '保存修改';
-        
+
         modal.style.display = 'flex';
         input.focus();
     }
@@ -3268,37 +3267,37 @@ function initSillyPhoneUI() {
                 const authorCircle = moment.authorCircle || (state.contacts.find(c => c.name === moment.authorName)?.circle);
                 const blockedIds = moment.blockedIds || [];
                 const mentionedIds = moment.mentionedIds || [];
-                
+
                 const mentions = mentionedIds.map(mid => {
                     const c = state.contacts.find(contact => contact.id === mid);
                     return c ? c.name : null;
                 }).filter(n => n !== null);
 
                 const isUserMoment = moment.authorName === state.userName || moment.authorName === state.stUserName || moment.authorName === '我' || moment.authorName === 'user';
-                
-                const commentsContext = moment.comments && moment.comments.length > 0 
-                    ? `\n已有评论记录：\n${moment.comments.map(c => `${c.authorName}${c.replyToName ? ' 回复 ' + c.replyToName : ''}: ${c.text}`).join('\n')}` 
+
+                const commentsContext = moment.comments && moment.comments.length > 0
+                    ? `\n已有评论记录：\n${moment.comments.map(c => `${c.authorName}${c.replyToName ? ' 回复 ' + c.replyToName : ''}: ${c.text}`).join('\n')}`
                     : '';
 
                 let promptText = `[系统提示: 朋友圈互动]\n动态作者: ${moment.authorName}\n动态内容：“${moment.content}”${commentsContext}`;
                 if (mentions.length > 0) {
                     promptText += `\n[强制响应]: 请务必让被@到的好友【${mentions.join('】和【')}】进行回复。`;
                 }
-                
+
                 if (isUserMoment) {
                     promptText += `\n这是“我”（{{user}}）发的朋友圈。请挑选 1~3 个角色进行评论。（具体格式请严格遵守世界书设定）`;
                 } else {
                     promptText += `\n这是 ${moment.authorName} 发的朋友圈。请挑选 1~2 个角色进行评论，或让 ${moment.authorName} 回复现有评论。（具体格式请严格遵守世界书设定）`;
                 }
-                
+
                 setIslandState('loading');
                 showToast('好友正在响应...', 'sparkles');
-                
+
                 setTimeout(() => {
                     setIslandState('default');
-                    sendMessage({ 
+                    sendMessage({
                         text: promptText,
-                        isSilent: true 
+                        isSilent: true
                     }, moment.id);
                 }, 1500);
             };
@@ -3312,19 +3311,19 @@ function initSillyPhoneUI() {
                 const momentId = item.dataset.momentId;
                 const replyTo = item.dataset.replyTo; // 这里的 replyTo 是我回复的那个人
                 const moment = state.moments.find(m => m.id === momentId);
-                
+
                 const commentId = item.dataset.commentId;
                 const comment = moment.comments.find(c => c.id === commentId);
                 const commentText = comment ? comment.text : '';
-                
+
                 const isUserMoment = moment.authorName === state.userName || moment.authorName === state.stUserName || moment.authorName === '我' || moment.authorName === 'user';
-                
-                const commentsContext = moment.comments && moment.comments.length > 0 
-                    ? `\n已有评论记录：\n${moment.comments.map(c => `${c.authorName}${c.replyToName ? ' 回复 ' + c.replyToName : ''}: ${c.text}`).join('\n')}` 
+
+                const commentsContext = moment.comments && moment.comments.length > 0
+                    ? `\n已有评论记录：\n${moment.comments.map(c => `${c.authorName}${c.replyToName ? ' 回复 ' + c.replyToName : ''}: ${c.text}`).join('\n')}`
                     : '';
 
                 let promptText = '';
-                
+
                 if (isUserMoment) {
                     const targetNPC = replyTo || '该角色';
                     promptText = `[系统提示: 朋友圈互动]\n动态内容：“${moment.content}”${commentsContext}\n\n在“我”（{{user}}）的朋友圈下，“我”回复了 ${targetNPC}：“${commentText}”。\n请让 ${targetNPC} 结合上下文，对“我”的这句话做出最新的回应。\n【重要指令】请直接输出 ${targetNPC} 的回复内容，不要加任何前缀，不要重复历史记录，不要输出任何格式代码，只输出回复的纯文本！`;
@@ -3338,12 +3337,12 @@ function initSillyPhoneUI() {
 
                 setIslandState('loading');
                 showToast('好友正在响应...', 'sparkles');
-                
+
                 setTimeout(() => {
                     setIslandState('default');
-                    sendMessage({ 
+                    sendMessage({
                         text: promptText,
-                        isSilent: true 
+                        isSilent: true
                     }, moment.id);
                 }, 1500);
             };
@@ -3395,7 +3394,7 @@ function initSillyPhoneUI() {
         const input = document.getElementById('moment-comment-input');
         const text = input.value.trim();
         if (!text) return;
-        
+
         if (editingCommentInfo) {
             // 修改现有评论
             const moment = state.moments.find(m => m.id === editingCommentInfo.momentId);
@@ -3425,7 +3424,7 @@ function initSillyPhoneUI() {
                 showToast(activeReplyTo ? '回复成功' : '评论成功');
             }
         }
-        
+
         input.value = '';
         document.getElementById('moment-comment-modal').style.display = 'none';
         // 重置弹窗标题和按钮
@@ -3445,7 +3444,7 @@ function initSillyPhoneUI() {
     const postMomentImagesContainer = document.getElementById('post-moment-images-container');
     const addMomentImageBtn = document.getElementById('add-moment-image-btn');
     const momentImageInput = document.getElementById('moment-image-input');
-    
+
     let pendingMomentImages = [];
     let blockedIds = [];
     let mentionedIds = [];
@@ -3460,16 +3459,16 @@ function initSillyPhoneUI() {
                 if (activeAccount) {
                     activeAccount.momentsBg = url;
                     momentsUserBg.src = url;
-                    
+
                     // 如果是主账号，同步到全局设置
                     if (state.activeAccountId === 'user_main') {
                         state.settings.momentsBg = url;
                     }
-                    
+
                     // 更新设置页面的输入框
                     const momentsBgInput = document.getElementById('moments-bg-url');
                     if (momentsBgInput) momentsBgInput.value = url;
-                    
+
                     showToast('朋友圈背景已更新', 'image');
                     deferredSync();
                 }
@@ -3538,10 +3537,10 @@ function initSillyPhoneUI() {
         momentImageInput.onchange = async (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            
+
             showToast('正在上传到服务器...', 'loader');
             const serverPath = await uploadImageToST(file);
-            
+
             if (serverPath) {
                 pendingMomentImages.push({
                     url: serverPath,
@@ -3570,13 +3569,13 @@ function initSillyPhoneUI() {
         // 移除所有现有的预览图
         const previews = postMomentImagesContainer.querySelectorAll('.moment-img-preview');
         previews.forEach(p => p.remove());
-        
+
         // 插入新的预览图
         pendingMomentImages.forEach((imgSrc, index) => {
             const div = document.createElement('div');
             div.className = 'moment-img-preview';
             div.style.cssText = 'aspect-ratio: 1; position: relative; border-radius: 8px; overflow: hidden; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; padding: 8px;';
-            
+
             const isData = imgSrc.startsWith('data:') || imgSrc.startsWith('http');
             if (isData) {
                 const img = document.createElement('img');
@@ -3589,7 +3588,7 @@ function initSillyPhoneUI() {
                 text.style.cssText = 'font-size: 10px; color: rgba(255,255,255,0.6); text-align: center; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;';
                 div.appendChild(text);
             }
-            
+
             const deleteBtn = document.createElement('div');
             deleteBtn.innerHTML = '<i data-lucide="x" size="14"></i>';
             deleteBtn.style.cssText = 'position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,0.5); color: white; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10;';
@@ -3598,20 +3597,20 @@ function initSillyPhoneUI() {
                 pendingMomentImages.splice(index, 1);
                 renderPendingMomentImages();
             };
-            
+
             div.appendChild(deleteBtn);
-            
+
             postMomentImagesContainer.insertBefore(div, addMomentImageBtn);
         });
-        
+
         // 如果达到9张，隐藏添加按钮
         if (pendingMomentImages.length >= 9) {
             addMomentImageBtn.style.display = 'none';
         } else {
             addMomentImageBtn.style.display = 'flex';
         }
-        
-        if(typeof lucide !== 'undefined') lucide.createIcons();
+
+        if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 
     confirmPostMomentBtn.onclick = () => {
@@ -3620,7 +3619,7 @@ function initSillyPhoneUI() {
             showToast('写点什么或发张照片吧');
             return;
         }
-        
+
         state.moments.unshift({
             id: 'm' + Date.now(),
             authorId: 'user',
@@ -3635,7 +3634,7 @@ function initSillyPhoneUI() {
             likes: [],
             comments: []
         });
-        
+
         saveMoments();
         postMomentModal.style.display = 'none';
         document.querySelector('.bottom-nav').style.display = 'flex'; // 恢复底栏
@@ -3668,7 +3667,7 @@ function initSillyPhoneUI() {
         // 获取当前朋友圈中所有的作者（去重）
         const authors = [];
         const seenIds = new Set();
-        
+
         state.moments.forEach(m => {
             if (!seenIds.has(m.authorId)) {
                 seenIds.add(m.authorId);
@@ -3748,7 +3747,7 @@ function initSillyPhoneUI() {
         confirmBtn.onclick = () => {
             const selectedIds = Array.from(listEl.querySelectorAll('.char-checkbox:checked'))
                 .map(cb => cb.dataset.id);
-            
+
             if (selectedIds.length === 0) {
                 cleanup();
                 return;
@@ -3758,16 +3757,16 @@ function initSillyPhoneUI() {
                 .map(cb => cb.dataset.name);
 
             showActionSheet([
-                { 
-                    text: `永久删除 ${selectedNames.join('、')} 的所有动态`, 
-                    danger: true, 
+                {
+                    text: `永久删除 ${selectedNames.join('、')} 的所有动态`,
+                    danger: true,
                     onClick: () => {
                         state.moments = state.moments.filter(m => !selectedIds.includes(m.authorId));
                         saveMoments();
                         renderMomentsList();
                         showToast('已永久删除选中好友的所有动态');
                         cleanup();
-                    } 
+                    }
                 }
             ]);
         };
@@ -3781,16 +3780,20 @@ function initSillyPhoneUI() {
         const contactsList = document.getElementById('contacts-list');
         if (!contactsList) return;
         contactsList.innerHTML = '';
-        
+
         const tools = [
-            { name: '群聊', icon: 'users', action: () => {
-                switchPage('groups');
-                renderGroupsList();
-            }},
-            { name: '我的好友', icon: 'user', action: () => {
-                switchPage('my-friends');
-                renderMyFriendsList();
-            }}
+            {
+                name: '群聊', icon: 'users', action: () => {
+                    switchPage('groups');
+                    renderGroupsList();
+                }
+            },
+            {
+                name: '我的好友', icon: 'user', action: () => {
+                    switchPage('my-friends');
+                    renderMyFriendsList();
+                }
+            }
         ];
 
         tools.forEach(t => {
@@ -3806,7 +3809,7 @@ function initSillyPhoneUI() {
             contactsList.appendChild(item);
         });
 
-        if(typeof lucide !== 'undefined') lucide.createIcons();
+        if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 
     function renderMyFriendsList() {
@@ -3827,7 +3830,7 @@ function initSillyPhoneUI() {
                     <button class="accept-btn" style="margin-left: auto; background: #10b981; color: white; border: none; padding: 4px 10px; border-radius: 6px; font-size: 12px;">通过</button>
                 ` : ''}
             `;
-            
+
             if (c.status === 'pending') {
                 const acceptBtn = item.querySelector('.accept-btn');
                 acceptBtn.onclick = (e) => {
@@ -3842,7 +3845,7 @@ function initSillyPhoneUI() {
             }
             myFriendsList.appendChild(item);
         });
-        if(typeof lucide !== 'undefined') lucide.createIcons();
+        if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 
     function openChat(contact) {
@@ -3851,26 +3854,26 @@ function initSillyPhoneUI() {
         state.multiSelectMode = false;
         state.selectedMessageIds = [];
         state.quotedMessage = null;
-        
+
         try {
             sessionStorage.setItem('sillyphone-currentChatId', contact.id);
-        } catch (e) {}
-        
+        } catch (e) { }
+
         const multiSelectToolbar = document.getElementById('chat-multi-select-toolbar');
         const quotePreview = document.getElementById('chat-quote-preview');
         const inputBar = document.querySelector('.input-bar');
-        
+
         if (multiSelectToolbar) multiSelectToolbar.style.display = 'none';
         if (quotePreview) quotePreview.style.display = 'none';
         if (inputBar) inputBar.style.display = 'flex';
-        
+
         // 应用备注名或原名
         let displayName = contact.remark || contact.name;
         if (contact.isGroup && contact.members) {
             displayName += ` (${contact.members.length})`;
         }
         document.getElementById('chat-name').textContent = displayName;
-        
+
         // 应用局部背景
         const bgLayer = document.getElementById('chat-bg-layer');
         if (contact.chatBg) {
@@ -3882,7 +3885,7 @@ function initSillyPhoneUI() {
             bgLayer.style.filter = 'none';
             bgLayer.style.opacity = '0';
         }
-        
+
         // 查找所属角色信息
         const character = state.characters.find(char => char.id === contact.characterId);
         if (character) {
@@ -3893,18 +3896,18 @@ function initSillyPhoneUI() {
                 state.currentChat.accountType = account.type;
             }
         }
-        
+
         const btnTransferLabel = document.getElementById('btn-transfer-label');
         if (btnTransferLabel) {
             btnTransferLabel.textContent = contact.isGroup ? '红包' : '转账';
         }
-        
+
         const btnTransferIcon = document.querySelector('#btn-transfer .panel-icon');
         if (btnTransferIcon) {
             btnTransferIcon.innerHTML = `<i data-lucide="${contact.isGroup ? 'gift' : 'banknote'}" size="24"></i>`;
-            if(typeof lucide !== 'undefined') lucide.createIcons();
+            if (typeof lucide !== 'undefined') lucide.createIcons();
         }
-        
+
         checkExpiredMoney(contact.id);
         renderMessages(contact.id);
         switchPage('chat-window');
@@ -3923,7 +3926,7 @@ function initSillyPhoneUI() {
                 if (!isNaN(timestamp) && now - timestamp > EXPIRE_TIME) {
                     m.status = 'returned';
                     changed = true;
-                    
+
                     sysMsgs.push({
                         id: 'msg_' + Date.now() + Math.random(),
                         type: 'system',
@@ -3977,7 +3980,7 @@ function initSillyPhoneUI() {
         callTimer.textContent = '00:00';
         callTextDisplay.innerHTML = '';
         callInputContainer.style.display = 'none';
-        
+
         // 重置按钮状态
         callMuteBtn.classList.remove('active');
         callSpeakerBtn.classList.remove('active');
@@ -3985,7 +3988,7 @@ function initSillyPhoneUI() {
         callSpeakerBtn.querySelector('span').textContent = '免提';
 
         callOverlay.style.display = 'flex';
-        
+
         // 自动接听
         setTimeout(() => {
             if (state.call.active) {
@@ -3999,9 +4002,9 @@ function initSillyPhoneUI() {
         callStatus.textContent = '通话中';
         callTimer.style.display = 'block';
         callInputContainer.style.display = 'none';
-        
+
         state.call.timerInterval = setInterval(updateCallTimer, 1000);
-        
+
         addCallTranscript('系统', '通话已接通');
     }
 
@@ -4009,7 +4012,7 @@ function initSillyPhoneUI() {
         if (!state.call.startTime) return;
         const diff = Math.floor((Date.now() - state.call.startTime) / 1000);
         state.call.duration = diff;
-        
+
         const mins = Math.floor(diff / 60).toString().padStart(2, '0');
         const secs = (diff % 60).toString().padStart(2, '0');
         callTimer.textContent = `${mins}:${secs}`;
@@ -4017,13 +4020,13 @@ function initSillyPhoneUI() {
 
     function endCall() {
         if (!state.call.active) return;
-        
+
         clearInterval(state.call.timerInterval);
         const durationStr = callTimer.textContent;
-        
+
         // 添加到通话记录
         addCallTranscript('系统', `通话已结束 (${durationStr})`);
-        
+
         // 发送结束消息
         const chatId = state.call.contact.id;
         const endMsg = {
@@ -4032,7 +4035,7 @@ function initSillyPhoneUI() {
             transcript: [...state.call.transcript],
             text: `语音通话已结束 (${durationStr})`
         };
-        
+
         // 如果是当前聊天，直接发送
         if (state.currentChat && state.currentChat.id === chatId) {
             sendMessage(endMsg);
@@ -4051,7 +4054,7 @@ function initSillyPhoneUI() {
 
         state.call.active = false;
         state.call.startTime = null;
-        
+
         // 延迟 1 秒关闭，让用户看到结束提示
         setTimeout(() => {
             callOverlay.style.display = 'none';
@@ -4073,7 +4076,7 @@ function initSillyPhoneUI() {
             line.innerHTML = `<span class="name">${item.sender}:</span> <span class="text">${item.text}</span>`;
             callTextDisplay.appendChild(line);
         });
-        
+
         // 确保滚动到最底部
         setTimeout(() => {
             callTextDisplay.scrollTop = callTextDisplay.scrollHeight;
@@ -4103,11 +4106,11 @@ function initSillyPhoneUI() {
     callSendBtn.onclick = () => {
         const text = callMsgInput.value.trim();
         if (!text) return;
-        
+
         // 同时作为普通消息发送（同步给 AI，但不自动触发响应）
         // sendMessage 内部已经处理了通话记录的添加
         sendMessage({ text, isSilent: true, noTrigger: true });
-        
+
         callMsgInput.value = '';
     };
 
@@ -4126,10 +4129,10 @@ function initSillyPhoneUI() {
         state.call.isSpeaker = !state.call.isSpeaker;
         callSpeakerBtn.classList.toggle('active', state.call.isSpeaker);
         callSpeakerBtn.querySelector('span').textContent = state.call.isSpeaker ? '关闭免提' : '免提';
-        
+
         // 免提开启时显示输入框，关闭时隐藏
         callInputContainer.style.display = state.call.isSpeaker ? 'flex' : 'none';
-        
+
         showToast(state.call.isSpeaker ? '免提已开启' : '免提已关闭');
     };
 
@@ -4156,12 +4159,12 @@ function initSillyPhoneUI() {
     function setIslandState(status, text) {
         const chatName = document.getElementById('chat-name');
         const callAvatar = document.getElementById('call-avatar');
-        
+
         // 重置状态
         island.classList.remove('active', 'notification');
         islandText.style.color = '';
         if (callAvatar) callAvatar.classList.remove('responding');
-        
+
         if (status === 'loading') {
             island.classList.add('active');
             islandText.textContent = '...';
@@ -4185,7 +4188,7 @@ function initSillyPhoneUI() {
         setTimeout(() => {
             // 角色自动通过验证
             req.status = 'added';
-            
+
             // 添加到联系人列表
             if (!state.contacts.find(c => c.id === req.id)) {
                 state.contacts.push({
@@ -4202,7 +4205,7 @@ function initSillyPhoneUI() {
 
             pendingApproval = req;
             setIslandState('notification', `${req.name} 已通过验证`);
-            
+
             // 刷新列表显示状态
             renderContactsList();
             renderChatList();
@@ -4224,10 +4227,10 @@ function initSillyPhoneUI() {
         if (pendingApproval) {
             const res = pendingApproval;
             const contact = state.contacts.find(c => c.id === res.id);
-            
+
             setIslandState('default');
             pendingApproval = null;
-            
+
             if (contact) {
                 openChat(contact);
             }
@@ -4239,7 +4242,7 @@ function initSillyPhoneUI() {
             isAIRequestPending = false;
             setIslandState('default');
             showToast('已取消响应', 'x');
-            
+
             // 尝试停止酒馆生成
             const st = getSTInterface();
             if (st.executeSlashCommands) {
@@ -4264,7 +4267,7 @@ function initSillyPhoneUI() {
             // 在朋友圈页面点击灵动岛：触发发布新动态或互动
             showCharacterSelect('选择发朋友圈角色', (targetNames) => {
                 if (targetNames === null) return; // 取消
-                
+
                 let promptText = '';
                 if (targetNames.trim() === '') {
                     promptText = "[系统提示: 用户在朋友圈页面点击了灵动岛] 请从当前联系人中随机挑选 1 到 2 个角色，发布一条符合他们人设的新朋友圈动态。发布动态后，请随机挑选 1 到 3 个其他角色（必须是不同的角色，绝对不能是“我”或“{{user}}”）在动态下方发表评论。接着，让发布动态的角色根据性格，选择性地回复其中 1 到 2 条评论，模拟真实的朋友圈互动。";
@@ -4423,7 +4426,7 @@ function initSillyPhoneUI() {
             const maxSafe = m.remainingAmount - 0.01 * (m.remainingCount - 1);
             const average = m.remainingAmount / m.remainingCount;
             const max = Math.min(maxSafe, average * 2);
-            
+
             grabAmount = Math.random() * max;
             grabAmount = Math.max(0.01, grabAmount); // 至少0.01
             grabAmount = parseFloat(grabAmount.toFixed(2));
@@ -4467,7 +4470,7 @@ function initSillyPhoneUI() {
             if (m.remainingCount === 0) {
                 m.status = 'empty';
                 if (m.senderId === 'user') {
-                     const sysMsg2 = {
+                    const sysMsg2 = {
                         id: 'msg_' + Date.now() + 1,
                         type: 'system',
                         text: `你的红包已被领完`,
@@ -4476,7 +4479,7 @@ function initSillyPhoneUI() {
                     state.messages[chatId].push(sysMsg2);
                 }
             }
-            
+
             // AI 领取红包后的反应
             setTimeout(() => {
                 const average = parseFloat(m.amount) / parseInt(m.count);
@@ -4502,7 +4505,7 @@ function initSillyPhoneUI() {
         const senderName = m.senderId === 'user' ? '你' : (state.currentChat.isGroup ? (state.currentChat.members.find(mem => mem.id === m.senderId)?.name || '对方') : state.currentChat.name);
         senderNameEl.textContent = `${senderName}的红包`;
         remarkEl.textContent = m.remark || '恭喜发财，大吉大利';
-        
+
         const avatarEl = document.getElementById('rp-detail-avatar');
         if (avatarEl) {
             if (m.senderId === 'user') {
@@ -4514,10 +4517,10 @@ function initSillyPhoneUI() {
                 avatarEl.src = state.currentChat.avatar;
             }
         }
-        
+
         const totalCount = parseInt(m.count) || 1;
         const grabbedCount = m.grabRecords ? m.grabRecords.length : 0;
-        
+
         if (m.status === 'returned') {
             statusEl.textContent = '该红包已超过24小时。如已领取，可在红包记录中查看。';
         } else if (m.targetId && m.targetId !== 'all' && m.targetId !== 'user' && grabbedCount === 0) {
@@ -4528,12 +4531,12 @@ function initSillyPhoneUI() {
         }
 
         listEl.innerHTML = '';
-        
+
         const myRecord = m.grabRecords ? m.grabRecords.find(r => r.id === 'user') : null;
         const grabBtnContainer = document.getElementById('rp-detail-grab-btn-container');
         const grabBtn = document.getElementById('rp-detail-grab-btn');
         const remainingCount = m.remainingCount !== undefined ? m.remainingCount : totalCount;
-        
+
         if (myRecord) {
             myAmountContainer.style.display = 'block';
             myAmountEl.textContent = myRecord.amount.toFixed(2);
@@ -4551,7 +4554,7 @@ function initSillyPhoneUI() {
                 grabBtnContainer.style.display = 'none';
             }
         }
-        
+
         if (m.grabRecords && m.grabRecords.length > 0) {
             // 找出最佳手气
             let bestAmount = 0;
@@ -4580,7 +4583,7 @@ function initSillyPhoneUI() {
                     </div>
                 `;
             });
-            if(typeof lucide !== 'undefined') lucide.createIcons();
+            if (typeof lucide !== 'undefined') lucide.createIcons();
         } else {
             listEl.innerHTML = '<div style="text-align:center; color:rgba(255,255,255,0.5); padding: 20px;">暂无领取记录</div>';
         }
@@ -4633,7 +4636,7 @@ function initSillyPhoneUI() {
             if (m.isSilent) return; // 跳过静默消息（通话消息等）
 
             // 插入历史记录分割线
-            if (!m.isHistory && !historyDividerShown && index > 0 && msgs[index-1].isHistory) {
+            if (!m.isHistory && !historyDividerShown && index > 0 && msgs[index - 1].isHistory) {
                 const divider = document.createElement('div');
                 divider.className = 'history-divider';
                 divider.innerHTML = '<span>以上为历史记录</span>';
@@ -4641,7 +4644,7 @@ function initSillyPhoneUI() {
                 historyDividerShown = true;
                 lastSenderId = null; // 分割线后重新显示头像
             }
-            
+
             const wrapper = document.createElement('div');
             const isUser = m.type === 'user';
 
@@ -4653,7 +4656,7 @@ function initSillyPhoneUI() {
                 sysMsg.className = 'system-msg';
                 const senderName = m.senderId === 'user' ? '你' : (state.currentChat.isGroup ? (state.currentChat.members.find(mem => mem.id === m.senderId)?.name || '对方') : state.currentChat.name);
                 sysMsg.innerHTML = `<span>${senderName} 撤回了一条消息</span>`;
-                
+
                 // 上帝视角：点击非用户撤回的消息查看内容
                 if (m.senderId !== 'user') {
                     sysMsg.style.cursor = 'pointer';
@@ -4663,7 +4666,7 @@ function initSillyPhoneUI() {
                         if (m.msgType === 'photo') content = `[图片] ${m.url || m.description || ''}`;
                         if (m.msgType === 'voice') content = `[语音] ${m.text || ''}`;
                         if (m.msgType === 'sticker') content = `[表情包] ${m.url || ''}`;
-                        
+
                         if (sysMsg.dataset.revealed === 'true') {
                             sysMsg.innerHTML = `<span>${senderName} 撤回了一条消息</span>`;
                             sysMsg.dataset.revealed = 'false';
@@ -4673,7 +4676,7 @@ function initSillyPhoneUI() {
                         }
                     };
                 }
-                
+
                 // 如果是用户撤回的文本消息，提供“重新编辑”
                 if (m.senderId === 'user' && (!m.msgType || m.msgType === 'voice')) {
                     const editLink = document.createElement('span');
@@ -4685,7 +4688,7 @@ function initSillyPhoneUI() {
                     };
                     sysMsg.appendChild(editLink);
                 }
-                
+
                 sysWrapper.appendChild(sysMsg);
                 messagesContainer.appendChild(sysWrapper);
                 lastSenderId = null; // 撤回消息后，下一个消息需要显示头像
@@ -4706,11 +4709,11 @@ function initSillyPhoneUI() {
             }
 
             wrapper.className = `message-wrapper ${isUser ? 'user' : 'ai'}`;
-            
+
             const avatar = document.createElement('img');
             avatar.className = 'msg-avatar';
             avatar.referrerPolicy = 'no-referrer';
-            
+
             if (isUser) {
                 avatar.src = m.senderAvatar || m.avatar || state.userAvatar || 'https://files.catbox.moe/blaehb.jpg';
             } else if (state.currentChat.isGroup) {
@@ -4737,20 +4740,25 @@ function initSillyPhoneUI() {
 
             const div = document.createElement('div');
             div.className = `bubble ${isUser ? 'user' : 'ai'} ${m.msgType || ''}`;
-            
+
             const contentDiv = document.createElement('div');
             contentDiv.className = 'bubble-content';
 
-            if (m.msgType === 'photo') {
-                const isImageSource = m.url && (m.url.startsWith('http') || m.url.startsWith('data:image'));
-                if (isImageSource) {
+            if (m.msgType === 'photo' || m.msgType === 'image') {
+                const isImageSource = m.url && (m.url.startsWith('http') || m.url.startsWith('data:image') || m.url.startsWith('IMGDATA:'));
+                if (isImageSource || m.serverPath) {
+                    let displayUrl = m.url || m.serverPath;
+                    if (displayUrl && displayUrl.startsWith('IMGDATA:')) {
+                        // 转换 ST 内部路径为 API 接口
+                        displayUrl = `/api/images/get?path=${encodeURIComponent(displayUrl.replace('IMGDATA:', ''))}`;
+                    }
                     contentDiv.innerHTML = `
                         <div class="sticker-content">
-                            <img src="${m.url}" referrerpolicy="no-referrer" class="sticker-img" style="border-radius: 8px; max-width: 200px; cursor: pointer;" onclick="if(this.src.startsWith('http')) window.open(this.src, '_blank')">
+                            <img src="${displayUrl}" referrerpolicy="no-referrer" class="sticker-img" style="border-radius: 8px; max-width: 200px; cursor: pointer;" onclick="if(this.src.includes('/api/images/get')) window.open(this.src, '_blank')">
                         </div>
                     `;
                 } else {
-                    contentDiv.innerHTML = formatContent(`(IMG:${m.description || m.url || '一张照片'})`);
+                    contentDiv.innerHTML = formatContent(`(IMG:${m.description || m.url || m.content || '一张照片'})`);
                 }
             } else if (m.msgType === 'sticker') {
                 let displayUrl = m.url;
@@ -4770,8 +4778,8 @@ function initSillyPhoneUI() {
                     if (!foundUrl) {
                         for (const catName in state.stickers) {
                             const cat = state.stickers[catName];
-                            const found = cat.items.find(s => 
-                                (s.url && displayUrl.includes(s.url.split('/').pop())) || 
+                            const found = cat.items.find(s =>
+                                (s.url && displayUrl.includes(s.url.split('/').pop())) ||
                                 (s.label && displayUrl.includes(s.label))
                             );
                             if (found) {
@@ -4780,7 +4788,7 @@ function initSillyPhoneUI() {
                             }
                         }
                     }
-                    
+
                     if (foundUrl) {
                         displayUrl = foundUrl;
                     } else {
@@ -4801,7 +4809,7 @@ function initSillyPhoneUI() {
                 const durationVal = parseInt(m.duration) || calculatedDuration || 5;
                 const bubbleWidth = Math.min(240, 80 + durationVal * 5); // 根据时长动态计算宽度
                 div.style.minWidth = bubbleWidth + 'px';
-                
+
                 contentDiv.innerHTML = `
                     <div class="voice-bar">
                         <div class="voice-wave"></div>
@@ -4818,11 +4826,11 @@ function initSillyPhoneUI() {
                 const isReceived = m.status === 'received';
                 const isReturned = m.status === 'returned';
                 const isEmpty = m.status === 'empty';
-                
+
                 if (isReceived || isReturned || isEmpty) {
                     div.classList.add('received');
                 }
-                
+
                 let iconName = isTransfer ? 'arrow-right-left' : 'gift';
                 if (isReceived || isEmpty) {
                     iconName = 'check';
@@ -4838,7 +4846,7 @@ function initSillyPhoneUI() {
 
                 let titleText = isTransfer ? `¥${m.amount}` : m.remark;
                 let subText = isTransfer ? m.remark : '点击领取';
-                
+
                 if (isTransfer) {
                     if (isReceived) subText = '已收款';
                     if (isReturned) subText = '已退还';
@@ -4961,11 +4969,11 @@ function initSillyPhoneUI() {
             messagesContainer.appendChild(wrapper);
         });
 
-        if(typeof lucide !== 'undefined') lucide.createIcons();
+        if (typeof lucide !== 'undefined') lucide.createIcons();
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
 
-    window.processTypingQueue = function() {
+    window.processTypingQueue = function () {
         if (!state.typingQueue || state.typingQueue.length === 0) {
             state.isTypingNow = false;
             if (typeof isAIRequestPending !== 'undefined' && !isAIRequestPending) {
@@ -4973,7 +4981,7 @@ function initSillyPhoneUI() {
             }
             return;
         }
-        
+
         setIslandState('loading');
 
         if (state.isTypingNow) return;
@@ -4982,7 +4990,7 @@ function initSillyPhoneUI() {
         if (!nextMsg) return;
 
         state.isTypingNow = true;
-        
+
         if (state.currentChat) renderMessages(state.currentChat.id);
 
         let delay = 1500;
@@ -4994,16 +5002,16 @@ function initSillyPhoneUI() {
             delay = 2000;
         }
         delay += Math.floor(Math.random() * 500);
-        
+
         setTimeout(() => {
             nextMsg.isTypingPending = false;
             state.typingQueue.shift();
             state.isTypingNow = false;
-            
+
             saveMessagesToLocalStorage();
-            
+
             if (state.currentChat) renderMessages(state.currentChat.id);
-            
+
             window.processTypingQueue();
         }, delay);
     };
@@ -5012,7 +5020,7 @@ function initSillyPhoneUI() {
     function openEditMessageModal(chatId, msgIndex) {
         const msg = state.messages[chatId][msgIndex];
         if (msg.msgType && msg.msgType !== 'voice') return; // 只允许编辑文本和语音翻译文本
-        
+
         currentEditingMsg = { chatId, msgIndex };
         const modal = document.getElementById('edit-message-modal');
         const input = document.getElementById('edit-message-input');
@@ -5025,10 +5033,10 @@ function initSillyPhoneUI() {
         const { chatId, msgIndex } = currentEditingMsg;
         const input = document.getElementById('edit-message-input');
         const newText = input.value.trim();
-        
+
         state.messages[chatId][msgIndex].text = newText;
         saveMessagesToLocalStorage();
-        
+
         document.getElementById('edit-message-modal').style.display = 'none';
         renderMessages(chatId);
         showToast('修改已保存');
@@ -5069,7 +5077,7 @@ function initSillyPhoneUI() {
 
     function removeMessagesFromRawCode(messagesToRemove) {
         if (!messagesToRemove || messagesToRemove.length === 0) return;
-        
+
         const st = getSTInterface();
         if (!st.getChatMessages || !st.setChatMessages) return;
 
@@ -5171,7 +5179,7 @@ function initSillyPhoneUI() {
         state.selectedMessageIds = [];
         const msg = state.messages[chatId][initialIndex];
         state.selectedMessageIds.push(msg.id || `msg_${initialIndex}`);
-        
+
         document.getElementById('chat-multi-select-toolbar').style.display = 'flex';
         document.querySelector('.input-bar').style.display = 'none';
         updateMultiSelectToolbar();
@@ -5192,25 +5200,25 @@ function initSillyPhoneUI() {
 
     document.getElementById('confirm-chat-multi-delete').onclick = () => {
         if (state.selectedMessageIds.length === 0) return;
-        
+
         showActionSheet([
-            { 
-                text: `永久删除 ${state.selectedMessageIds.length} 条消息`, 
-                danger: true, 
+            {
+                text: `永久删除 ${state.selectedMessageIds.length} 条消息`,
+                danger: true,
                 onClick: () => {
                     const chatId = state.currentChat.id;
                     const msgsToRemove = state.messages[chatId].filter((m, index) => {
                         const msgId = m.id || `msg_${index}`;
                         return state.selectedMessageIds.includes(msgId);
                     });
-                    
+
                     state.messages[chatId] = state.messages[chatId].filter((m, index) => {
                         const msgId = m.id || `msg_${index}`;
                         return !state.selectedMessageIds.includes(msgId);
                     });
-                    
+
                     removeMessagesFromRawCode(msgsToRemove);
-                    
+
                     state.multiSelectMode = false;
                     state.selectedMessageIds = [];
                     saveMessagesToLocalStorage();
@@ -5218,7 +5226,7 @@ function initSillyPhoneUI() {
                     document.querySelector('.input-bar').style.display = 'flex';
                     renderMessages(chatId);
                     showToast('已永久删除选中消息');
-                } 
+                }
             }
         ]);
     };
@@ -5227,15 +5235,15 @@ function initSillyPhoneUI() {
         const chatId = state.currentChat ? state.currentChat.id : (msgData.isSilent ? 'system_queue' : null);
         if (!chatId) return;
         if (!state.messages[chatId]) state.messages[chatId] = [];
-        
-        const newMessage = { 
+
+        const newMessage = {
             id: 'msg_' + Date.now(),
-            type: 'user', 
+            type: 'user',
             senderId: 'user',
             senderName: state.userName,
             senderAvatar: state.userAvatar,
             time: new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0'),
-            ...msgData 
+            ...msgData
         };
 
         // 处理引用
@@ -5249,7 +5257,7 @@ function initSillyPhoneUI() {
         saveMessagesToLocalStorage();
         renderMessages(chatId);
         closeAllPanels();
-        
+
         // 如果在通话中，将消息加入通话记录
         if (state.call.active) {
             state.call.transcript.push({
@@ -5330,7 +5338,7 @@ function initSillyPhoneUI() {
                 const base64Pure = base64Data.split(',')[1];
                 const mediaType = base64Data.split(';')[0].split(':')[1];
                 const geminiUrl = s.visionEndpoint || `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${s.visionKey}`;
-                
+
                 const response = await fetch(geminiUrl, {
                     method: 'POST',
                     headers: headers,
@@ -5386,7 +5394,7 @@ function initSillyPhoneUI() {
         try {
             let url;
             let headers = { "Content-Type": "application/json" };
-            
+
             if (provider === 'openai') {
                 // 处理中转地址常见的 /v1/chat/completions 结尾
                 let base = customEndpoint || 'https://api.openai.com/v1';
@@ -5450,10 +5458,10 @@ function initSillyPhoneUI() {
 
     async function triggerAIResponse(customPrompt = null, targetId = null, chatId = null) {
         if (isAIRequestPending) return;
-        
+
         isAIRequestPending = true;
         setIslandState('loading');
-        
+
         const activeChatId = chatId || (state.currentChat ? state.currentChat.id : 'system_queue');
         if (!state.messages[activeChatId]) state.messages[activeChatId] = [];
 
@@ -5468,29 +5476,29 @@ function initSillyPhoneUI() {
                     const description = await identifyImage(msg.url);
                     if (description) {
                         msg.description = description;
-                        msg.text = `(IMG:${description})`; 
+                        msg.text = `(IMG:${description})`;
                         saveMessagesToLocalStorage();
                     }
                 }
             }
         }
         // --- 识图逻辑结束 ---
-        
+
         const mode = state.currentPage === 'moments' ? 'moments' : 'chat';
-        
+
         // 注入全局系统约束
         const userNames = [state.userName, state.stUserName, '我', 'user', 'me', state.wechatId].filter(Boolean);
         const userNameStr = userNames.join('、');
-        
+
         const globalConstraints = '';
-        
+
         // 使用构建生成 Prompt 的函数，过滤掉历史记录
         const currentSessionMessages = buildGenerationPrompt(activeChatId);
         const lastMessages = currentSessionMessages.slice(-5).map(m => {
             const { time, ...rest } = m;
             return rest;
         });
-        
+
         const requestData = {
             source: 'yuii-phone',
             type: 'YUII_AI_REQUEST',
@@ -5501,13 +5509,13 @@ function initSillyPhoneUI() {
             context: lastMessages,
             chatId: activeChatId
         };
-        
+
         lastAIRequest = requestData;
-        
+
         console.log('[SillyPhone] 发送 AI 请求:', requestData);
 
         const st = getSTInterface();
-        
+
         // 动态注入当前角色绑定的表情包清单
         let stickerPrompt = "";
         if (mode === 'chat' && state.currentChat && !state.currentChat.isGroup) {
@@ -5526,7 +5534,7 @@ function initSillyPhoneUI() {
                 stickerPrompt = `\n[系统提示：你当前可用的表情包标签如下，请在需要时使用：${availableLabels.join('、')}。发送格式：[角色昵称|表情包|标签名]]`;
             }
         }
-        
+
         // 尝试使用同层原生 API 进行生成
         // 动态读取轻预设，在生成时临时注入，绝不污染聊天记录
         let dynamicPresetPrompt = '';
@@ -5542,7 +5550,7 @@ function initSillyPhoneUI() {
             try {
                 // 确保在生成前同步最新状态到聊天记录
                 syncToSillyTavern();
-                
+
                 const rawRequestData = {
                     user_input: (customPrompt || (mode === 'moments' ? '请回复朋友圈...' : '请回复...')) + stickerPrompt + globalConstraints + dynamicPresetPrompt,
                     should_silence: true
@@ -5559,12 +5567,12 @@ function initSillyPhoneUI() {
                         'user_input'
                     ];
                 }
-                
+
                 const replyText = String(await st.generateRaw(rawRequestData) || '').trim();
-                
+
                 // 检查是否已被取消
                 if (!isAIRequestPending) return;
-                
+
                 isAIRequestPending = false;
                 if (replyText) {
                     processAIReply(replyText, activeChatId, mode, targetId || activeChatId);
@@ -5590,7 +5598,7 @@ function initSillyPhoneUI() {
                 syncToSillyTavern();
                 let genPrompt = customPrompt || (mode === 'moments' ? '请回复朋友圈...' : '请回复...');
                 genPrompt += stickerPrompt + globalConstraints + dynamicPresetPrompt;
-                
+
                 await st.executeSlashCommands(`/gen ${String(genPrompt).replace(/\n/g, " ")}`);
                 // Slash 命令生成后，通常会通过其他机制（如监听 DOM 或轮询）获取结果
                 // 这里为了兼容性，我们仍然发送 postMessage 兜底
@@ -5617,7 +5625,7 @@ function initSillyPhoneUI() {
                 showToast('响应超时，请重试', 'x-circle');
                 aiResponseTimer = null;
             }
-        }, 60000); 
+        }, 60000);
     }
 
     let selectedStickers = new Set();
@@ -5645,7 +5653,7 @@ function initSillyPhoneUI() {
         stickerGrid.innerHTML = '';
         const category = state.stickers[categoryName];
         const list = category ? category.items : [];
-        
+
         if (list.length === 0) {
             stickerGrid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 20px; color: rgba(255,255,255,0.3); font-size: 12px;">暂无表情包，点击右上角添加</div>';
             return;
@@ -5683,9 +5691,9 @@ function initSillyPhoneUI() {
                     updateSelectedCount();
                     renderStickers(categoryName);
                 } else {
-                    sendMessage({ 
-                        msgType: 'sticker', 
-                        url: sticker.url, 
+                    sendMessage({
+                        msgType: 'sticker',
+                        url: sticker.url,
                         label: sticker.label,
                         text: sticker.label + (sticker.url ? sticker.url.split('/').pop() : '')
                     });
@@ -5698,30 +5706,30 @@ function initSillyPhoneUI() {
     function renderStickerTabs() {
         stickerTabs.innerHTML = '';
         const currentRole = state.currentChat ? state.currentChat.name : null;
-        
+
         // 显示所有分类，收藏永远在第一位
         const categories = Object.keys(state.stickers).sort((a, b) => {
             if (a === '收藏') return -1;
             if (b === '收藏') return 1;
             return a.localeCompare(b);
         });
-        
+
         categories.forEach((catName, index) => {
             const tab = document.createElement('div');
             const cat = state.stickers[catName];
             // 如果没有当前激活的分类，默认选第一个
             const isActive = state.currentStickerCategory === catName || (!state.currentStickerCategory && index === 0);
             if (isActive) state.currentStickerCategory = catName;
-            
+
             tab.className = `sticker-tab ${isActive ? 'active' : ''}`;
-            
+
             let roleInfo = '';
             if (cat.roles && cat.roles.length > 0) {
                 roleInfo = `<span class="role-tag">${cat.roles.length > 1 ? '多角色' : cat.roles[0]}</span>`;
             }
 
             tab.innerHTML = `${catName}${roleInfo}`;
-            
+
             // 点击切换
             tab.onclick = () => {
                 if (state.isStickerEditMode) exitStickerEditMode();
@@ -5744,7 +5752,7 @@ function initSillyPhoneUI() {
 
             stickerTabs.appendChild(tab);
         });
-        
+
         // 初始加载当前分类的内容
         if (state.currentStickerCategory) {
             renderStickers(state.currentStickerCategory);
@@ -5774,7 +5782,7 @@ function initSillyPhoneUI() {
         const input = document.getElementById('new-sticker-input');
         const select = document.getElementById('sticker-category-select');
         const newCatInput = document.getElementById('new-category-name');
-        
+
         let categoryName = select.value;
         if (categoryName === 'new') {
             categoryName = newCatInput.value.trim();
@@ -5790,7 +5798,7 @@ function initSillyPhoneUI() {
         // 支持批量添加：语义:URL 语义:URL ...
         // 使用正则匹配 语义:URL 模式，支持 URL 中包含特殊字符
         const stickerPairs = rawText.split(/\s+/).filter(p => p.includes(':'));
-        
+
         if (stickerPairs.length === 0) {
             showToast('格式错误，请使用 语义:URL', 'alert-circle');
             return;
@@ -5813,7 +5821,7 @@ function initSillyPhoneUI() {
 
         // 持久化
         localStorage.setItem('all-stickers', JSON.stringify(state.stickers));
-        
+
         input.value = '';
         newCatInput.value = '';
         newCatInput.style.display = 'none';
@@ -5829,10 +5837,10 @@ function initSillyPhoneUI() {
         const roleList = document.getElementById('role-list');
         const nameInput = document.getElementById('edit-category-name');
         const deleteBtn = document.getElementById('delete-category-btn');
-        
+
         roleList.innerHTML = '';
         nameInput.value = categoryName;
-        
+
         // 收藏分类不允许删除和改名
         if (categoryName === '收藏') {
             nameInput.disabled = true;
@@ -5864,7 +5872,7 @@ function initSillyPhoneUI() {
         const roleList = document.getElementById('role-list');
         const nameInput = document.getElementById('edit-category-name');
         const newName = nameInput.value.trim();
-        
+
         if (!newName) {
             showToast('分类名称不能为空');
             return;
@@ -5876,7 +5884,7 @@ function initSillyPhoneUI() {
             .map(cb => cb.value);
 
         const catData = state.stickers[currentBindingCategory];
-        
+
         if (newName !== currentBindingCategory) {
             // 改名逻辑
             if (state.stickers[newName]) {
@@ -5887,10 +5895,10 @@ function initSillyPhoneUI() {
             state.stickers[newName] = catData;
             state.currentStickerCategory = newName;
         }
-        
+
         state.stickers[newName].roles = selectedRoles;
         localStorage.setItem('all-stickers', JSON.stringify(state.stickers));
-        
+
         document.getElementById('role-binding-modal').style.display = 'none';
         renderStickerTabs();
         showToast('设置已保存');
@@ -5899,10 +5907,10 @@ function initSillyPhoneUI() {
     function deleteCategory() {
         if (!currentBindingCategory || currentBindingCategory === '收藏') return;
         if (!confirm(`确定要删除分类 "${currentBindingCategory}" 吗？此操作将同时删除该分类下的所有表情包。`)) return;
-        
+
         delete state.stickers[currentBindingCategory];
         localStorage.setItem('all-stickers', JSON.stringify(state.stickers));
-        
+
         state.currentStickerCategory = '收藏';
         document.getElementById('role-binding-modal').style.display = 'none';
         renderStickerTabs();
@@ -5923,7 +5931,7 @@ function initSillyPhoneUI() {
     document.getElementById('back-btn').onclick = () => switchPage('chat-list');
     toggleFunctionsBtn.onclick = () => togglePanel(panelFunctions);
     toggleVoiceBtn.onclick = () => togglePanel(panelVoice);
-    
+
     document.getElementById('btn-photo').onclick = () => togglePanel(panelPhoto);
     document.getElementById('btn-sticker').onclick = () => {
         togglePanel(panelSticker);
@@ -5938,7 +5946,7 @@ function initSillyPhoneUI() {
             sendTransferBtn.style.border = '1px solid rgba(255, 255, 255, 0.3)';
             redPacketTargetContainer.style.display = 'block';
             redPacketCountContainer.style.display = 'flex';
-            
+
             // 填充群成员
             let optionsHtml = '<option value="all" style="background: #333; color: white;">所有人可领</option>';
             state.currentChat.members.forEach(member => {
@@ -5947,7 +5955,7 @@ function initSillyPhoneUI() {
                 }
             });
             redPacketTargetSelect.innerHTML = optionsHtml;
-            
+
             redPacketTargetSelect.onchange = () => {
                 if (redPacketTargetSelect.value === 'all') {
                     redPacketCountContainer.style.display = 'flex';
@@ -5971,13 +5979,13 @@ function initSillyPhoneUI() {
             showToast('请输入有效的金额', 'alert-circle');
             return;
         }
-        
+
         let remark = transferRemarkInput.value.trim();
         const isGroup = state.currentChat && state.currentChat.isGroup;
-        
+
         let targetId = 'all';
         let count = 1;
-        
+
         if (isGroup) {
             targetId = redPacketTargetSelect.value;
             if (targetId === 'all') {
@@ -6018,7 +6026,7 @@ function initSillyPhoneUI() {
         }
 
         sendMessage(msgData);
-        
+
         transferAmountInput.value = '';
         transferRemarkInput.value = '';
         redPacketCountInput.value = '';
@@ -6029,9 +6037,9 @@ function initSillyPhoneUI() {
         const descriptionInput = photoDescInput.value.trim();
         const file = realPhotoInput.files[0];
         const base64Data = photoPreviewImg.src.startsWith('data:') ? photoPreviewImg.src : null;
-        
+
         if (!descriptionInput && !file && !base64Data) return;
-        
+
         let serverPath = null;
         let fileName = file ? file.name : null;
         let finalDescription = descriptionInput;
@@ -6043,7 +6051,7 @@ function initSillyPhoneUI() {
             // 根据不同模式选择识图 API
             let provider = state.settings.visionProvider;
             let endpoint = state.settings.visionEndpoint;
-            
+
             if (state.settings.visionMode === 'kimi') {
                 provider = 'openai';
                 endpoint = 'https://api.moonshot.cn/v1'; // Kimi 预设
@@ -6067,23 +6075,23 @@ function initSillyPhoneUI() {
             serverPath = await uploadImageToST(file);
         }
 
-        const photoMsg = { 
+        const photoMsg = {
             msgType: 'photo',
             text: finalDescription ? `(IMG:${finalDescription})` : '(IMG:一张照片)',
             serverPath: serverPath,
             fileName: fileName,
             description: finalDescription || '一张照片'
         };
-        
+
         if (serverPath) {
             photoMsg.url = serverPath;
         } else if (base64Data) {
-            photoMsg.url = base64Data; 
+            photoMsg.url = base64Data;
         }
 
         sendMessage(photoMsg);
         setIslandState('default');
-        
+
         // 重置
         photoDescInput.value = '';
         photoPreviewContainer.style.display = 'none';
@@ -6096,7 +6104,7 @@ function initSillyPhoneUI() {
         realPhotoInput.onchange = (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            
+
             if (file.size > 5 * 1024 * 1024) {
                 showToast('图片太大了 (Max 5MB)', 'alert-circle');
                 realPhotoInput.value = '';
@@ -6123,11 +6131,11 @@ function initSillyPhoneUI() {
     sendVoiceBtn.onclick = () => {
         const text = voiceTextInput.value.trim();
         if (!text) return;
-        
+
         // 根据字数估算时长 (约每秒 3.5 个字)
         const durationSec = Math.max(1, Math.ceil(text.length / 3.5) + Math.floor(Math.random() * 2));
         sendMessage({ msgType: 'voice', text, duration: durationSec + '"' });
-        
+
         voiceTextInput.value = '';
     };
 
@@ -6156,7 +6164,7 @@ function initSillyPhoneUI() {
 
     const avatarModal = document.getElementById('avatar-modal');
     const avatarInput = document.getElementById('new-avatar-url-input');
-    
+
     if (changeAvatarBtn) {
         changeAvatarBtn.onclick = (e) => {
             e.preventDefault();
@@ -6196,20 +6204,20 @@ function initSillyPhoneUI() {
     if (chatInfoBtn) {
         chatInfoBtn.onclick = () => {
             if (!state.currentChat) return;
-            
+
             const isGroup = state.currentChat.isGroup;
-            
+
             // 填充当前设置
             chatInfoAvatar.src = state.currentChat.avatar || 'https://files.catbox.moe/blaehb.jpg';
             chatInfoRemark.value = state.currentChat.remark || '';
             chatInfoBg.value = state.currentChat.chatBg || '';
             chatInfoBlur.value = state.currentChat.chatBlur || 0;
             chatInfoBlurValue.textContent = `${state.currentChat.chatBlur || 0}px`;
-            
+
             // 更新标签
             document.getElementById('avatar-label').textContent = isGroup ? '群头像' : '聊天头像';
             document.getElementById('remark-label').textContent = isGroup ? '群聊名称' : '备注名';
-            
+
             // 处理群聊特有显示
             const avatarItem = document.getElementById('change-chat-avatar');
             const remarkItem = document.getElementById('chat-info-remark').closest('.info-item');
@@ -6218,12 +6226,12 @@ function initSillyPhoneUI() {
             const myGroupNicknameItem = document.getElementById('my-group-nickname-item');
             const dangerZone = document.getElementById('danger-zone');
             const deleteBtn = document.getElementById('delete-and-exit-btn');
-            
+
             // 危险区域处理
             dangerZone.style.display = 'flex';
             if (isGroup) {
                 avatarItem.style.display = 'none'; // 群聊不需要群头像设置
-                
+
                 if (state.currentChat.godMode) {
                     // 上帝视角：隐藏群聊名称、群公告、我在本群的昵称、群成员
                     remarkItem.style.display = 'none';
@@ -6239,11 +6247,11 @@ function initSillyPhoneUI() {
                     myGroupNicknameItem.style.display = 'flex';
                     deleteBtn.style.display = 'block';
                     deleteBtn.textContent = '删除并退出';
-                    
+
                     // 填充群公告和我的昵称
                     document.getElementById('chat-info-announcement').value = state.currentChat.announcement || '';
                     document.getElementById('chat-info-my-nickname').value = state.currentChat.myNickname || '';
-                    
+
                     renderMemberGrid();
                 }
             } else {
@@ -6255,7 +6263,7 @@ function initSillyPhoneUI() {
                 deleteBtn.style.display = 'block';
                 deleteBtn.textContent = '删除聊天';
             }
-            
+
             switchPage('chat-info');
             console.log('[SillyPhone] Switched to chat-info, currentChat is:', state.currentChat ? state.currentChat.id : 'null');
         };
@@ -6264,9 +6272,9 @@ function initSillyPhoneUI() {
     function renderMemberGrid() {
         const grid = document.getElementById('chat-info-member-grid');
         if (!grid || !state.currentChat || !state.currentChat.members) return;
-        
+
         grid.innerHTML = '';
-        
+
         // 渲染成员
         state.currentChat.members.forEach(member => {
             const item = document.createElement('div');
@@ -6277,7 +6285,7 @@ function initSillyPhoneUI() {
             `;
             grid.appendChild(item);
         });
-        
+
         // 添加按钮
         const addBtn = document.createElement('div');
         addBtn.className = 'member-item';
@@ -6289,7 +6297,7 @@ function initSillyPhoneUI() {
             addMembersToGroup();
         };
         grid.appendChild(addBtn);
-        
+
         // 删除按钮 (仅群主/管理员可见，这里简单处理)
         const removeBtn = document.createElement('div');
         removeBtn.className = 'member-item';
@@ -6301,17 +6309,17 @@ function initSillyPhoneUI() {
             removeMembersFromGroup();
         };
         grid.appendChild(removeBtn);
-        
-        if(typeof lucide !== 'undefined') lucide.createIcons();
+
+        if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 
     function addMembersToGroup() {
         if (!state.currentChat || !state.currentChat.isGroup) return;
-        
+
         // 过滤掉已经在群里的联系人
         const currentMemberIds = state.currentChat.members.map(m => m.id);
         const availableContacts = state.contacts.filter(c => !currentMemberIds.includes(c.id));
-        
+
         if (availableContacts.length === 0) {
             showToast('所有联系人已在群中', 'info');
             return;
@@ -6319,13 +6327,13 @@ function initSillyPhoneUI() {
 
         showCharacterSelect('选择要添加的成员', (selectedNames) => {
             if (selectedNames.length === 0) return;
-            
+
             const newMembers = state.contacts.filter(c => selectedNames.includes(c.name));
             if (newMembers.length === 0) return;
 
             // 添加到群成员
             state.currentChat.members.push(...newMembers);
-            
+
             // 生成系统消息
             const names = newMembers.map(m => m.name).join('、');
             const sysMsg = {
@@ -6334,15 +6342,15 @@ function initSillyPhoneUI() {
                 text: `你邀请 "${names}" 加入了群聊`,
                 time: new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0')
             };
-            
+
             if (!state.messages[state.currentChat.id]) state.messages[state.currentChat.id] = [];
             state.messages[state.currentChat.id].push(sysMsg);
-            
+
             saveMessagesToLocalStorage();
             saveStateToLocalStorage();
             renderMemberGrid();
             renderMessages(state.currentChat.id);
-            
+
             // 角色反应
             triggerMemberChangeReaction(state.currentChat.id, 'add', names);
         });
@@ -6350,10 +6358,10 @@ function initSillyPhoneUI() {
 
     function removeMembersFromGroup() {
         if (!state.currentChat || !state.currentChat.isGroup) return;
-        
+
         // 只能移除除了自己以外的成员
         const removableMembers = state.currentChat.members.filter(m => m.id !== 'user');
-        
+
         if (removableMembers.length === 0) {
             showToast('群里没有其他成员可以移除', 'info');
             return;
@@ -6365,7 +6373,7 @@ function initSillyPhoneUI() {
             onClick: () => {
                 // 移除成员
                 state.currentChat.members = state.currentChat.members.filter(mem => mem.id !== m.id);
-                
+
                 // 生成系统消息
                 const sysMsg = {
                     id: 'msg_' + Date.now(),
@@ -6373,32 +6381,32 @@ function initSillyPhoneUI() {
                     text: `你将 "${m.name}" 移出了群聊`,
                     time: new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0')
                 };
-                
+
                 if (!state.messages[state.currentChat.id]) state.messages[state.currentChat.id] = [];
                 state.messages[state.currentChat.id].push(sysMsg);
-                
+
                 saveMessagesToLocalStorage();
                 saveStateToLocalStorage();
                 renderMemberGrid();
                 renderMessages(state.currentChat.id);
-                
+
                 // 角色反应
                 triggerMemberChangeReaction(state.currentChat.id, 'remove', m.name);
             }
         }));
-        
+
         showActionSheet(options);
     }
 
     function triggerMemberChangeReaction(chatId, type, names) {
         if (!state.currentChat || !state.currentChat.isGroup) return;
-        
+
         const otherMembers = state.currentChat.members.filter(m => m.id !== 'user');
         if (otherMembers.length === 0) return;
-        
+
         const reactor = otherMembers[Math.floor(Math.random() * otherMembers.length)];
         const prompt = `[系统指令：角色 ${reactor.name} 看到 ${names} ${type === 'add' ? '加入' : '离开'} 了群聊，请发表一句符合人设的简短感言。直接输出内容，不要带括号。]`;
-        
+
         // 延迟触发 AI 请求
         setTimeout(() => {
             triggerAIResponse(prompt, reactor.id, chatId);
@@ -6423,7 +6431,7 @@ function initSillyPhoneUI() {
 
         // 2. 从成员列表中移除
         chat.members = chat.members.filter(m => m.id !== aiSenderId);
-        
+
         // 3. 刷新 UI
         if (state.currentChat && state.currentChat.id === chatId) {
             renderMemberGrid();
@@ -6508,24 +6516,24 @@ function initSillyPhoneUI() {
     if (saveChatInfoBtn) {
         saveChatInfoBtn.onclick = () => {
             if (!state.currentChat) return;
-            
+
             const newAvatar = chatInfoAvatar.src;
             const newRemark = chatInfoRemark.value.trim();
             const newBg = chatInfoBg.value.trim();
             const newBlur = parseInt(chatInfoBlur.value);
-            
+
             // 更新状态
             state.currentChat.avatar = newAvatar;
             state.currentChat.remark = newRemark;
             state.currentChat.chatBg = newBg;
             state.currentChat.chatBlur = newBlur;
-            
+
             // 群聊特有字段
             if (state.currentChat.isGroup) {
                 state.currentChat.announcement = document.getElementById('chat-info-announcement').value.trim();
                 state.currentChat.myNickname = document.getElementById('chat-info-my-nickname').value.trim();
             }
-            
+
             // 同步到联系人列表/群组列表
             const contact = state.contacts.find(c => c.id === state.currentChat.id);
             if (contact) {
@@ -6544,7 +6552,7 @@ function initSillyPhoneUI() {
                     group.myNickname = state.currentChat.myNickname;
                 }
             }
-            
+
             // 重新应用设置
             let displayName = newRemark || state.currentChat.name;
             if (state.currentChat.isGroup && state.currentChat.members) {
@@ -6561,14 +6569,14 @@ function initSillyPhoneUI() {
                 bgLayer.style.filter = 'none';
                 bgLayer.style.opacity = '0';
             }
-            
+
             // 刷新界面
             renderChatList();
             renderMessages(state.currentChat.id);
-            
+
             switchPage('chat-window');
             showToast('聊天设置已保存', 'check');
-            
+
             // 持久化
             saveStateToLocalStorage();
         };
@@ -6608,28 +6616,28 @@ function initSillyPhoneUI() {
             }
             const isGroup = state.currentChat.isGroup;
             const chatId = state.currentChat.id;
-            
+
             if (isGroup) {
                 state.groups = state.groups.filter(g => g.id !== chatId);
             } else {
                 // 如果是单聊，从联系人列表中移除
                 state.contacts = state.contacts.filter(c => c.id !== chatId);
             }
-            
+
             // 移除消息记录
             const msgsToRemove = [...(state.messages[chatId] || [])];
             delete state.messages[chatId];
             removeMessagesFromRawCode(msgsToRemove);
-            
+
             state.currentChat = null;
-            
+
             // 关键：保存并刷新所有列表
             saveStateToLocalStorage();
             saveMessagesToLocalStorage();
-            
+
             renderChatList();
             renderContactsList(); // 确保联系人列表也刷新
-            
+
             switchPage('chat-list');
             showToast(isGroup ? '已删除并退出群聊' : '已删除聊天', 'check');
         };
@@ -6677,7 +6685,7 @@ function initSillyPhoneUI() {
                 if (data.contacts) state.contacts = data.contacts;
                 if (data.groups) state.groups = data.groups;
                 if (data.moments) state.moments = data.moments;
-                
+
                 // 尝试从 all-messages 加载，如果不存在则从 userAccounts 中恢复
                 const msgKey = `all-messages-${state.activeAccountId}`;
                 const savedMsgs = localStorage.getItem(msgKey);
@@ -6694,17 +6702,17 @@ function initSillyPhoneUI() {
             console.error("Failed to load state from localStorage", e);
         }
         loadFromSillyTavern();
-        
+
         // 恢复之前所在的页面和聊天
         try {
             const savedPage = sessionStorage.getItem('sillyphone-currentPage');
             const savedChatId = sessionStorage.getItem('sillyphone-currentChatId');
-            
+
             if (savedPage) {
                 switchPage(savedPage);
                 if (savedPage === 'chat-window' && savedChatId) {
-                    let chatToOpen = state.contacts.find(c => c.id === savedChatId) || 
-                                     state.groups.find(g => g.id === savedChatId);
+                    let chatToOpen = state.contacts.find(c => c.id === savedChatId) ||
+                        state.groups.find(g => g.id === savedChatId);
                     if (chatToOpen) {
                         openChat(chatToOpen);
                     } else {
@@ -6712,7 +6720,7 @@ function initSillyPhoneUI() {
                     }
                 }
             }
-        } catch (e) {}
+        } catch (e) { }
     }
 
     const confirmAvatarBtn = document.getElementById('confirm-avatar-change');
@@ -6723,7 +6731,7 @@ function initSillyPhoneUI() {
                 if (avatarChangeTarget === 'user') {
                     settingsUserAvatarImg.src = newUrl;
                     state.userAvatar = newUrl; // 立即更新状态，确保聊天窗口同步
-                    
+
                     const activeAccount = state.userAccounts.find(acc => acc.id === state.activeAccountId);
                     if (activeAccount) {
                         activeAccount.avatar = newUrl;
@@ -6738,7 +6746,7 @@ function initSillyPhoneUI() {
                 } else {
                     chatInfoAvatar.src = newUrl;
                 }
-                
+
                 avatarModal.style.display = 'none';
                 showToast('头像已更改', 'image');
                 saveStateToLocalStorage();
@@ -6830,9 +6838,9 @@ function initSillyPhoneUI() {
                     const mode = data.mode || (lastAIRequest ? lastAIRequest.mode : null);
                     const targetId = data.targetId || (lastAIRequest ? lastAIRequest.targetId : null);
                     const chatId = data.chatId || (lastAIRequest ? lastAIRequest.chatId : null);
-                    
+
                     processAIReply(data.replyText, chatId, mode, targetId);
-                    
+
                     // 启动打字队列，逐条弹出消息
                     if (state.typingQueue && state.typingQueue.length > 0 && typeof window.processTypingQueue === 'function') {
                         window.processTypingQueue();
@@ -6883,7 +6891,7 @@ function initSillyPhoneUI() {
             if (moment) {
                 let hasNewComment = false;
                 let hasMatchedFormat = false;
-                
+
                 // 1. 尝试解析所有 [评论|...] 格式
                 const commentRegex = /\[评论\|(.*?)\]/g;
                 let match;
@@ -6893,10 +6901,10 @@ function initSillyPhoneUI() {
                     let senderName = '好友';
                     let replyToName = null;
                     let cleanText = '';
-                    
+
                     const cLastPart = cParts[cParts.length - 1];
                     const hasTime = /^\d{1,2}:\d{2}(:\d{2})?$/.test(cLastPart);
-                    
+
                     if (hasTime) {
                         if (cParts.length === 3) {
                             senderName = cParts[0];
@@ -6920,7 +6928,7 @@ function initSillyPhoneUI() {
                             continue;
                         }
                     }
-                    
+
                     const isUser = senderName === state.userName || senderName === state.stUserName || senderName === '我' || senderName === 'user';
                     if (isUser) {
                         // 忽略 AI 伪造的用户评论
@@ -6939,7 +6947,7 @@ function initSillyPhoneUI() {
                         hasNewComment = true;
                     }
                 }
-                
+
                 // 2. 如果没有匹配到任何 [评论|...]，尝试解析 [人名|内容|时间]
                 if (!hasNewComment && !hasMatchedFormat) {
                     const msgRegex = /\[(.*?)\]/g;
@@ -6951,19 +6959,19 @@ function initSillyPhoneUI() {
                             let senderName = mParts[0];
                             let cleanText = mParts[1];
                             let replyToName = null;
-                            
+
                             const replyMatch = cleanText.match(/^回复\s*([^：:]+)[：:]\s*(.*)/);
                             if (replyMatch) {
                                 replyToName = replyMatch[1];
                                 cleanText = replyMatch[2];
                             }
-                            
+
                             const isUser = senderName === state.userName || senderName === state.stUserName || senderName === '我' || senderName === 'user';
                             if (isUser) {
                                 // 忽略 AI 伪造的用户评论
                                 continue;
                             }
-                            
+
                             const isDuplicate = moment.comments.some(c => c.authorName === senderName && c.text === cleanText);
                             if (!isDuplicate) {
                                 moment.comments.push({
@@ -6978,7 +6986,7 @@ function initSillyPhoneUI() {
                         }
                     }
                 }
-                
+
                 // 3. 终极兜底解析：角色名: 内容
                 if (!hasNewComment && !hasMatchedFormat) {
                     const lines = text.split('\n');
@@ -6989,19 +6997,19 @@ function initSillyPhoneUI() {
                             let senderName = lineMatch[1];
                             let cleanText = lineMatch[2];
                             let replyToName = null;
-                            
+
                             const replyMatch = cleanText.match(/^回复\s*([^：:]+)[：:]\s*(.*)/);
                             if (replyMatch) {
                                 replyToName = replyMatch[1];
                                 cleanText = replyMatch[2];
                             }
-                            
+
                             const isUser = senderName === state.userName || senderName === state.stUserName || senderName === '我' || senderName === 'user';
                             if (isUser) {
                                 // 忽略 AI 伪造的用户评论
                                 return;
                             }
-                            
+
                             const isDuplicate = moment.comments.some(c => c.authorName === senderName && c.text === cleanText);
                             if (!isDuplicate) {
                                 moment.comments.push({
@@ -7016,7 +7024,7 @@ function initSillyPhoneUI() {
                         }
                     });
                 }
-                
+
                 // 4. 终极无格式兜底：如果完全没有解析出任何东西，且不包含 <pyq>，直接把整段话当做回复
                 if (!hasNewComment && !hasMatchedFormat && !text.includes('<pyq>') && !text.includes('<post')) {
                     let cleanText = text.trim();
@@ -7053,7 +7061,7 @@ function initSillyPhoneUI() {
                         }
                     }
                 }
-                
+
                 if (hasNewComment) {
                     saveMoments();
                     renderMomentsList();
@@ -7081,7 +7089,7 @@ function initSillyPhoneUI() {
                 if (existingM) {
                     // 如果存在，只合并新评论
                     newM.comments.forEach(newC => {
-                        const commentExists = existingM.comments.some(c => 
+                        const commentExists = existingM.comments.some(c =>
                             c.authorName === newC.authorName && c.text === newC.text
                         );
                         if (!commentExists) {
@@ -7095,7 +7103,7 @@ function initSillyPhoneUI() {
                     hasUpdates = true;
                 }
             });
-            
+
             if (hasUpdates) {
                 saveMoments();
                 renderMomentsList();
@@ -7110,7 +7118,7 @@ function initSillyPhoneUI() {
                 hasProcessedAnything = true;
                 let effectiveCid = cid;
                 let realCid = getContactIdByName(effectiveCid);
-                
+
                 // 如果 cid 是用户自己，说明 AI 搞反了视角
                 if (effectiveCid === state.userName || effectiveCid === '我' || effectiveCid === 'user' || effectiveCid === 'me' || effectiveCid === state.wechatId || (state.stUserName && effectiveCid === state.stUserName)) {
                     const aiMsg = parsedData.messages[cid].find(m => {
@@ -7125,7 +7133,7 @@ function initSillyPhoneUI() {
                         realCid = state.currentChat.id;
                     }
                 }
-                
+
                 if (!state.messages[realCid]) state.messages[realCid] = [];
                 const getNormalizedType = (m) => {
                     let t = m.msgType || m.type;
@@ -7141,16 +7149,16 @@ function initSillyPhoneUI() {
                     existingSignatures.add(sig);
                     return true;
                 });
-                
+
                 const formattedMsgs = newMsgs.map(m => {
                     let senderName = m.sender || effectiveCid;
-                    const isUser = senderName === state.userName || 
-                                   senderName === '我' || 
-                                   senderName === 'user' || 
-                                   senderName === 'me' || 
-                                   senderName === state.wechatId || 
-                                   (state.stUserName && senderName === state.stUserName);
-                    
+                    const isUser = senderName === state.userName ||
+                        senderName === '我' ||
+                        senderName === 'user' ||
+                        senderName === 'me' ||
+                        senderName === state.wechatId ||
+                        (state.stUserName && senderName === state.stUserName);
+
                     if (isUser) {
                         senderName = state.userName;
                     } else if (state.currentChat && !state.currentChat.isGroup && realCid === state.currentChat.id) {
@@ -7181,7 +7189,7 @@ function initSillyPhoneUI() {
                         quote: m.quote,
                         isRecalled: m.type === 'recall'
                     };
-                    
+
                     if (formattedMsg.type !== 'user') {
                         formattedMsg.isTypingPending = true;
                         if (!state.typingQueue) state.typingQueue = [];
@@ -7189,7 +7197,7 @@ function initSillyPhoneUI() {
                     }
                     return formattedMsg;
                 }).filter(m => m.type !== 'user');
-                
+
                 state.messages[realCid].push(...formattedMsgs);
             }
         }
@@ -7205,7 +7213,7 @@ function initSillyPhoneUI() {
         // 检查是否是上帝模式或群聊，尝试解析多行对话
         const isGroup = state.currentChat && state.currentChat.isGroup;
         const isGodMode = state.currentChat && state.currentChat.godMode;
-        
+
         // 清理可能残留的标签
         let cleanText = text.replace(/<shouji>[\s\S]*?(?:<\/shouji>|$)/g, '').replace(/<horae>[\s\S]*?(?:<\/horae>|$)/g, '').trim();
         if (!cleanText) {
@@ -7248,14 +7256,14 @@ function initSillyPhoneUI() {
         // 普通单人聊天或解析失败的兜底
         if (!chatId || !state.messages[chatId]) return;
         const time = new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0');
-            
-            const newMessage = {
-                id: 'msg_' + Date.now(),
-                type: 'ai',
-                senderId: chatId,
-                time: time,
-                text: cleanText
-            };
+
+        const newMessage = {
+            id: 'msg_' + Date.now(),
+            type: 'ai',
+            senderId: chatId,
+            time: time,
+            text: cleanText
+        };
 
         state.messages[chatId].push(newMessage);
         saveMessagesToLocalStorage();
@@ -7267,20 +7275,20 @@ function initSillyPhoneUI() {
     function handleResize() {
         const screenEl = document.querySelector('.screen');
         if (!screenEl) return;
-        
+
         const baseWidth = 360;
         const baseHeight = 600;
-        
+
         // 考虑 body 的 padding (20px * 2 = 40px)
         const availableWidth = window.innerWidth - 40;
         const availableHeight = window.innerHeight - 40;
-        
+
         const scaleX = availableWidth / baseWidth;
         const scaleY = availableHeight / baseHeight;
-        
+
         // 取最小的缩放比例，但不超过 1（不放大）
         const scale = Math.min(scaleX, scaleY, 1);
-        
+
         screenEl.style.transform = `scale(${scale})`;
         screenEl.style.transformOrigin = 'center center';
     }
@@ -7301,7 +7309,7 @@ function initSillyPhoneUI() {
 
         // 2. 加载本地存储 (聊天、表情包、头像)
         loadUserStickers();
-        
+
         const localData = localStorage.getItem(getStorageKey());
         if (localData) {
             try {
@@ -7312,7 +7320,7 @@ function initSillyPhoneUI() {
                     if (saved.presets) state.presets = saved.presets;
                     if (saved.activeAccountId) state.activeAccountId = saved.activeAccountId;
                 }
-                
+
                 if (saved.userAccounts) {
                     state.userAccounts = saved.userAccounts;
                     const active = state.userAccounts.find(a => a.id === state.activeAccountId) || state.userAccounts[0];
@@ -7324,7 +7332,7 @@ function initSillyPhoneUI() {
                     }
                 }
                 state._dataLoaded = true;
-            } catch (e) {}
+            } catch (e) { }
         } else {
             state._dataLoaded = true;
         }
