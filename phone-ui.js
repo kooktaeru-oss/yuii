@@ -4789,6 +4789,34 @@ function initSillyPhoneUI() {
             messagesContainer.appendChild(wrapper);
         });
 
+        const pendingMsg = state.typingQueue && state.typingQueue.find(msg => state.messages[chatId] && state.messages[chatId].includes(msg));
+        if (pendingMsg && state.currentChat && state.currentChat.id === chatId) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'message-wrapper ai pop-in';
+            
+            const avatar = document.createElement('img');
+            avatar.className = 'msg-avatar';
+            avatar.referrerPolicy = 'no-referrer';
+            
+            if (state.currentChat.isGroup) {
+                const member = state.currentChat.members.find(mem => mem.id === (pendingMsg.senderId || pendingMsg.sender));
+                avatar.src = (member ? member.avatar : null) || pendingMsg.avatar || state.currentChat.avatar || 'https://files.catbox.moe/blaehb.jpg';
+            } else {
+                avatar.src = state.currentChat.avatar || 'https://files.catbox.moe/blaehb.jpg';
+            }
+            wrapper.appendChild(avatar);
+
+            const bubbleContainer = document.createElement('div');
+            bubbleContainer.className = 'msg-bubble-container';
+            const div = document.createElement('div');
+            div.className = 'msg-bubble typing-indicator-bubble';
+            div.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
+            
+            bubbleContainer.appendChild(div);
+            wrapper.appendChild(bubbleContainer);
+            messagesContainer.appendChild(wrapper);
+        }
+
         if(typeof lucide !== 'undefined') lucide.createIcons();
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
