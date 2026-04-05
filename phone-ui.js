@@ -4572,10 +4572,11 @@ function initSillyPhoneUI() {
             contentDiv.className = 'bubble-content';
 
             if (m.msgType === 'photo') {
-                if (m.url && m.url.startsWith('http')) {
+                const isImageSource = m.url && (m.url.startsWith('http') || m.url.startsWith('data:image'));
+                if (isImageSource) {
                     contentDiv.innerHTML = `
                         <div class="sticker-content">
-                            <img src="${m.url}" referrerpolicy="no-referrer" class="sticker-img" style="border-radius: 8px; max-width: 200px; cursor: pointer;" onclick="window.open('${m.url}', '_blank')">
+                            <img src="${m.url}" referrerpolicy="no-referrer" class="sticker-img" style="border-radius: 8px; max-width: 200px; cursor: pointer;" onclick="if(this.src.startsWith('http')) window.open(this.src, '_blank')">
                         </div>
                     `;
                 } else {
