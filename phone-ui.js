@@ -1810,7 +1810,7 @@ function initSillyPhoneUI() {
     const toastContainer = document.getElementById('toast-container');
 
 
-    // 照片面板增强
+    // 照片面板增强 (部分元素已在上方声明)
     const photoPreviewContainer = document.getElementById('photo-preview-container');
     const photoPreviewImg = document.getElementById('photo-preview-img');
     const removePhotoPreviewBtn = document.getElementById('remove-photo-preview');
@@ -1825,6 +1825,76 @@ function initSillyPhoneUI() {
     if (selectPhotoBtn && realPhotoInput) {
         selectPhotoBtn.onclick = () => {
             realPhotoInput.click();
+        };
+    }
+
+    if (sendPhotoBtn) {
+        sendPhotoBtn.onclick = async () => {
+            const descriptionInput = photoDescInput ? photoDescInput.value.trim() : '';
+            const file = realPhotoInput ? realPhotoInput.files[0] : null;
+            const base64Data = photoPreviewImg && photoPreviewImg.src.startsWith('data:') ? photoPreviewImg.src : null;
+
+            if (!descriptionInput && !file && !base64Data) return;
+
+            let serverPath = null;
+            let fileName = file ? file.name : null;
+            let finalDescription = descriptionInput;
+
+            if (file) {
+                showToast('正在发送图片...', 'loader');
+                serverPath = await uploadImageToST(file);
+            }
+
+            const photoMsg = {
+                msgType: 'photo',
+                text: finalDescription ? `(IMG:${finalDescription})` : '(IMG)',
+                serverPath: serverPath,
+                fileName: fileName,
+                description: finalDescription || ''
+            };
+
+            if (serverPath) {
+                photoMsg.url = serverPath;
+            } else if (base64Data) {
+                photoMsg.url = base64Data;
+            }
+
+            sendMessage(photoMsg);
+            setIslandState('default');
+
+            // 重置
+            if (photoDescInput) photoDescInput.value = '';
+            if (photoPreviewContainer) photoPreviewContainer.style.display = 'none';
+            if (photoPreviewImg) photoPreviewImg.src = '';
+            if (realPhotoInput) realPhotoInput.value = '';
+        };
+    }
+
+    if (realPhotoInput) {
+        realPhotoInput.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            if (file.size > 5 * 1024 * 1024) {
+                showToast('图片太大了 (Max 5MB)', 'alert-circle');
+                realPhotoInput.value = '';
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                if (photoPreviewImg) photoPreviewImg.src = e.target.result;
+                if (photoPreviewContainer) photoPreviewContainer.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+        };
+    }
+
+    if (removePhotoPreviewBtn) {
+        removePhotoPreviewBtn.onclick = () => {
+            if (photoPreviewImg) photoPreviewImg.src = '';
+            if (photoPreviewContainer) photoPreviewContainer.style.display = 'none';
+            if (realPhotoInput) realPhotoInput.value = '';
         };
     }
 
@@ -5141,6 +5211,115 @@ function initSillyPhoneUI() {
 
         if (updates.length > 0) {
             st.setChatMessages(updates, { refresh: 'none' });
+        }
+    }
+
+    function deleteMessage(chatId, index) {
+        const msg = state.messages[chatId][index];
+        state.messages[chatId].splice(index, 1);
+        removeMessagesFromRawCode([msg]);
+        saveMessagesToLocalStorage();
+        renderMessages(chatId);
+        showToast('已永久删除消息');
+    }
+
+    function enableMultiSelect(chatId, initialIndex) {
+        state.multiSelectMode = true;
+        state.selectedMessageIds = [];
+        const msg = state.messages[chatId][initialIndex];
+        state.selectedMessageIds.push(msg.id || `msg_${initialIndex}`);
+
+        document.getElementById('chat-multi-select-toolbar').style.display = 'flex';
+        document.querySelector('.input-bar').style.display = 'none';
+        updateMultiSelectToolbar();
+        renderMessages(chatId);
+    }
+
+    function updateMultiSelectToolbar() {
+        document.getElementById('chat-selected-count').textContent = `已选择 ${state.selectedMessageIds.length} 项`;
+    }
+
+    document.getElementById('cancel-chat-multi-select').onclick = () => {
+        state.multiSelectMode = false;
+        state.selectedMessageIds = [];
+        document.getElementById('chat-multi-select-toolbar').style.display = 'none';
+        document.querySelector('.input-bar').style.display = 'flex';
+        renderMessages(state.currentChat.id);
+    };
+
+    document.getElementById('confirm-chat-multi-delete').onclick = () => {
+        if (state.selectedMessageIds.length === 0) return;
+
+        showActionSheet([
+            {
+                text: `永久删除 ${state.selectedMessageIds.length} 条消息`,
+                danger: true,
+                onClick: () => {
+                    const chatId = state.currentChat.id;
+                    const msgsToRemove = state.messages[chatId].filter((m, index) => {
+                        const msgId = m.id || `msg_${index}`;
+                        return state.selectedMessageIds.includes(msgId);
+                    });
+
+                    state.messages[chatId] = state.messages[chatId].filter((m, index) => {
+                        const msgId = m.id || `msg_${index}`;
+                        return !state.selectedMessageIds.includes(msgId);
+                    });
+
+                    removeMessagesFromRawCode(msgsToRemove);
+
+                    state.multiSelectMode = false;
+                    state.selectedMessageIds = [];
+                    saveMessagesToLocalStorage();
+                    document.getElementById('chat-multi-select-toolbar').style.display = 'none';
+                    document.querySelector('.input-bar').style.display = 'flex';
+                    renderMessages(chatId);
+                    showToast('已永久删除选中消息');
+                }
+            }
+        ]);
+    };
+
+    function sendMessage(msgData, targetId = null) {
+        const chatId = state.currentChat ? state.currentChat.id : (msgData.isSilent ? 'system_queue' : null);
+        if (!chatId) return;
+        if (!state.messages[chatId]) state.messages[chatId] = [];
+
+        const newMessage = {
+            id: 'msg_' + Date.now(),
+            type: 'user',
+            senderId: 'user',
+            senderName: state.userName,
+            senderAvatar: state.userAvatar,
+            time: new Date().getHours() + ':' + new Date().getMinutes().toString().padStart(2, '0'),
+            ...msgData
+        };
+
+        // 处理引用
+        if (state.quotedMessage) {
+            newMessage.quotedMsg = { ...state.quotedMessage };
+            state.quotedMessage = null;
+            updateQuotePreview();
+        }
+
+        state.messages[chatId].push(newMessage);
+        saveMessagesToLocalStorage();
+        renderMessages(chatId);
+        closeAllPanels();
+
+        // 如果在通话中，将消息加入通话记录
+        if (state.call.active) {
+            state.call.transcript.push({
+                sender: '我',
+                text: newMessage.text,
+                time: newMessage.time
+            });
+            renderCallTranscript();
+        }
+
+        // 只有系统消息才自动触发 AI，用户发送的消息需要手动点击灵动岛或通话头像
+        if (msgData.isSilent && !msgData.noTrigger) {
+            triggerAIResponse(msgData.text, targetId);
         }
     }
 
