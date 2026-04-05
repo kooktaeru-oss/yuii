@@ -605,7 +605,8 @@
                             识图模型
                             <button id="fetch-vision-models-btn" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 4px; padding: 2px 8px; font-size: 11px; cursor: pointer; backdrop-filter: blur(5px);">拉取</button>
                         </label>
-                        <input type="text" id="vision-model" placeholder="gpt-4o" style="color: white; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 8px; outline: none;">
+                        <input type="text" id="vision-model" list="vision-model-list" placeholder="gpt-4o" style="color: white; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 8px; outline: none;">
+                        <datalist id="vision-model-list"></datalist>
                     </div>
                     <div class="setting-item">
                         <label>代理地址 (可选)</label>
