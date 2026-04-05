@@ -1643,6 +1643,7 @@ function initSillyPhoneUI() {
     const panelSticker = document.getElementById('panel-sticker');
     const panelVoice = document.getElementById('panel-voice');
     const panelTransfer = document.getElementById('panel-transfer');
+    const realPhotoInput = document.getElementById('real-photo-input');
 
     const photoDescInput = document.getElementById('photo-desc-input');
     const sendPhotoBtn = document.getElementById('send-photo-btn');
@@ -1652,17 +1653,6 @@ function initSillyPhoneUI() {
     const transferRemarkInput = document.getElementById('transfer-remark-input');
     const sendTransferBtn = document.getElementById('send-transfer-btn');
 
-    // 绑定选图按钮点击
-    const selectPhotoBtn = document.getElementById('select-photo-btn');
-    if (selectPhotoBtn && realPhotoInput) {
-        selectPhotoBtn.onclick = () => {
-            realPhotoInput.click();
-        };
-    }
-    const redPacketTargetContainer = document.getElementById('red-packet-target-container');
-    const redPacketTargetSelect = document.getElementById('red-packet-target-select');
-    const redPacketCountContainer = document.getElementById('red-packet-count-container');
-    const redPacketCountInput = document.getElementById('red-packet-count-input');
     const transferPanelTitle = document.getElementById('transfer-panel-title');
     const btnTransferLabel = document.getElementById('btn-transfer-label');
     const stickerTabs = document.getElementById('sticker-tabs');
@@ -1697,10 +1687,22 @@ function initSillyPhoneUI() {
     const fetchVisionModelsBtn = document.getElementById('fetch-vision-models-btn');
 
     // 照片面板增强
-    const realPhotoInput = document.getElementById('real-photo-input');
     const photoPreviewContainer = document.getElementById('photo-preview-container');
     const photoPreviewImg = document.getElementById('photo-preview-img');
     const removePhotoPreviewBtn = document.getElementById('remove-photo-preview');
+
+    const redPacketTargetContainer = document.getElementById('red-packet-target-container');
+    const redPacketTargetSelect = document.getElementById('red-packet-target-select');
+    const redPacketCountContainer = document.getElementById('red-packet-count-container');
+    const redPacketCountInput = document.getElementById('red-packet-count-input');
+
+    // 绑定选图按钮点击
+    const selectPhotoBtn = document.getElementById('select-photo-btn');
+    if (selectPhotoBtn && realPhotoInput) {
+        selectPhotoBtn.onclick = () => {
+            realPhotoInput.click();
+        };
+    }
 
     // 预设相关
     const addPresetBtn = document.getElementById('add-preset-btn');
