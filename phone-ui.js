@@ -76,7 +76,11 @@ function initSillyPhoneUI() {
             bubbleBlur: 12,
             navBlur: 15,
             glassOpacity: 5,
-            pureMode: false
+            pureMode: false,
+            visionProvider: 'openai',
+            visionKey: '',
+            visionModel: 'gpt-4o',
+            visionEndpoint: ''
         },
         presets: [], // 手机轻预设
         call: {
@@ -396,6 +400,8 @@ function initSillyPhoneUI() {
             let amount = undefined;
             let remark = undefined;
             let status = undefined;
+            let url = '';
+            let label = '';
 
             if (dataParts.length === 1) {
                 const body = dataParts[0];
@@ -430,8 +436,25 @@ function initSillyPhoneUI() {
                 else { content = body; }
             } else if (dataParts.length === 2) {
                 const body = dataParts[0];
-                if (body === '图片') { type = 'image'; content = dataParts[1]; }
-                else if (body === '表情包') { type = 'sticker'; content = dataParts[1]; }
+                if (body === '图片') { type = 'image'; content = dataParts[1]; url = dataParts[1]; }
+                else if (body === '表情包') { 
+                    type = 'sticker'; 
+                    label = dataParts[1] || '表情包';
+                    content = label; 
+                    
+                    // 尝试根据标签名反向查找 URL，恢复视觉显示
+                    let foundUrl = '';
+                    if (state.stickers) {
+                        for (const catName in state.stickers) {
+                            const item = state.stickers[catName].items.find(i => i.label === label);
+                            if (item) {
+                                foundUrl = item.url;
+                                break;
+                            }
+                        }
+                    }
+                    url = foundUrl; 
+                }
                 else if (body === '语音消息') { type = 'voice'; content = dataParts[1]; }
                 else if (body.includes('转账') || body.includes('收账')) { 
                     type = 'transfer'; 
@@ -479,7 +502,7 @@ function initSillyPhoneUI() {
                 content = dataParts.join('|');
             }
 
-            return { sender, time, type, content, duration, amount, remark, status };
+            return { sender, time, type, content, duration, amount, remark, status, url, label };
         };
 
         // 辅助函数：解析引用消息
@@ -1522,6 +1545,12 @@ function initSillyPhoneUI() {
         glassOpacityValueDisplay.textContent = s.glassOpacity / 100;
         if (pureModeToggle) pureModeToggle.checked = !!s.pureMode;
 
+        // 更新识图设置
+        if (visionProviderSelect) visionProviderSelect.value = s.visionProvider || 'openai';
+        if (visionKeyInput) visionKeyInput.value = s.visionKey || '';
+        if (visionModelInput) visionModelInput.value = s.visionModel || '';
+        if (visionEndpointInput) visionEndpointInput.value = s.visionEndpoint || '';
+
         if (settingsUserNameInput) settingsUserNameInput.value = state.userName;
         if (settingsWechatIdInput) settingsWechatIdInput.value = state.wechatId;
         if (settingsUserAvatarImg) settingsUserAvatarImg.src = state.userAvatar;
@@ -1648,6 +1677,18 @@ function initSillyPhoneUI() {
     const momentsBgInput = document.getElementById('moments-bg-url');
     const saveSettingsBtn = document.getElementById('save-settings-btn');
     const toastContainer = document.getElementById('toast-container');
+
+    // Vision API 设置
+    const visionProviderSelect = document.getElementById('vision-provider');
+    const visionKeyInput = document.getElementById('vision-key');
+    const visionModelInput = document.getElementById('vision-model');
+    const visionEndpointInput = document.getElementById('vision-endpoint');
+
+    // 照片面板增强
+    const realPhotoInput = document.getElementById('real-photo-input');
+    const photoPreviewContainer = document.getElementById('photo-preview-container');
+    const photoPreviewImg = document.getElementById('photo-preview-img');
+    const removePhotoPreviewBtn = document.getElementById('remove-photo-preview');
 
     // 预设相关
     const addPresetBtn = document.getElementById('add-preset-btn');
@@ -2333,6 +2374,12 @@ function initSillyPhoneUI() {
         state.settings.glassOpacity = parseFloat(glassOpacityVal) * 100;
         state.settings.momentsBg = newMomentsBg;
         state.settings.pureMode = isPureMode;
+
+        // 保存识图设置
+        state.settings.visionProvider = visionProviderSelect.value;
+        state.settings.visionKey = visionKeyInput.value.trim();
+        state.settings.visionModel = visionModelInput.value.trim();
+        state.settings.visionEndpoint = visionEndpointInput.value.trim();
 
         state.userName = newUserName;
         state.userAvatar = newUserAvatar;
@@ -5034,6 +5081,111 @@ function initSillyPhoneUI() {
         }
     }
 
+    async function identifyImage(base64Data) {
+        const s = state.settings;
+        if (!s.visionKey) {
+            console.warn('[Vision] API Key missing. Skipping identification.');
+            return null;
+        }
+
+        const provider = s.visionProvider || 'openai';
+        const model = s.visionModel || (provider === 'openai' ? 'gpt-4o' : (provider === 'claude' ? 'claude-3-5-sonnet' : 'gemini-1.5-pro'));
+        const endpoint = s.visionEndpoint || (provider === 'openai' ? 'https://api.openai.com/v1/chat/completions' : (provider === 'claude' ? 'https://api.anthropic.com/v1/messages' : 'https://generativelanguage.googleapis.com/v1beta/models/...'));
+
+        const systemPrompt = "你是一个识图助手。请简要描述这张图片中的内容，侧重于视觉细节和氛围（不超过50字）。请直接返回描述内容，不要有任何前缀。";
+
+        try {
+            let body;
+            let headers = { "Content-Type": "application/json" };
+
+            if (provider === 'openai') {
+                body = JSON.stringify({
+                    model: model,
+                    messages: [
+                        { role: "system", content: systemPrompt },
+                        {
+                            role: "user",
+                            content: [
+                                { type: "text", text: "描述这张图。" },
+                                { type: "image_url", image_url: { url: base64Data } }
+                            ]
+                        }
+                    ],
+                    max_tokens: 100
+                });
+                headers["Authorization"] = `Bearer ${s.visionKey}`;
+            } else if (provider === 'claude') {
+                // Claude needs base64 without prefix
+                const base64Pure = base64Data.split(',')[1];
+                const mediaType = base64Data.split(';')[0].split(':')[1];
+                body = JSON.stringify({
+                    model: model,
+                    max_tokens: 100,
+                    messages: [
+                        {
+                            role: "user",
+                            content: [
+                                {
+                                    type: "image",
+                                    source: {
+                                        type: "base64",
+                                        media_type: mediaType,
+                                        data: base64Pure
+                                    }
+                                },
+                                { type: "text", text: systemPrompt }
+                            ]
+                        }
+                    ]
+                });
+                headers["x-api-key"] = s.visionKey;
+                headers["anthropic-version"] = "2023-06-01";
+                // Note: Anthropic often requires a proxy or specific CORS handling
+            } else if (provider === 'gemini') {
+                const base64Pure = base64Data.split(',')[1];
+                const mediaType = base64Data.split(';')[0].split(':')[1];
+                const geminiUrl = s.visionEndpoint || `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${s.visionKey}`;
+                
+                const response = await fetch(geminiUrl, {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [
+                                { text: systemPrompt },
+                                { inline_data: { mime_type: mediaType, data: base64Pure } }
+                            ]
+                        }]
+                    })
+                });
+                const result = await response.json();
+                return result.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
+            }
+
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: headers,
+                body: body
+            });
+
+            if (!response.ok) {
+                console.error('[Vision] API Request failed:', response.statusText);
+                return null;
+            }
+
+            const result = await response.json();
+            if (provider === 'openai') {
+                return result.choices?.[0]?.message?.content?.trim();
+            } else if (provider === 'claude') {
+                return result.content?.[0]?.text?.trim();
+            }
+        } catch (error) {
+            console.error('[Vision] Error identifying image:', error);
+            return null;
+        }
+        return null;
+    }
+
     async function triggerAIResponse(customPrompt = null, targetId = null, chatId = null) {
         if (isAIRequestPending) return;
         
@@ -5042,6 +5194,27 @@ function initSillyPhoneUI() {
         
         const activeChatId = chatId || (state.currentChat ? state.currentChat.id : 'system_queue');
         if (!state.messages[activeChatId]) state.messages[activeChatId] = [];
+
+        // --- 识图逻辑集成 ---
+        // 扫描最近的消息，寻找包含 Base64 数据但没有描述的照片
+        const recentMsgs = state.messages[activeChatId].slice(-5);
+        for (const msg of recentMsgs) {
+            if (msg.msgType === 'photo' && msg.url && msg.url.startsWith('data:') && !msg.description) {
+                console.log('[Vision] 发现未识图照片，正在后台识别...', msg.id);
+                // 此时灵动岛已经是 loading 状态 (对方正在输入...)，符合用户需求
+                const description = await identifyImage(msg.url);
+                if (description) {
+                    console.log('[Vision] 识图成功:', description);
+                    msg.description = description;
+                    msg.text = `(IMG:${description})`; // 更新显示文本
+                    saveMessagesToLocalStorage();
+                } else {
+                    console.warn('[Vision] 识图失败或返回为空');
+                    msg.description = '一张照片'; // 兜底
+                }
+            }
+        }
+        // --- 识图逻辑结束 ---
         
         const mode = state.currentPage === 'moments' ? 'moments' : 'chat';
         
@@ -5110,23 +5283,9 @@ function initSillyPhoneUI() {
                 // 确保在生成前同步最新状态到聊天记录
                 syncToSillyTavern();
                 
-                // 提取最近的表情包作为视觉附件
-                const attachments = [];
-                const recentStickers = currentSessionMessages
-                    .filter(m => m.msgType === 'sticker' && m.url)
-                    .slice(-3); // 只取最近3个，避免由于附件过多导致请求失败
-                
-                recentStickers.forEach(s => {
-                    attachments.push({ type: 'image', data: s.url });
-                });
-
-                // 为识图插件增加隐藏的 Markdown 图片链接注入（作为双保险）
-                const visualPrompt = recentStickers.map(s => `![${s.label || 'sticker'}](${s.url})`).join(' ');
-
                 const rawRequestData = {
-                    user_input: (customPrompt || (mode === 'moments' ? '请回复朋友圈...' : '请回复...')) + stickerPrompt + globalConstraints + dynamicPresetPrompt + (visualPrompt ? '\n' + visualPrompt : ''),
-                    should_silence: true,
-                    attachments: attachments.length > 0 ? attachments : undefined
+                    user_input: (customPrompt || (mode === 'moments' ? '请回复朋友圈...' : '请回复...')) + stickerPrompt + globalConstraints + dynamicPresetPrompt,
+                    should_silence: true
                 };
 
                 if (state.settings.pureMode) {
@@ -5608,10 +5767,59 @@ function initSillyPhoneUI() {
 
     sendPhotoBtn.onclick = () => {
         const description = photoDescInput.value.trim();
-        if (!description) return;
-        sendMessage({ text: `(IMG:${description})` });
+        const base64Data = photoPreviewImg.src.startsWith('data:') ? photoPreviewImg.src : null;
+        
+        if (!description && !base64Data) return;
+        
+        const photoMsg = { 
+            msgType: 'photo',
+            text: description ? `(IMG:${description})` : '(IMG:一张照片)'
+        };
+        
+        if (base64Data) {
+            photoMsg.url = base64Data; // 存入 url 字段，供 renderMessages 使用
+        }
+        if (description) {
+            photoMsg.description = description;
+        }
+        
+        sendMessage(photoMsg);
+        
+        // 重置
         photoDescInput.value = '';
+        photoPreviewContainer.style.display = 'none';
+        photoPreviewImg.src = '';
+        realPhotoInput.value = '';
     };
+
+    // 真实照片监听
+    if (realPhotoInput) {
+        realPhotoInput.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            if (file.size > 5 * 1024 * 1024) {
+                showToast('图片太大了 (Max 5MB)', 'alert-circle');
+                realPhotoInput.value = '';
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                photoPreviewImg.src = event.target.result;
+                photoPreviewContainer.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+        };
+    }
+
+    if (removePhotoPreviewBtn) {
+        removePhotoPreviewBtn.onclick = () => {
+            photoPreviewContainer.style.display = 'none';
+            photoPreviewImg.src = '';
+            realPhotoInput.value = '';
+        };
+    }
 
     sendVoiceBtn.onclick = () => {
         const text = voiceTextInput.value.trim();
