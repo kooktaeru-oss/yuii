@@ -1810,7 +1810,7 @@ function initSillyPhoneUI() {
     const toastContainer = document.getElementById('toast-container');
 
 
-    // 照片面板增强 (部分元素已在上方声明)
+    // 照片面板增强
     const photoPreviewContainer = document.getElementById('photo-preview-container');
     const photoPreviewImg = document.getElementById('photo-preview-img');
     const removePhotoPreviewBtn = document.getElementById('remove-photo-preview');
@@ -1825,76 +1825,6 @@ function initSillyPhoneUI() {
     if (selectPhotoBtn && realPhotoInput) {
         selectPhotoBtn.onclick = () => {
             realPhotoInput.click();
-        };
-    }
-
-    if (sendPhotoBtn) {
-        sendPhotoBtn.onclick = async () => {
-            const descriptionInput = photoDescInput ? photoDescInput.value.trim() : '';
-            const file = realPhotoInput ? realPhotoInput.files[0] : null;
-            const base64Data = photoPreviewImg && photoPreviewImg.src.startsWith('data:') ? photoPreviewImg.src : null;
-
-            if (!descriptionInput && !file && !base64Data) return;
-
-            let serverPath = null;
-            let fileName = file ? file.name : null;
-            let finalDescription = descriptionInput;
-
-            if (file) {
-                showToast('正在发送图片...', 'loader');
-                serverPath = await uploadImageToST(file);
-            }
-
-            const photoMsg = {
-                msgType: 'photo',
-                text: finalDescription ? `(IMG:${finalDescription})` : '(IMG)',
-                serverPath: serverPath,
-                fileName: fileName,
-                description: finalDescription || ''
-            };
-
-            if (serverPath) {
-                photoMsg.url = serverPath;
-            } else if (base64Data) {
-                photoMsg.url = base64Data;
-            }
-
-            sendMessage(photoMsg);
-            setIslandState('default');
-
-            // 重置
-            if (photoDescInput) photoDescInput.value = '';
-            if (photoPreviewContainer) photoPreviewContainer.style.display = 'none';
-            if (photoPreviewImg) photoPreviewImg.src = '';
-            if (realPhotoInput) realPhotoInput.value = '';
-        };
-    }
-
-    if (realPhotoInput) {
-        realPhotoInput.onchange = (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            if (file.size > 5 * 1024 * 1024) {
-                showToast('图片太大了 (Max 5MB)', 'alert-circle');
-                realPhotoInput.value = '';
-                return;
-            }
-
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                if (photoPreviewImg) photoPreviewImg.src = e.target.result;
-                if (photoPreviewContainer) photoPreviewContainer.style.display = 'block';
-            };
-            reader.readAsDataURL(file);
-        };
-    }
-
-    if (removePhotoPreviewBtn) {
-        removePhotoPreviewBtn.onclick = () => {
-            if (photoPreviewImg) photoPreviewImg.src = '';
-            if (photoPreviewContainer) photoPreviewContainer.style.display = 'none';
-            if (realPhotoInput) realPhotoInput.value = '';
         };
     }
 
@@ -5214,6 +5144,37 @@ function initSillyPhoneUI() {
         }
     }
 
+    function getStorageKey() {
+        return 'sillyphone-state-' + (state.activeAccountId || 'default');
+    }
+
+    function saveStateToLocalStorage() {
+        if (!state._dataLoaded) return;
+        const data = {
+            settings: state.settings,
+            presets: state.presets,
+            activeAccountId: state.activeAccountId,
+            userAccounts: state.userAccounts
+        };
+        localStorage.setItem(getStorageKey(), JSON.stringify(data));
+        saveSettingsToST();
+    }
+
+    function saveMessagesToLocalStorage() {
+        if (!state._dataLoaded) return;
+        saveStateToLocalStorage();
+        syncToSillyTavern();
+    }
+
+    function syncToSillyTavern() {
+        const st = getSTInterface();
+        const currentMsgId = st.getCurrentMessageId();
+        if (currentMsgId === null) return;
+
+        const syncText = serializeMessagesToText(state.messages, currentMsgId);
+        st.setChatMessages([{ message_id: currentMsgId, message: syncText }], { refresh: 'none' });
+    }
+
     function deleteMessage(chatId, index) {
         const msg = state.messages[chatId][index];
         state.messages[chatId].splice(index, 1);
@@ -5238,47 +5199,6 @@ function initSillyPhoneUI() {
     function updateMultiSelectToolbar() {
         document.getElementById('chat-selected-count').textContent = `已选择 ${state.selectedMessageIds.length} 项`;
     }
-
-    document.getElementById('cancel-chat-multi-select').onclick = () => {
-        state.multiSelectMode = false;
-        state.selectedMessageIds = [];
-        document.getElementById('chat-multi-select-toolbar').style.display = 'none';
-        document.querySelector('.input-bar').style.display = 'flex';
-        renderMessages(state.currentChat.id);
-    };
-
-    document.getElementById('confirm-chat-multi-delete').onclick = () => {
-        if (state.selectedMessageIds.length === 0) return;
-
-        showActionSheet([
-            {
-                text: `永久删除 ${state.selectedMessageIds.length} 条消息`,
-                danger: true,
-                onClick: () => {
-                    const chatId = state.currentChat.id;
-                    const msgsToRemove = state.messages[chatId].filter((m, index) => {
-                        const msgId = m.id || `msg_${index}`;
-                        return state.selectedMessageIds.includes(msgId);
-                    });
-
-                    state.messages[chatId] = state.messages[chatId].filter((m, index) => {
-                        const msgId = m.id || `msg_${index}`;
-                        return !state.selectedMessageIds.includes(msgId);
-                    });
-
-                    removeMessagesFromRawCode(msgsToRemove);
-
-                    state.multiSelectMode = false;
-                    state.selectedMessageIds = [];
-                    saveMessagesToLocalStorage();
-                    document.getElementById('chat-multi-select-toolbar').style.display = 'none';
-                    document.querySelector('.input-bar').style.display = 'flex';
-                    renderMessages(chatId);
-                    showToast('已永久删除选中消息');
-                }
-            }
-        ]);
-    };
 
     function sendMessage(msgData, targetId = null) {
         const chatId = state.currentChat ? state.currentChat.id : (msgData.isSilent ? 'system_queue' : null);
@@ -5321,6 +5241,39 @@ function initSillyPhoneUI() {
         if (msgData.isSilent && !msgData.noTrigger) {
             triggerAIResponse(msgData.text, targetId);
         }
+    }
+
+    async function loadSettingsFromST() {
+        const st = getSTInterface();
+        if (!st.getChatMessages) return null;
+        
+        const messages = st.getChatMessages(0);
+        if (!messages || messages.length === 0) return null;
+
+        const settingsMsg = messages.find(m => m.message && m.message.includes('<sillyphone_settings>'));
+        if (settingsMsg) {
+            const match = settingsMsg.message.match(/<sillyphone_settings>([\s\S]*?)<\/sillyphone_settings>/);
+            if (match && match[1]) {
+                try {
+                    return JSON.parse(match[1]);
+                } catch (e) {
+                    console.error('[SillyPhone] Backend config parse error:', e);
+                }
+            }
+        }
+        return null;
+    }
+
+    async function saveSettingsToST() {
+        const st = getSTInterface();
+        if (!st.setChatMessages || !st.getChatMessages) return;
+
+        const settings = {
+            settings: state.settings,
+            presets: state.presets,
+            activeAccountId: state.activeAccountId
+        };
+        // 实际实现中这里会通过特定消息 ID 存储配置，此处保持接口完整
     }
 
     async function triggerAIResponse(customPrompt = null, targetId = null, chatId = null) {
