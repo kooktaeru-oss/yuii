@@ -5272,16 +5272,18 @@ function initSillyPhoneUI() {
         }
     }
 
-    async function identifyImage(base64Data, customProvider = null, customEndpoint = null) {
+    async function identifyImage(base64Data, customProvider = null, customEndpoint = null, customKey = null, customModel = null) {
         const s = state.settings;
-        if (!s.visionKey && !customEndpoint) {
+        const activeKey = customKey || s.visionKey;
+        if (!activeKey && !customEndpoint) {
             console.warn('[Vision] API Key missing. Skipping identification.');
             return null;
         }
 
         const provider = customProvider || s.visionProvider || 'openai';
         
-        let model = s.visionModel || (provider === 'openai' ? 'gpt-4o' : (provider === 'claude' ? 'claude-3-5-sonnet' : 'gemini-1.5-pro'));
+        // 修正模型名称：针对特定的中转站和错误输入进行自动对齐
+        let model = customModel || s.visionModel || (provider === 'openai' ? 'gpt-4o' : (provider === 'claude' ? 'claude-3-5-sonnet' : 'gemini-1.5-pro'));
         // 只有官方 Gemini 渠道才强制修正，站子中转的建议保持用户原样，除非用户填的是错误的 2.5
         if (provider === 'gemini' && model.includes('2.5')) model = model.replace('2.5', '1.5'); 
 
@@ -5303,7 +5305,7 @@ function initSillyPhoneUI() {
                 if (!endpoint.endsWith('/messages')) endpoint += '/v1/messages';
             }
         } else if (provider === 'gemini') {
-            if (!endpoint) endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${s.visionKey}`;
+            if (!endpoint) endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${activeKey}`;
         }
 
         const systemPrompt = "你是一个识图助手。请简要描述这张图片中的内容，侧重于视觉细节和氛围（不超过50字）。请直接返回描述内容，不要有任何前缀。";
@@ -5326,7 +5328,7 @@ function initSillyPhoneUI() {
                     ],
                     max_tokens: 200
                 });
-                headers["Authorization"] = `Bearer ${s.visionKey}`;
+                headers["Authorization"] = `Bearer ${activeKey}`;
             } else if (provider === 'claude') {
                 const base64Pure = base64Data.split(',')[1];
                 const mediaType = base64Data.split(';')[0].split(':')[1];
@@ -5350,12 +5352,12 @@ function initSillyPhoneUI() {
                         }
                     ]
                 });
-                headers["x-api-key"] = s.visionKey;
+                headers["x-api-key"] = activeKey;
                 headers["anthropic-version"] = "2023-06-01";
             } else if (provider === 'gemini') {
                 const base64Pure = base64Data.split(',')[1];
                 const mediaType = base64Data.split(';')[0].split(':')[1];
-                const geminiUrl = s.visionEndpoint || `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${s.visionKey}`;
+                const geminiUrl = endpoint || `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${activeKey}`;
 
                 const response = await fetch(geminiUrl, {
                     method: 'POST',
@@ -5485,15 +5487,26 @@ function initSillyPhoneUI() {
     }
 
     async function testVisionConnection() {
-        showToast('正在测试识图连接...', 'loader');
+        // 从当前 UI 输入框获取最新值，而不是从 state.settings 获取
+        const provider = visionProviderSelect.value;
+        const key = visionKeyInput.value.trim();
+        const model = visionModelInput.value.trim();
+        const endpoint = visionEndpointInput.value.trim();
+
+        if (!key) {
+            showToast('测试前请先填写 API Key', 'alert-circle');
+            return;
+        }
+
+        showToast('正在测试识图连接 (使用当前配置)...', 'loader');
         // 一个 1x1 像素的黑色图片 Base64，用于测试流量非常小
         const testImg = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
-        const result = await identifyImage(testImg);
+        const result = await identifyImage(testImg, provider, endpoint, key, model);
         
         if (result) {
-            showToast('识图连接成功! 响应: ' + result.substring(0, 20), 'check-circle');
+            showToast('识图连接成功! AI回复: ' + result.substring(0, 30) + '...', 'check-circle');
         } else {
-            // identifyImage 内部已经弹过具体的错误 toast 了
+            // identifyImage 内部已经弹过具体的错误 status toast 了
             console.warn('[Vision] Test connection returned no result.');
         }
     }
