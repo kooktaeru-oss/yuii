@@ -5672,7 +5672,7 @@ function initSillyPhoneUI() {
                 // 核心 Prompt 构建优化：如果 customPrompt 为空，尝试使用最后一条用户消息
                 const userPrompt = customPrompt || lastUserMsgText || (mode === 'moments' ? '请回复朋友圈...' : '请回复...');
 const visionSystemInfo = multimodalAttachment ? '[系统提示：用户发送了一张图片，请结合图片内容进行回复。]' : '';
-const latestImageDesc = [...recentMsgs].reverse().find(m => (m.msgType === 'photo' || m.msgType === 'image') && m.description)?.description || '';
+const latestImageDesc = [...recentMsgs].reverse().find(     m => (m.msgType === 'photo' || m.msgType === 'image') && m.description && m.description !== '一张照片' )?.description || '';
 const visionTextInfo = latestImageDesc ? `\n[图片内容文字描述：${latestImageDesc}]` : '';
 console.log('[latestImageDesc]', latestImageDesc);
 console.log('[visionTextInfo]', visionTextInfo);
@@ -6196,10 +6196,10 @@ const rawRequestData = {
 
         const photoMsg = {
             msgType: 'photo',
-            text: finalDescription ? `(IMG:${finalDescription})` : '(IMG:一张照片)',
+            text: finalDescription ? `(IMG:${finalDescription})` : '(IMG)',
             serverPath: serverPath,
             fileName: fileName,
-            description: finalDescription || '一张照片'
+            description: finalDescription || ''
         };
 
         if (serverPath) {
