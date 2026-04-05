@@ -430,6 +430,23 @@ function initSillyPhoneUI() {
      * D. 图片后端上传 (Image Backend Upload)
      */
     async function uploadImageToST(file) {
+        if (window.parent && window.parent.__uploadImageByPlugin) {
+    console.log('[SillyPhone] 正在通过 Smart Media Assistant 上传...');
+    try {
+        const result = await window.parent.__uploadImageByPlugin(file, {
+            path: 'phone',
+            sendToChat: false
+        });
+
+        console.log('[upload result]', result);
+        console.log('[upload success]', result?.success);
+        console.log('[upload url]', result?.url);
+
+        if (result && result.success && result.url) return result.url;
+    } catch (e) {
+        console.error('[SillyPhone] 桥接上传异常:', e);
+    }
+}
         // --- 方案 1: 借道 kencuo/chajian (识图插件) 桥接器 ---
         if (window.parent && window.parent.__uploadImageByPlugin) {
             console.log('[SillyPhone] 正在通过 Smart Media Assistant 上传...');
