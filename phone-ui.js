@@ -5671,12 +5671,14 @@ function initSillyPhoneUI() {
 
                 // 核心 Prompt 构建优化：如果 customPrompt 为空，尝试使用最后一条用户消息
                 const userPrompt = customPrompt || lastUserMsgText || (mode === 'moments' ? '请回复朋友圈...' : '请回复...');
-                const visionSystemInfo = multimodalAttachment ? '[系统提示：用户发送了一张图片，请结合图片内容进行回复。]' : '';
+const visionSystemInfo = multimodalAttachment ? '[系统提示：用户发送了一张图片，请结合图片内容进行回复。]' : '';
+const latestImageDesc = [...recentMsgs].reverse().find(m => (m.msgType === 'photo' || m.msgType === 'image') && m.description)?.description || '';
+const visionTextInfo = latestImageDesc ? `\n[图片内容文字描述：${latestImageDesc}]` : '';
 
-                const rawRequestData = {
-                    user_input: userPrompt + stickerPrompt + globalConstraints + dynamicPresetPrompt + visionSystemInfo,
-                    should_silence: true
-                };
+const rawRequestData = {
+    user_input: userPrompt + stickerPrompt + globalConstraints + dynamicPresetPrompt + visionSystemInfo + visionTextInfo,
+    should_silence: true
+};
 
                 // --- 注入多模态附件 ---
                 if (multimodalAttachment) {
