@@ -5321,8 +5321,9 @@ function initSillyPhoneUI() {
                 : 'https://generativelanguage.googleapis.com/v1beta/models/...')
     );
 
-    console.log('[Vision provider]', provider);
-    console.log('[Vision model]', model);
+console.log('[Vision provider]', provider);
+console.log('[Vision model]', model);
+console.log('[Vision endpoint]', endpoint);
 
     const systemPrompt = "你是一个识图助手。请先明确说出图片主体是什么，再补充1到2个最明显的视觉特征。必须具体，禁止只回答“这是一张照片”“一张图片”“某种动物”“看起来像……”这类模糊说法。优先识别主体类别、颜色、姿态、场景。示例：一只橘色短毛猫，正面趴着，眼神有点幽怨。只输出描述本身，不要加前缀，不要解释。";
 
@@ -5430,96 +5431,11 @@ function initSillyPhoneUI() {
         return text;
     } catch (error) {
         console.error('[Vision] Error identifying image:', error);
-        showToast(`识图发生错误: ${error.message || '未知错误'}`, 'alert-triangle');
-        return null;
+console.log('[Vision error message]', error?.message);
+showToast(`识图发生错误: ${error.message || '未知错误'}`, 'alert-triangle');
+return null;
     }
 }
-
-    async function fetchVisionModels() {
-        const provider = visionProviderSelect.value;
-        const key = visionKeyInput.value.trim();
-        const customEndpoint = visionEndpointInput.value.trim();
-
-        if (!key) {
-            showToast('请填写 API Key', 'alert-circle');
-            return;
-        }
-
-        showToast('正在拉取模型中...', 'loader');
-
-        try {
-            let url;
-            let headers = { "Content-Type": "application/json" };
-
-            if (provider === 'openai') {
-                // 处理中转地址常见的 /v1/chat/completions 结尾
-                let base = customEndpoint || 'https://api.openai.com/v1';
-                base = base.replace(/\/chat\/completions\/?$/, '');
-                url = base.endsWith('/models') ? base : (base.endsWith('/') ? base + 'models' : base + '/models');
-                headers["Authorization"] = `Bearer ${key}`;
-            } else if (provider === 'claude') {
-                let base = customEndpoint || 'https://api.anthropic.com/v1';
-                base = base.replace(/\/messages\/?$/, '');
-                url = base.endsWith('/models') ? base : (base.endsWith('/') ? base + 'models' : base + '/models');
-                headers["x-api-key"] = key;
-                headers["anthropic-version"] = "2023-06-01";
-                headers["Content-Type"] = "application/json";
-            } else if (provider === 'gemini') {
-                url = `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`;
-            }
-
-            const response = await fetch(url, { method: 'GET', headers: headers });
-            if (!response.ok) throw new Error('拉取失败: ' + response.statusText);
-
-            const data = await response.json();
-            let models = [];
-
-            if (provider === 'openai' || provider === 'claude') {
-                const list = data.data || data.models || data || [];
-                models = Array.isArray(list) ? list.map(m => m.id || m.name) : [];
-                // 简单过滤：包含视觉关键词的排在前面
-                models.sort((a, b) => {
-                    const keywords = ['vision', 'gpt-4o', 'claude-3', 'gemini'];
-                    const aHas = keywords.some(k => a.toLowerCase().includes(k));
-                    const bHas = keywords.some(k => b.toLowerCase().includes(k));
-                    if (aHas && !bHas) return -1;
-                    if (!aHas && bHas) return 1;
-                    return 0;
-                });
-            } else if (provider === 'gemini') {
-                models = (data.models || []).map(m => m.name.replace('models/', ''));
-            }
-
-            if (models.length === 0) {
-                showToast('未找到可用模型', 'alert-circle');
-                return;
-            }
-
-            // 更新 Datalist 供用户直接在输入框选择
-            const dataList = document.getElementById('vision-model-list');
-            if (dataList) {
-                dataList.innerHTML = '';
-                models.slice(0, 100).forEach(m => {
-                    const option = document.createElement('option');
-                    option.value = m;
-                    dataList.appendChild(option);
-                });
-                showToast('模型列表已拉取，请在输入框选择', 'check-circle');
-            }
-        } catch (error) {
-            console.error('[Vision] Fetch models error:', error);
-            showToast('拉取失败，请检查 Key 或代理地址', 'alert-circle');
-        }
-    }
-
-    async function triggerAIResponse(customPrompt = null, targetId = null, chatId = null) {
-        if (isAIRequestPending) return;
-
-        isAIRequestPending = true;
-        setIslandState('loading');
-
-        const activeChatId = chatId || (state.currentChat ? state.currentChat.id : 'system_queue');
-        if (!state.messages[activeChatId]) state.messages[activeChatId] = [];
 
         // --- 识图逻辑集成 (静默扫描补丁) ---
         // 扫描最近的消息，寻找最近的一张照片作为多模态附件
