@@ -5391,11 +5391,11 @@ function initSillyPhoneUI() {
                 const errorBody = await response.text();
                 console.error('[Vision] API Request failed:', response.status, errorBody);
                 // 404 时显示完整 URL 方便排错
-                let errorMsg = `接口报错: ${response.status}`;
+                let errorMsg = `识图请求失败: ${response.status}`;
                 if (response.status === 404) {
-                    errorMsg += `\n路径不对? 尝试地址: ${endpoint.substring(0, 50)}...`;
+                    errorMsg += `\n[404] 路径可能不对，插件请求地址为: ${endpoint}`;
                 } else {
-                    errorMsg += ` ${errorBody.substring(0, 20)}`;
+                    errorMsg += `\n详情: ${errorBody.substring(0, 50)}...`;
                 }
                 showToast(errorMsg, 'alert-circle');
                 return null;
@@ -5517,31 +5517,67 @@ function initSillyPhoneUI() {
         }
     }
 
-    function syncFromSillyTavern() {
+    async function syncFromSillyTavern() {
         try {
-            // 尝试获取酒馆主配置
-            // 优先级：custom_url -> openai_url -> 默认
-            const stUrl = localStorage.getItem('api_custom_url') || localStorage.getItem('api_url_openai') || '';
-            const stKey = localStorage.getItem('api_key_openai') || '';
-            const stModel = localStorage.getItem('model_openai') || '';
+            showToast('正在从酒馆后端同步配置...', 'loader');
+            // 彻底放弃 localStorage，直接请求酒馆后端接口
+            const response = await fetch('/api/settings/get', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            });
 
-            if (!stUrl && !stKey) {
-                showToast('未在酒馆中找到有效的 OpenAI 兼容配置', 'alert-circle');
+            if (!response.ok) throw new Error('无法连接到酒馆后端');
+            const settings = await response.json();
+            
+            // 1. 获取当前生效的 API 来源
+            const apiSource = settings.main_api; // 'openai', 'claude', 'google' 等
+            
+            let targetUrl = '';
+            let targetKey = '';
+            let targetModel = '';
+
+            if (apiSource === 'openai') {
+                targetUrl = settings.api_url_openai || settings.api_custom_url || '';
+                targetKey = settings.api_key_openai || '';
+                targetModel = settings.model_openai || '';
+            } else if (apiSource === 'google') {
+                targetKey = settings.google_api_key || '';
+                targetModel = settings.google_model || '';
+                // Gemini 通常没自定义地址
+            } else if (apiSource === 'claude') {
+                targetKey = settings.api_key_claude || '';
+                targetModel = settings.model_claude || '';
+            }
+
+            if (!targetKey && !targetUrl) {
+                showToast('未在酒馆中检测到已激活的 API 配置', 'alert-circle');
                 return;
             }
 
-            // 填充到 UI
-            if (stUrl) {
-                visionEndpointInput.value = stUrl;
-                visionProviderSelect.value = 'openai'; // 酒馆填这类地址通常是 OpenAI 兼容
-            }
-            if (stKey) visionKeyInput.value = stKey;
-            if (stModel) visionModelInput.value = stModel;
+            // 2. 填充 UI
+            visionProviderSelect.value = apiSource === 'google' ? 'gemini' : (apiSource === 'claude' ? 'claude' : 'openai');
+            if (targetUrl) visionEndpointInput.value = targetUrl;
+            if (targetKey) visionKeyInput.value = targetKey;
+            if (targetModel) visionModelInput.value = targetModel;
 
-            showToast('已从酒馆主配置同步 API 信息', 'check-circle');
+            showToast(`已同步: ${apiSource} | ${targetModel}`, 'check-circle');
+            console.log('[Vision] Synced API settings from ST backend:', { apiSource, targetModel, targetUrl });
         } catch (e) {
             console.error('[Vision] Sync error:', e);
-            showToast('同步失败，请检查浏览器权限', 'alert-circle');
+            // 备选方案：尝试从 localStorage 兜底
+            const stUrl = localStorage.getItem('api_custom_url') || localStorage.getItem('api_url_openai') || '';
+            const stKey = localStorage.getItem('api_key_openai') || '';
+            const stModel = localStorage.getItem('model_openai') || '';
+            
+            if (stUrl || stKey) {
+                if (stUrl) visionEndpointInput.value = stUrl;
+                if (stKey) visionKeyInput.value = stKey;
+                if (stModel) visionModelInput.value = stModel;
+                showToast('已从本地缓存同步配置', 'check-circle');
+            } else {
+                showToast('同步失败，请手动填写 API 设置', 'alert-circle');
+            }
         }
     }
 
