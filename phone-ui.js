@@ -1466,6 +1466,11 @@ function initSillyPhoneUI() {
                             msg.text = contentStr;
                         }
                         
+                        if (msg.type !== 'user') {
+                            msg.isTypingPending = true;
+                            if (!state.typingQueue) state.typingQueue = [];
+                            state.typingQueue.push(msg);
+                        }
                         state.messages[chatId].push(msg);
                         } else {
                             textBuffer.push(line);
@@ -4808,7 +4813,15 @@ function initSillyPhoneUI() {
         
         if (state.currentChat) renderMessages(state.currentChat.id);
 
-        const delay = Math.floor(Math.random() * 2000) + 3000;
+        let delay = 1500;
+        if (nextMsg.msgType === 'voice' && nextMsg.duration) {
+            delay = Math.min(nextMsg.duration * 1000, 5000) + 500;
+        } else if (nextMsg.text) {
+            delay = Math.max(1000, Math.min(nextMsg.text.length * 100, 4000));
+        } else if (nextMsg.msgType === 'photo' || nextMsg.msgType === 'sticker') {
+            delay = 2000;
+        }
+        delay += Math.floor(Math.random() * 500);
         
         setTimeout(() => {
             nextMsg.isTypingPending = false;
