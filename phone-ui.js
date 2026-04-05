@@ -1210,8 +1210,15 @@ function initSillyPhoneUI() {
                         m.isTypingPending = true;
                         state.typingQueue.push(m);
                     } else if (oldMsgs.find(oldM => (oldM.id === m.id || `${oldM.time}|${oldM.text||oldM.content}` === sig))?.isTypingPending) {
-                        // 继承老的 pending 状态
+                        // 继承老的 pending 状态，并更新打字队列中的引用防止孤立
                         m.isTypingPending = true;
+                        if (!state.typingQueue) state.typingQueue = [];
+                        const queueIndex = state.typingQueue.findIndex(q => q.id === m.id || `${q.time}|${q.text||q.content}` === sig);
+                        if (queueIndex !== -1) {
+                            state.typingQueue[queueIndex] = m;
+                        } else {
+                            state.typingQueue.push(m);
+                        }
                     } else {
                         m.isTypingPending = false;
                     }
@@ -4789,34 +4796,6 @@ function initSillyPhoneUI() {
             messagesContainer.appendChild(wrapper);
         });
 
-        const pendingMsg = state.typingQueue && state.typingQueue.find(msg => state.messages[chatId] && state.messages[chatId].includes(msg));
-        if (pendingMsg && state.currentChat && state.currentChat.id === chatId) {
-            const wrapper = document.createElement('div');
-            wrapper.className = 'message-wrapper ai pop-in';
-            
-            const avatar = document.createElement('img');
-            avatar.className = 'msg-avatar';
-            avatar.referrerPolicy = 'no-referrer';
-            
-            if (state.currentChat.isGroup) {
-                const member = state.currentChat.members.find(mem => mem.id === (pendingMsg.senderId || pendingMsg.sender));
-                avatar.src = (member ? member.avatar : null) || pendingMsg.avatar || state.currentChat.avatar || 'https://files.catbox.moe/blaehb.jpg';
-            } else {
-                avatar.src = state.currentChat.avatar || 'https://files.catbox.moe/blaehb.jpg';
-            }
-            wrapper.appendChild(avatar);
-
-            const bubbleContainer = document.createElement('div');
-            bubbleContainer.className = 'msg-bubble-container';
-            const div = document.createElement('div');
-            div.className = 'msg-bubble typing-indicator-bubble';
-            div.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
-            
-            bubbleContainer.appendChild(div);
-            wrapper.appendChild(bubbleContainer);
-            messagesContainer.appendChild(wrapper);
-        }
-
         if(typeof lucide !== 'undefined') lucide.createIcons();
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
@@ -6717,6 +6696,13 @@ function initSillyPhoneUI() {
                         quote: m.quote,
                         isRecalled: m.type === 'recall'
                     };
+                    
+                    if (formattedMsg.type !== 'user') {
+                        formattedMsg.isTypingPending = true;
+                        if (!state.typingQueue) state.typingQueue = [];
+                        state.typingQueue.push(formattedMsg);
+                    }
+                    return formattedMsg;
                 }).filter(m => m.type !== 'user');
                 
                 state.messages[realCid].push(...formattedMsgs);
