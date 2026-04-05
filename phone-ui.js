@@ -5281,19 +5281,27 @@ function initSillyPhoneUI() {
 
         const provider = customProvider || s.visionProvider || 'openai';
         
-        // 修正模型名称：针对特定的中转站和错误输入进行自动对齐
         let model = s.visionModel || (provider === 'openai' ? 'gpt-4o' : (provider === 'claude' ? 'claude-3-5-sonnet' : 'gemini-1.5-pro'));
-        if (model.includes('2.5')) model = model.replace('2.5', '1.5'); 
+        // 只有官方 Gemini 渠道才强制修正，站子中转的建议保持用户原样，除非用户填的是错误的 2.5
+        if (provider === 'gemini' && model.includes('2.5')) model = model.replace('2.5', '1.5'); 
 
         let endpoint = customEndpoint || s.visionEndpoint;
         if (provider === 'openai') {
             if (!endpoint) endpoint = 'https://api.openai.com/v1/chat/completions';
-            // 自动修正中转地址路径
-            else if (!endpoint.includes('/v1') && !endpoint.includes('/chat/')) {
-                endpoint = endpoint.endsWith('/') ? endpoint + 'v1/chat/completions' : endpoint + '/v1/chat/completions';
+            else {
+                // 彻底解决 404: 只要不以 /chat/completions 结尾，就智能补全
+                endpoint = endpoint.replace(/\/+$/, ''); // 去掉结尾斜杠
+                if (!endpoint.endsWith('/chat/completions')) {
+                    if (endpoint.endsWith('/v1')) endpoint += '/chat/completions';
+                    else endpoint += '/v1/chat/completions';
+                }
             }
         } else if (provider === 'claude') {
             if (!endpoint) endpoint = 'https://api.anthropic.com/v1/messages';
+            else {
+                endpoint = endpoint.replace(/\/+$/, '');
+                if (!endpoint.endsWith('/messages')) endpoint += '/v1/messages';
+            }
         } else if (provider === 'gemini') {
             if (!endpoint) endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${s.visionKey}`;
         }
@@ -5474,6 +5482,25 @@ function initSillyPhoneUI() {
             console.error('[Vision] Fetch models error:', error);
             showToast('拉取失败，请检查 Key 或代理地址', 'alert-circle');
         }
+    }
+
+    async function testVisionConnection() {
+        showToast('正在测试识图连接...', 'loader');
+        // 一个 1x1 像素的黑色图片 Base64，用于测试流量非常小
+        const testImg = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+        const result = await identifyImage(testImg);
+        
+        if (result) {
+            showToast('识图连接成功! 响应: ' + result.substring(0, 20), 'check-circle');
+        } else {
+            // identifyImage 内部已经弹过具体的错误 toast 了
+            console.warn('[Vision] Test connection returned no result.');
+        }
+    }
+
+    const testVisionBtn = document.getElementById('test-vision-conn-btn');
+    if (testVisionBtn) {
+        testVisionBtn.onclick = testVisionConnection;
     }
 
     async function triggerAIResponse(customPrompt = null, targetId = null, chatId = null) {
