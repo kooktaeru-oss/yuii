@@ -5599,6 +5599,7 @@ function initSillyPhoneUI() {
 
         console.log('[multimodalAttachment]', multimodalAttachment);
         console.log('[recentMsgs]', recentMsgs);
+        console.log('=== 我改过的识图代码真的加载了 ===');
         // --- 识图逻辑结束 ---
 
         const mode = state.currentPage === 'moments' ? 'moments' : 'chat';
