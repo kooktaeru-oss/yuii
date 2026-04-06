@@ -175,7 +175,7 @@ function initSillyPhoneUI() {
                     text += `<${sender}|${quotedContent}|${content}>\n`;
                 } else if (msgType === 'photo') {
                     // 如果是原生传图且有路径，我们保持 Raw 代码极致干净，甚至可以省略文字描述
-                    const desc = msg.description || '一张照片';
+                    const desc = msg.description || '发送了一张图片';
                     const path = msg.serverPath ? `|IMGDATA:${msg.serverPath}` : '';
                     const fileName = msg.fileName ? `|FILENAME:${msg.fileName}` : '';
                     text += `[${sender}|图片|${desc}${path}${fileName}|${time}]\n`;
