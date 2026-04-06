@@ -5276,6 +5276,7 @@ function initSillyPhoneUI() {
         const recentMsgs = state.messages[activeChatId].slice(-8);
         let multimodalAttachment = null;
         let lastUserMsgText = null;
+        let targetImgMsg = null; // 记录源图片消息
 
         // 倒序找图和找最后一条用户文本
         for (let i = recentMsgs.length - 1; i >= 0; i--) {
@@ -5293,6 +5294,7 @@ function initSillyPhoneUI() {
                 // 核心：直接获取 Base64 用于附件挂载，不再调用外部识图接口
                 if (url.startsWith('data:')) {
                     multimodalAttachment = url;
+                    targetImgMsg = msg;
                 } else if (url.startsWith('IMGDATA:') || url.startsWith('/api/images/get')) {
                     try {
                         const cleanPath = url.includes('IMGDATA:') ? url.replace('IMGDATA:', '') : url.split('path=')[1];
@@ -5304,11 +5306,25 @@ function initSillyPhoneUI() {
                             reader.onloadend = () => resolve(reader.result);
                             reader.readAsDataURL(blob);
                         });
+                        if (multimodalAttachment) targetImgMsg = msg;
                     } catch (e) { console.error('[SillyPhone] 获取图片附件失败:', e); }
                 }
             }
         }
         // --- 识图逻辑结束 ---
+
+        // --- 构造结构化图片对象 ---
+        let structuralImage = null;
+        if (multimodalAttachment) {
+            structuralImage = {
+                type: 'image',
+                text: '发送了一张图片',
+                imageData: multimodalAttachment,
+                fileName: (targetImgMsg ? targetImgMsg.fileName : null) || 'image.jpg',
+                imageDescription: '发送了一张图片',
+                extra: {}
+            };
+        }
 
         const mode = state.currentPage === 'moments' ? 'moments' : 'chat';
 
@@ -5320,25 +5336,51 @@ function initSillyPhoneUI() {
 
         // 使用构建生成 Prompt 的函数，过滤掉历史记录
         const currentSessionMessages = buildGenerationPrompt(activeChatId);
-        const lastMessages = currentSessionMessages.slice(-5).map(m => {
+        let lastMessages = currentSessionMessages.slice(-6).map(m => {
             const { time, ...rest } = m;
             return rest;
         });
+
+        // --- 结构化上下文注入 (关键：将 Context 中的图片消息替换为 Image-Type) ---
+        if (structuralImage) {
+            // 找到最后一条图片消息的位置（或者是 '(IMG)' 占位符）
+            const lastPhotoIdx = [...lastMessages].reverse().findIndex(m => m.msgType === 'photo' || m.text === '(IMG)');
+            if (lastPhotoIdx !== -1) {
+                const realIdx = lastMessages.length - 1 - lastPhotoIdx;
+                // 仅替换必要的字段，保留发送者等信息，但类型改为 image
+                lastMessages[realIdx] = {
+                    ...lastMessages[realIdx],
+                    ...structuralImage
+                };
+            }
+        }
+
+        // 核心 Prompt 构建优化
+        let userPrompt = customPrompt || lastUserMsgText || (mode === 'moments' ? '请回复朋友圈...' : '请回复...');
+        
+        // 规则实现：如果用户只发了图 (Prompt 只是占位符)，则清空文字 Prompt，依赖结构化输入
+        const isOnlyImage = structuralImage && (userPrompt === '(IMG)' || !lastUserMsgText);
+        if (isOnlyImage) {
+            userPrompt = ""; 
+        }
 
         const requestData = {
             source: 'yuii-phone',
             type: 'YUII_AI_REQUEST',
             requestId: 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-            prompt: customPrompt,
+            prompt: userPrompt,
             targetId: targetId || activeChatId,
             mode: mode,
             context: lastMessages,
             chatId: activeChatId
         };
+        
+        // 显式挂载到 requestData 根部，方便 Bridge 提取
+        if (structuralImage) requestData.structuralImage = structuralImage;
 
         lastAIRequest = requestData;
 
-        console.log('[SillyPhone] 发送 AI 请求:', requestData);
+        console.log('[SillyPhone] 发送 AI 请求 (携带结构化输入):', requestData);
 
         const st = getSTInterface();
 
@@ -5377,28 +5419,25 @@ function initSillyPhoneUI() {
                 // 确保在生成前同步最新状态到聊天记录
                 syncToSillyTavern();
 
-                // 核心 Prompt 构建优化：如果 customPrompt 为空，尝试使用最后一条用户消息
-                const userPrompt = customPrompt || lastUserMsgText || (mode === 'moments' ? '请回复朋友圈...' : '请回复...');
-                const visionSystemInfo = multimodalAttachment ? '[系统提示：用户发送了一张图片，请结合图片内容进行回复。]' : '';
+                const visionSystemInfo = structuralImage ? '[系统提示：用户发送了一张图片，请结合图片内容进行回复。]' : '';
 
                 const rawRequestData = {
-                    user_input: userPrompt + stickerPrompt + globalConstraints + dynamicPresetPrompt + visionSystemInfo,
+                    user_input: (userPrompt + stickerPrompt + globalConstraints + dynamicPresetPrompt + visionSystemInfo).trim(),
                     should_silence: true
                 };
 
-                // --- 注入多模态附件 ---
-                if (multimodalAttachment) {
-                    console.log('[SillyPhone] 正在挂载多模态附件, 文本内容:', userPrompt);
+                // --- 注入多模态附件 (同层支持) ---
+                if (structuralImage) {
+                    console.log('[SillyPhone] 正在挂载多模态附件, 文本 Prompt:', userPrompt);
                     try {
-                        const base64Parts = multimodalAttachment.split(',');
+                        const base64Parts = structuralImage.imageData.split(',');
                         const data = base64Parts[1];
                         const mime = base64Parts[0].split(';')[0].split(':')[1] || 'image/jpeg';
                         
-                        // 1. 标准 images 数组 (后端 api/generate 识别)
+                        // 包含结构化数据
                         rawRequestData.images = [{ data, mime }];
-                        
-                        // 2. 备用 attachments 字段 (某些前端接口识别)
                         rawRequestData.attachments = [{ type: 'image', data, mime }];
+                        rawRequestData.structuralImage = structuralImage; 
                     } catch (e) { console.error('[SillyPhone] 附件格式化失败:', e); }
                 }
 
