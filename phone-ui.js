@@ -76,8 +76,7 @@ function initSillyPhoneUI() {
             bubbleBlur: 12,
             navBlur: 15,
             glassOpacity: 5,
-            pureMode: false,
-            visionMode: 'direct'
+            pureMode: false
         },
         presets: [], // 手机轻预设
         call: {
@@ -1687,6 +1686,7 @@ function initSillyPhoneUI() {
         if (pureModeToggle) pureModeToggle.checked = !!s.pureMode;
 
 
+        // 更新设置页 UI
 
         // 更新朋友圈头部显示
         const momentsUserName = document.getElementById('moments-user-name');
@@ -1809,6 +1809,12 @@ function initSillyPhoneUI() {
     const saveSettingsBtn = document.getElementById('save-settings-btn');
     const toastContainer = document.getElementById('toast-container');
 
+    // Vision API 设置
+    const visionProviderSelect = document.getElementById('vision-provider');
+    const visionKeyInput = document.getElementById('vision-key');
+    const visionModelInput = document.getElementById('vision-model');
+    const visionEndpointInput = document.getElementById('vision-endpoint');
+    const fetchVisionModelsBtn = document.getElementById('fetch-vision-models-btn');
 
     // 照片面板增强
     const photoPreviewContainer = document.getElementById('photo-preview-container');
@@ -2443,20 +2449,21 @@ function initSillyPhoneUI() {
         if (!text) return '';
 
         // 1. 处理 @ 提及高亮 (类似 QQ 空间/微信)
+        // 匹配 @ 后面跟非空白字符，直到遇到空格或标点符号
         text = text.replace(/@([^\s@\n\r\t,.:;!?，。：；！？]+)/g, '<span class="mention-highlight">@$1</span>');
 
-        // 2. 匹配 (IMG) 或 (IMG:描述内容)
-        const imgRegex = /\(IMG(?::(.*?))?\)/g;
+        // 2. 匹配 (IMG:描述内容)
+        const imgRegex = /\(IMG:(.*?)\)/g;
         if (imgRegex.test(text)) {
             return text.replace(imgRegex, (match, desc) => {
-                const finalDesc = desc || '已发送图片';
-                const safeDesc = finalDesc.replace(/"/g, '&quot;');
+                // 将描述内容存入 data 属性，方便点击时获取
+                const safeDesc = desc.replace(/"/g, '&quot;');
                 return `<div class="text-img-card" data-full-text="${safeDesc}" onclick="window.openTextImgDetail(this)">
                     <div class="text-img-header">
                         <i data-lucide="image" size="10"></i>
-                        <span>IMAGE</span>
+                        <span>IMAGE DESCRIPTION</span>
                     </div>
-                    <div class="text-img-body">${finalDesc}</div>
+                    <div class="text-img-body">${desc}</div>
                 </div>`;
             });
         }
@@ -5144,37 +5151,6 @@ function initSillyPhoneUI() {
         }
     }
 
-    function getStorageKey() {
-        return 'sillyphone-state-' + (state.activeAccountId || 'default');
-    }
-
-    function saveStateToLocalStorage() {
-        if (!state._dataLoaded) return;
-        const data = {
-            settings: state.settings,
-            presets: state.presets,
-            activeAccountId: state.activeAccountId,
-            userAccounts: state.userAccounts
-        };
-        localStorage.setItem(getStorageKey(), JSON.stringify(data));
-        saveSettingsToST();
-    }
-
-    function saveMessagesToLocalStorage() {
-        if (!state._dataLoaded) return;
-        saveStateToLocalStorage();
-        syncToSillyTavern();
-    }
-
-    function syncToSillyTavern() {
-        const st = getSTInterface();
-        const currentMsgId = st.getCurrentMessageId();
-        if (currentMsgId === null) return;
-
-        const syncText = serializeMessagesToText(state.messages, currentMsgId);
-        st.setChatMessages([{ message_id: currentMsgId, message: syncText }], { refresh: 'none' });
-    }
-
     function deleteMessage(chatId, index) {
         const msg = state.messages[chatId][index];
         state.messages[chatId].splice(index, 1);
@@ -5199,6 +5175,47 @@ function initSillyPhoneUI() {
     function updateMultiSelectToolbar() {
         document.getElementById('chat-selected-count').textContent = `已选择 ${state.selectedMessageIds.length} 项`;
     }
+
+    document.getElementById('cancel-chat-multi-select').onclick = () => {
+        state.multiSelectMode = false;
+        state.selectedMessageIds = [];
+        document.getElementById('chat-multi-select-toolbar').style.display = 'none';
+        document.querySelector('.input-bar').style.display = 'flex';
+        renderMessages(state.currentChat.id);
+    };
+
+    document.getElementById('confirm-chat-multi-delete').onclick = () => {
+        if (state.selectedMessageIds.length === 0) return;
+
+        showActionSheet([
+            {
+                text: `永久删除 ${state.selectedMessageIds.length} 条消息`,
+                danger: true,
+                onClick: () => {
+                    const chatId = state.currentChat.id;
+                    const msgsToRemove = state.messages[chatId].filter((m, index) => {
+                        const msgId = m.id || `msg_${index}`;
+                        return state.selectedMessageIds.includes(msgId);
+                    });
+
+                    state.messages[chatId] = state.messages[chatId].filter((m, index) => {
+                        const msgId = m.id || `msg_${index}`;
+                        return !state.selectedMessageIds.includes(msgId);
+                    });
+
+                    removeMessagesFromRawCode(msgsToRemove);
+
+                    state.multiSelectMode = false;
+                    state.selectedMessageIds = [];
+                    saveMessagesToLocalStorage();
+                    document.getElementById('chat-multi-select-toolbar').style.display = 'none';
+                    document.querySelector('.input-bar').style.display = 'flex';
+                    renderMessages(chatId);
+                    showToast('已永久删除选中消息');
+                }
+            }
+        ]);
+    };
 
     function sendMessage(msgData, targetId = null) {
         const chatId = state.currentChat ? state.currentChat.id : (msgData.isSilent ? 'system_queue' : null);
@@ -5243,38 +5260,7 @@ function initSillyPhoneUI() {
         }
     }
 
-    async function loadSettingsFromST() {
-        const st = getSTInterface();
-        if (!st.getChatMessages) return null;
-        
-        const messages = st.getChatMessages(0);
-        if (!messages || messages.length === 0) return null;
 
-        const settingsMsg = messages.find(m => m.message && m.message.includes('<sillyphone_settings>'));
-        if (settingsMsg) {
-            const match = settingsMsg.message.match(/<sillyphone_settings>([\s\S]*?)<\/sillyphone_settings>/);
-            if (match && match[1]) {
-                try {
-                    return JSON.parse(match[1]);
-                } catch (e) {
-                    console.error('[SillyPhone] Backend config parse error:', e);
-                }
-            }
-        }
-        return null;
-    }
-
-    async function saveSettingsToST() {
-        const st = getSTInterface();
-        if (!st.setChatMessages || !st.getChatMessages) return;
-
-        const settings = {
-            settings: state.settings,
-            presets: state.presets,
-            activeAccountId: state.activeAccountId
-        };
-        // 实际实现中这里会通过特定消息 ID 存储配置，此处保持接口完整
-    }
 
     async function triggerAIResponse(customPrompt = null, targetId = null, chatId = null) {
         if (isAIRequestPending) return;
@@ -5285,7 +5271,7 @@ function initSillyPhoneUI() {
         const activeChatId = chatId || (state.currentChat ? state.currentChat.id : 'system_queue');
         if (!state.messages[activeChatId]) state.messages[activeChatId] = [];
 
-        // --- 多模态识图附件集成 ---
+        // --- 识图逻辑集成 (静默扫描补丁) ---
         // 扫描最近的消息，寻找最近的一张照片作为多模态附件
         const recentMsgs = state.messages[activeChatId].slice(-8);
         let multimodalAttachment = null;
@@ -5304,22 +5290,21 @@ function initSillyPhoneUI() {
                 const url = msg.url || msg.serverPath;
                 if (!url) continue;
 
-                // 核心：直接获取图片 Base64 并挂载为多模态附件
+                // 核心：直接获取 Base64 用于附件挂载，不再调用外部识图接口
                 if (url.startsWith('data:')) {
                     multimodalAttachment = url;
-                } else if (url.startsWith('IMGDATA:')) {
+                } else if (url.startsWith('IMGDATA:') || url.startsWith('/api/images/get')) {
                     try {
-                        const cleanPath = url.replace('IMGDATA:', '');
-                        const response = await fetch(`/api/images/get?path=${encodeURIComponent(cleanPath)}`);
+                        const cleanPath = url.includes('IMGDATA:') ? url.replace('IMGDATA:', '') : url.split('path=')[1];
+                        const fetchUrl = url.includes('path=') ? url : `/api/images/get?path=${encodeURIComponent(cleanPath)}`;
+                        const response = await fetch(fetchUrl);
                         const blob = await response.blob();
                         multimodalAttachment = await new Promise((resolve) => {
                             const reader = new FileReader();
                             reader.onloadend = () => resolve(reader.result);
                             reader.readAsDataURL(blob);
                         });
-                    } catch (e) {
-                        console.error('[SillyPhone] 获取图片附件失败:', e);
-                    }
+                    } catch (e) { console.error('[SillyPhone] 获取图片附件失败:', e); }
                 }
             }
         }
@@ -5348,8 +5333,7 @@ function initSillyPhoneUI() {
             targetId: targetId || activeChatId,
             mode: mode,
             context: lastMessages,
-            chatId: activeChatId,
-            multimodalAttachment: multimodalAttachment
+            chatId: activeChatId
         };
 
         lastAIRequest = requestData;
@@ -5919,7 +5903,7 @@ function initSillyPhoneUI() {
             text: finalDescription ? `(IMG:${finalDescription})` : '(IMG)',
             serverPath: serverPath,
             fileName: fileName,
-            description: finalDescription || ''
+            description: finalDescription
         };
 
         if (serverPath) {
