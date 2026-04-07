@@ -328,7 +328,8 @@ function initSillyPhoneUI() {
                     if ((m.msgType === 'photo' || m.msgType === 'image') && !m.isHistory && (m.serverPath || m.url)) {
                         attachments.push({
                             type: 'image',
-                            path: m.serverPath || m.url
+                            path: m.serverPath || m.url,
+                            data: m.imageData || null // 增强：同步时携带内存数据以防 404
                         });
                     }
                 });
@@ -6061,7 +6062,8 @@ function initSillyPhoneUI() {
             text: finalDescription ? `[图片:${finalDescription}]` : '[图片]',
             serverPath: serverPath,
             fileName: fileName,
-            description: finalDescription
+            description: finalDescription,
+            imageData: base64Data // 核心修复：直接将 Base64 注入消息对象，彻底终结 404 识图失败
         };
 
         if (serverPath) {
