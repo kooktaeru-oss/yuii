@@ -174,13 +174,11 @@ function initSillyPhoneUI() {
                     const quotedContent = msg.quotedMsg.text || msg.quotedMsg.content || '';
                     text += `<${sender}|${quotedContent}|${content}>\n`;
                 } else if (msgType === 'photo') {
-                    const desc = msg.description || '';
-                    const rawPath = msg.serverPath || '';
-                    const path = rawPath ? `|IMGDATA:${rawPath}` : '';
+                    // 如果是原生传图且有路径，我们保持 Raw 代码极致干净，甚至可以省略文字描述
+                    const desc = msg.description || '一张照片';
+                    const path = msg.serverPath ? `|IMGDATA:${msg.serverPath}` : '';
                     const fileName = msg.fileName ? `|FILENAME:${msg.fileName}` : '';
-                    const avatar = msg.senderAvatar || '';
-                    // 采用更加直观的 [名字|头像|图片|描述|路径|时间] 格式，增强 AI 联想力
-                    text += `[${sender}|${avatar}|图片|${desc}${path}${fileName}|${time}]\n`;
+                    text += `[${sender}|图片|${desc}${path}${fileName}|${time}]\n`;
                 } else if (msgType === 'sticker') {
                     text += `[${sender}|图片|发送了一个表情包|${msg.label || '表情包'}|${time}]\n`;
                 } else if (msgType === 'voice') {
@@ -317,31 +315,10 @@ function initSillyPhoneUI() {
             updatedMessage = raw + "\n" + shoujiTag;
         }
 
-        // --- 深度多模态接驳：构建附件元数据 ---
-        let attachments = [];
-        if (state.messages) {
-            for (const chatId in state.messages) {
-                const msgs = state.messages[chatId];
-                if (!Array.isArray(msgs)) continue;
-                msgs.forEach(m => {
-                    // 仅同步非历史消息且有服务器路径或 URL 的图片
-                    if ((m.msgType === 'photo' || m.msgType === 'image') && !m.isHistory && (m.serverPath || m.url)) {
-                        attachments.push({
-                            type: 'image',
-                            path: m.serverPath || m.url,
-                            data: m.imageData || null // 增强：同步时携带内存数据以防 404
-                        });
-                    }
-                });
-            }
-        }
-
-        // 更新酒馆原代码，并携带多模态附件
+        // 更新酒馆原代码
         st.setChatMessages([{
             message_id: msgId,
-            message: updatedMessage,
-            // 协议对齐：确保 extra.attachments 格式与酒馆标准一致
-            extra: attachments.length > 0 ? { attachments: attachments } : {}
+            message: updatedMessage
         }], { refresh: 'none' });
 
         // 尝试将关键设置同步到酒馆后端 API 存储
@@ -376,33 +353,19 @@ function initSillyPhoneUI() {
             settings: state.settings
         };
 
-        // --- 核心修复：使用标准 v1 接口，确保兼容性 ---
-        const endpoint = `/api/extensions/settings/v1`;
-
         // 方案 1: 优先尝试调用父窗口的 jQuery.ajax (自带 CSRF)
         if (window.parent && window.parent.jQuery) {
             window.parent.jQuery.ajax({
-                url: endpoint,
+                url: '/api/extensions/settings/v1',
                 method: 'POST',
                 contentType: 'application/json',
                 data: JSON.stringify(payload),
                 success: () => {
                     state._useBackendSync = true;
-                    console.log('[SillyPhone] 设置同步成功 (v1)');
+                    console.log('[SillyPhone] 设置同步成功');
                 },
                 error: (xhr) => {
-                    // 如果 v1 失败，尝试降级到无版本号接口
-                    if (xhr.status === 404) {
-                        const legacyEndpoint = '/api/extensions/settings';
-                        window.parent.jQuery.ajax({
-                            url: legacyEndpoint,
-                            method: 'POST',
-                            contentType: 'application/json',
-                            data: JSON.stringify(payload),
-                            success: () => console.log('[SillyPhone] 设置同步成功 (Legacy)'),
-                            error: (xhr2) => console.warn('[SillyPhone] 降级同步也失败:', xhr2.status)
-                        });
-                    }
+                    console.warn('[SillyPhone] 设置同步失败:', xhr.status);
                 }
             });
             return;
@@ -410,7 +373,7 @@ function initSillyPhoneUI() {
 
         // 方案 2: 回退到 fetch (带令牌)
         try {
-            await fetch(endpoint, {
+            await fetch('/api/extensions/settings/v1', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -425,7 +388,7 @@ function initSillyPhoneUI() {
 
     async function loadSettingsFromST() {
         try {
-            const response = await fetch('/api/extensions/settings/v1?extension=yuii-phone');
+            const response = await fetch('/api/extensions/settings/v1?extension=sillyphone');
             if (response.ok) {
                 const data = await response.json();
                 if (data && data.settings) {
@@ -443,16 +406,24 @@ function initSillyPhoneUI() {
      * D. 图片后端上传 (Image Backend Upload)
      */
     async function uploadImageToST(file) {
-        // --- 方案 1: 借道 kencuo/chajian (识图插件) 桥接器 ---
+        // --- 方案 1: 借道 外部插件 (如 Olivia's Toolkit / Smart Media Assistant) 桥接器 ---
         if (window.parent && window.parent.__uploadImageByPlugin) {
-            console.log('[SillyPhone] 正在通过 Smart Media Assistant 上传...');
+            console.log('[SillyPhone] 正在通过外部插件上传...');
             try {
                 const result = await window.parent.__uploadImageByPlugin(file, {
                     path: 'phone',
                     sendToChat: false
                 });
-                if (result && result.success && result.url) return result.url;
-            } catch (e) { console.error('[SillyPhone] 桥接上传异常:', e); }
+
+                console.log('[SillyPhone] 插件上传结果:', result);
+
+                // 兼容性适配：Olivia's Toolkit 可能只返回 { url: '...' } 而没有 success: true
+                if (result && (result.success || result.url)) {
+                    return result.url;
+                }
+            } catch (e) {
+                console.error('[SillyPhone] 插件桥接上传异常:', e);
+            }
         }
 
         // --- 方案 2: 使用父窗口 jQuery.ajax (原生绕过 CSRF) ---
@@ -1703,8 +1674,11 @@ function initSillyPhoneUI() {
         glassOpacityValueDisplay.textContent = s.glassOpacity / 100;
         if (pureModeToggle) pureModeToggle.checked = !!s.pureMode;
 
+        // 更新用户设置
+        if (settingsUserNameInput) settingsUserNameInput.value = state.userName;
+        if (settingsWechatIdInput) settingsWechatIdInput.value = state.wechatId;
+        if (settingsUserAvatarImg) settingsUserAvatarImg.src = state.userAvatar;
 
-        // 更新设置页 UI
 
         // 更新朋友圈头部显示
         const momentsUserName = document.getElementById('moments-user-name');
@@ -1826,13 +1800,6 @@ function initSillyPhoneUI() {
     const momentsBgInput = document.getElementById('moments-bg-url');
     const saveSettingsBtn = document.getElementById('save-settings-btn');
     const toastContainer = document.getElementById('toast-container');
-
-    // Vision API 设置
-    const visionProviderSelect = document.getElementById('vision-provider');
-    const visionKeyInput = document.getElementById('vision-key');
-    const visionModelInput = document.getElementById('vision-model');
-    const visionEndpointInput = document.getElementById('vision-endpoint');
-    const fetchVisionModelsBtn = document.getElementById('fetch-vision-models-btn');
 
     // 照片面板增强
     const photoPreviewContainer = document.getElementById('photo-preview-container');
@@ -2539,7 +2506,6 @@ function initSillyPhoneUI() {
         state.settings.glassOpacity = parseFloat(glassOpacityVal) * 100;
         state.settings.momentsBg = newMomentsBg;
         state.settings.pureMode = isPureMode;
-
 
         state.userName = newUserName;
         state.userAvatar = newUserAvatar;
@@ -5287,127 +5253,22 @@ function initSillyPhoneUI() {
         setIslandState('loading');
 
         const activeChatId = chatId || (state.currentChat ? state.currentChat.id : 'system_queue');
-        if (!state.messages[activeChatId]) state.messages[activeChatId] = [];
+        if (!state.messages[activeChatId]) state.messages[activeChatId] = [];   
 
-        // --- 识图逻辑集成 (静默扫描补丁) ---
-        // 扫描最近的消息，寻找最近的一张照片作为多模态附件
+        // 扫描最近的消息，获取最后一条用户文本
         const recentMsgs = state.messages[activeChatId].slice(-8);
-        let multimodalAttachment = null;
         let lastUserMsgText = null;
-        let targetImgMsg = null; // 记录源图片消息
 
-        // 倒序找图和找最后一条用户文本
+        // 倒序找最后一条用户文本
         for (let i = recentMsgs.length - 1; i >= 0; i--) {
             const msg = recentMsgs[i];
-            console.log('[SillyPhone] 正在扫描消息: ', msg);
             
             // 找最后一条用户消息的内容作为 Prompt (如果 customPrompt 为空)
             if (!customPrompt && msg.type === 'user' && msg.text && !lastUserMsgText) {
                 lastUserMsgText = msg.text;
-            }
-
-            if (!multimodalAttachment) {
-                // --- 超级扫描器 2.0：全方位深度扫描 ---
-                let url = msg.imageData || msg.url || msg.serverPath;
-
-                // 1. 尝试从 extra.attachments 中抓取 (酒馆标准格式)
-                if (!url && msg.extra && msg.extra.attachments && msg.extra.attachments.length > 0) {
-                    const att = msg.extra.attachments.find(a => a.type === 'image');
-                    if (att) {
-                        url = att.path || att.url;
-                        console.log('[SillyPhone] 从 attachments 中发现图片:', url);
-                    }
-                }
-
-                // 2. 尝试全文本正则扫描 (处理文字中嵌入的 IMGDATA 等)
-                if (!url && msg.text) {
-                    const imgMatch = msg.text.match(/IMGDATA:([^\s|\]]+)/) || msg.text.match(/data:image\/[a-zA-Z]+;base64,[^\s|\]]+/);
-                    if (imgMatch) {
-                        url = imgMatch[0];
-                        console.log('[SillyPhone] 在全文中正则捕获到图片特征:', url);
-                    }
-                }
-
-                if (!url) continue;
-
-                // 检查是否是合法的图片特征
-                const isImage = msg.msgType === 'photo' || msg.msgType === 'image' || 
-                              url.startsWith('data:') || url.startsWith('IMGDATA:') || 
-                              url.startsWith('/api/images/get') || url.startsWith('user/images/');
-
-                if (isImage) {
-                    console.log('[SillyPhone] 命中图片特征，开始处理:', url);
-                    if (url.startsWith('data:')) {
-                        multimodalAttachment = url;
-                        targetImgMsg = msg;
-                    } else {
-                        try {
-                            let fetchUrl = "";
-                            // 坑位修复：移除路径开头的斜杠，防止 404 (SillyTavern API 规范)
-                            let cleanPath = url;
-                            if (cleanPath.startsWith('/')) cleanPath = cleanPath.substring(1);
-                            if (cleanPath.startsWith('IMGDATA:')) cleanPath = cleanPath.replace('IMGDATA:', '');
-                            
-                            if (url.startsWith('/api/images/get') || url.includes('path=')) {
-                                fetchUrl = url;
-                            } else {
-                                fetchUrl = `/api/images/get?path=${encodeURIComponent(cleanPath)}`;
-                            }
-                            
-                            console.log('[SillyPhone] 正在从后端拉取图片 (修正后):', fetchUrl);
-                            
-                            console.log('[SillyPhone] 正在从后端拉取图片:', fetchUrl);
-                            const response = await fetch(fetchUrl);
-                            if (response.ok) {
-                                const blob = await response.blob();
-                                multimodalAttachment = await new Promise((resolve) => {
-                                    const reader = new FileReader();
-                                    reader.onloadend = () => resolve(reader.result);
-                                    reader.readAsDataURL(blob);
-                                });
-                                if (multimodalAttachment) {
-                                    console.log('[SillyPhone] 图片二进制转换成功 (Base64 ByteSize):', multimodalAttachment.length);
-                                    targetImgMsg = msg;
-                                }
-                            } else {
-                                console.warn('[SillyPhone] 后端拉取图片失败, Status:', response.status);
-                            }
-                        } catch (e) { 
-                            console.error('[SillyPhone] 获取图片附件异常:', e); 
-                            // 三级补丁：如果拉取失败且 msg 本身具备二进制数据，则强制使用 Base64
-                            if (!multimodalAttachment && msg.imageData && msg.imageData.startsWith('data:')) {
-                                console.log('[SillyPhone] 拉取失败，强制回退到内存 Base64 缓存');
-                                multimodalAttachment = msg.imageData;
-                                targetImgMsg = msg;
-                            }
-                        }
-                    }
-                }
+                break;
             }
         }
-        // --- 识图逻辑结束 ---
-
-        // --- 构造结构化图片对象 (对齐酒馆标准多模态格式) ---
-        let structuralImage = null;
-        if (multimodalAttachment) {
-            structuralImage = {
-                type: 'image',
-                role: 'user',
-                // 关键点：使用内容数组格式，直接适配后端多模态检测
-                content: [
-                    {
-                        type: 'image_url',
-                        image_url: { url: multimodalAttachment }
-                    }
-                ],
-                text: '[图片]', // 简化的兜底文本描述
-                imageData: multimodalAttachment,
-                fileName: (targetImgMsg ? targetImgMsg.fileName : null) || 'image.jpg',
-                imageDescription: '发送了一张图片',
-                extra: {}
-            };
-        }
-
         const mode = state.currentPage === 'moments' ? 'moments' : 'chat';
 
         // 注入全局系统约束
@@ -5418,85 +5279,25 @@ function initSillyPhoneUI() {
 
         // 使用构建生成 Prompt 的函数，过滤掉历史记录
         const currentSessionMessages = buildGenerationPrompt(activeChatId);
-        let lastMessages = currentSessionMessages.slice(-6).map(m => {
+        const lastMessages = currentSessionMessages.slice(-5).map(m => {
             const { time, ...rest } = m;
             return rest;
         });
-
-        // --- 结构化上下文注入 (关键：将 Context 中的图片消息替换为 Image-Type) ---
-        if (structuralImage) {
-            // 找到最后一条图片消息的位置（或者是 '[图片]' 占位符）
-            const lastPhotoIdx = [...lastMessages].reverse().findIndex(m => m.msgType === 'photo' || m.text === '[图片]' || m.text === '(IMG)');
-            if (lastPhotoIdx !== -1) {
-                const realIdx = lastMessages.length - 1 - lastPhotoIdx;
-                // 仅替换必要的字段，保留发送者等信息，但类型改为 image
-                lastMessages[realIdx] = {
-                    ...lastMessages[realIdx],
-                    ...structuralImage
-                };
-            }
-        }
-
-        // 核心 Prompt 构建优化
-        let userPrompt = customPrompt || lastUserMsgText || (mode === 'moments' ? '请回复朋友圈...' : '请回复...');
-        
-        // 规则实现：如果用户只发了图 (Prompt 只是占位符)，则清空文字 Prompt，依赖结构化输入
-        const isOnlyImage = structuralImage && (userPrompt === '[图片]' || userPrompt === '(IMG)' || !lastUserMsgText);
-        if (isOnlyImage) {
-            userPrompt = ""; 
-        }
 
         const requestData = {
             source: 'yuii-phone',
             type: 'YUII_AI_REQUEST',
             requestId: 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-            prompt: userPrompt,
-            multimodal_prompt: null, // 新增：显式多模态字段
+            prompt: customPrompt,
             targetId: targetId || activeChatId,
             mode: mode,
             context: lastMessages,
-            chatId: activeChatId,
-            structuralImage: structuralImage,
-            // 协议对齐：如果存在结构化图片，将其放入 extra.attachments 中同步
-            extra: structuralImage ? {
-                attachments: [{
-                    type: 'image',
-                    path: targetImgMsg ? (targetImgMsg.serverPath || targetImgMsg.url) : null,
-                    data: structuralImage.imageData
-                }]
-            } : {}
+            chatId: activeChatId
         };
-
-        // --- 核心修复：构造专用的多模态 Prompt 数组 (对齐 ctrl 老师的 content 结构) ---
-        if (structuralImage) {
-            let mmp = [];
-            
-            // 1. 获取清理后的文本
-            const rawText = (customPrompt || lastUserMsgText || "").trim();
-            const cleanText = rawText.replace(/\[图片(:[^\]]*)?\]|\(IMG:[^\)]*\)|\(IMG\)/g, "").trim();
-
-            // 2. 构造多模态数组：文本在首，图片在后
-            if (cleanText && cleanText !== '[图片]' && cleanText !== '(IMG)') {
-                mmp.push({ type: 'text', text: cleanText });
-            }
-            
-            mmp.push({
-                type: 'image_url',
-                image_url: { url: structuralImage.imageData }
-            });
-
-            // 赋值给专用字段
-            requestData.multimodal_prompt = mmp;
-            
-            // 覆盖原 prompt 字段为纯净文本，避免冗余
-            requestData.prompt = cleanText === '[图片]' || cleanText === '(IMG)' ? "" : cleanText;
-            
-            console.log('[SillyPhone] 多模态协议对齐完毕:', requestData.multimodal_prompt);
-        }
 
         lastAIRequest = requestData;
 
-        console.log('[SillyPhone] 发送 AI 请求 (携带结构化输入):', requestData);
+        console.log('[SillyPhone] 发送 AI 请求:', requestData);
 
         const st = getSTInterface();
 
@@ -5529,40 +5330,19 @@ function initSillyPhoneUI() {
             }
         }
 
-        // 尝试使用同层原生 API 进行生成 (优先尝试 generateRaw，无论是否有图)
+        // 尝试使用同层原生 API 进行生成
         if (st.generateRaw) {
             try {
                 // 确保在生成前同步最新状态到聊天记录
                 syncToSillyTavern();
 
-                const visionSystemInfo = structuralImage ? '[系统提示：用户发送了一张图片，请结合图片内容进行回复。]' : '';
+                // 核心 Prompt 构建优化：如果 customPrompt 为空，尝试使用最后一条用户消息
+                const userPrompt = customPrompt || lastUserMsgText || (mode === 'moments' ? '请回复朋友圈...' : '请回复...');
 
                 const rawRequestData = {
-                    user_input: (userPrompt + stickerPrompt + globalConstraints + dynamicPresetPrompt + visionSystemInfo).trim(),
+                    user_input: userPrompt + stickerPrompt + globalConstraints + dynamicPresetPrompt,
                     should_silence: true
                 };
-
-                // --- 注入多模态附件 (同层支持) ---
-                if (structuralImage) {
-                    console.log('[SillyPhone] 正在挂载多模态附件到 generateRaw:', structuralImage);
-                    try {
-                        const base64Data = structuralImage.imageData.includes(',') ? structuralImage.imageData.split(',')[1] : structuralImage.imageData;
-                        const mime = structuralImage.imageData.includes(';') ? structuralImage.imageData.split(';')[0].split(':')[1] : 'image/jpeg';
-                        
-                        // --- 核心修复：还原 user_input 为字符串，躲避酒馆宏替换逻辑 ---
-                        // 酒馆的 evaluateMacros 只处理字符串，传入对象会导致 content.replace is not a function 报错
-                        
-                        // 1. 使用标准 images 属性传递二进制数据 (躲避宏替换)
-                        rawRequestData.images = [{ data: base64Data, mime: mime }];
-                        
-                        // 2. 传递多模态 Prompt 指令
-                        rawRequestData.multimodal_prompt = [structuralImage];
-                        
-                        // 3. 保持 user_input 为纯文本
-                        rawRequestData.user_input = (userPrompt + stickerPrompt + globalConstraints + dynamicPresetPrompt + visionSystemInfo).trim();
-                        
-                    } catch (e) { console.error('[SillyPhone] 附件格式化失败:', e); }
-                }
 
                 if (state.settings.pureMode) {
                     rawRequestData.ordered_prompts = [
@@ -6062,11 +5842,10 @@ function initSillyPhoneUI() {
 
         const photoMsg = {
             msgType: 'photo',
-            text: finalDescription ? `[图片:${finalDescription}]` : '[图片]',
+            text: finalDescription ? `(IMG:${finalDescription})` : '(IMG)',
             serverPath: serverPath,
             fileName: fileName,
-            description: finalDescription,
-            imageData: base64Data // 核心修复：直接将 Base64 注入消息对象，彻底终结 404 识图失败
+            description: finalDescription || ''
         };
 
         if (serverPath) {
