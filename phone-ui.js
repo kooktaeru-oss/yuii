@@ -379,8 +379,8 @@ function initSillyPhoneUI() {
             settings: state.settings
         };
 
-        // --- 核心修复：使用标准 v1 接口，确保兼容性 ---
-        const endpoint = `/api/extensions/settings/v1`;
+        // --- 核心修复：优先使用标准接口 ---
+        const endpoint = `/api/extensions/settings`;
 
         // 方案 1: 优先尝试调用父窗口的 jQuery.ajax (自带 CSRF)
         if (window.parent && window.parent.jQuery) {
@@ -394,16 +394,19 @@ function initSillyPhoneUI() {
                     console.log('[SillyPhone] 设置同步成功 (v1)');
                 },
                 error: (xhr) => {
-                    // 如果 v1 失败，尝试降级到无版本号接口
+                    // 如果标准路径失败，尝试 v1
                     if (xhr.status === 404) {
-                        const legacyEndpoint = '/api/extensions/settings';
+                        const v1Endpoint = '/api/extensions/settings/v1';
                         window.parent.jQuery.ajax({
-                            url: legacyEndpoint,
+                            url: v1Endpoint,
                             method: 'POST',
                             contentType: 'application/json',
                             data: JSON.stringify(payload),
-                            success: () => console.log('[SillyPhone] 设置同步成功 (Legacy)'),
-                            error: (xhr2) => console.warn('[SillyPhone] 降级同步也失败:', xhr2.status)
+                            success: () => console.log('[SillyPhone] 设置同步成功 (v1)'),
+                            error: (xhr2) => {
+                                console.warn('[SillyPhone] 所有同步接口均不可用，仅使用本地存储。');
+                                state._useBackendSync = false;
+                            }
                         });
                     }
                 }
@@ -428,16 +431,27 @@ function initSillyPhoneUI() {
 
     async function loadSettingsFromST() {
         try {
-            const response = await fetch('/api/extensions/settings/v1?extension=yuii-phone');
+            // 标准酒馆设置路径通常不带 /v1，先试标准的
+            const response = await fetch('/api/extensions/settings?extension=yuii-phone');
             if (response.ok) {
                 const data = await response.json();
                 if (data && data.settings) {
                     state._useBackendSync = true;
                     return data.settings;
                 }
+            } else if (response.status === 404) {
+                // 尝试 v1 路径兼容
+                const v1Response = await fetch('/api/extensions/settings/v1?extension=yuii-phone');
+                if (v1Response.ok) {
+                    const v1Data = await v1Response.json();
+                    if (v1Data && v1Data.settings) {
+                        state._useBackendSync = true;
+                        return v1Data.settings;
+                    }
+                }
             }
         } catch (e) {
-            console.error('[SillyPhone] 加载设置失败', e);
+            console.warn('[SillyPhone] 加载后端设置失败 (正常现象):', e.message);
         }
         return null;
     }
@@ -5335,11 +5349,20 @@ function initSillyPhoneUI() {
                         targetImgMsg = msg;
                     } else {
                         try {
-                            // 路径预处理
+                            // 橄榄百宝箱或其它插件返回的路径处理
                             let fetchUrl = url;
-                            if (url.startsWith('IMGDATA:')) fetchUrl = `/api/images/get?path=${encodeURIComponent(url.replace('IMGDATA:', ''))}`;
-                            else if (!url.startsWith('http') && !url.startsWith('/')) fetchUrl = `/api/images/get?path=${encodeURIComponent(url)}`;
-                            else if (url.startsWith('/') && !url.startsWith('/api')) fetchUrl = `/api/images/get?path=${encodeURIComponent(url.substring(1))}`;
+                            if (url.startsWith('IMGDATA:')) {
+                                fetchUrl = `/api/images/get?path=${encodeURIComponent(url.replace('IMGDATA:', ''))}`;
+                            } else if (!url.startsWith('http') && !url.startsWith('data:')) {
+                                // 移除可能的导出前缀 (如 /) 并确保 path 参数存在
+                                let cleanPath = url.startsWith('/') ? url.substring(1) : url;
+                                // 如果路径本身就是 api/images/get，则直接使用，否则包裹一层
+                                if (cleanPath.startsWith('api/images/get')) {
+                                    fetchUrl = '/' + cleanPath;
+                                } else {
+                                    fetchUrl = `/api/images/get?path=${encodeURIComponent(cleanPath)}`;
+                                }
+                            }
 
                             const response = await fetch(fetchUrl);
                             if (response.ok) {
