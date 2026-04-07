@@ -75,8 +75,7 @@ function initSillyPhoneUI() {
             blur: 12,
             bubbleBlur: 12,
             navBlur: 15,
-            glassOpacity: 5,
-            pureMode: false
+            glassOpacity: 5
         },
         presets: [], // 手机轻预设
         call: {
@@ -1822,7 +1821,7 @@ function initSillyPhoneUI() {
     const navBlurValueDisplay = document.getElementById('nav-blur-value');
     const glassOpacityIntensityInput = document.getElementById('glass-opacity-intensity');
     const glassOpacityValueDisplay = document.getElementById('glass-opacity-value');
-    const pureModeToggle = document.getElementById('pure-mode-toggle');
+
     const settingsUserNameInput = document.getElementById('settings-user-name');
     const settingsWechatIdInput = document.getElementById('settings-wechat-id');
     const settingsUserAvatarImg = document.getElementById('settings-user-avatar');
@@ -2530,7 +2529,6 @@ function initSillyPhoneUI() {
         const bubbleBlurVal = bubbleBlurIntensityInput.value;
         const navBlurVal = navBlurIntensityInput.value;
         const glassOpacityVal = glassOpacityValueDisplay.textContent;
-        const isPureMode = pureModeToggle ? pureModeToggle.checked : false;
         const newUserName = settingsUserNameInput.value.trim() || '我';
         const newWechatId = settingsWechatIdInput.value.trim() || 'wxid_sillyphone';
         const newUserAvatar = settingsUserAvatarImg.src;
@@ -2543,7 +2541,6 @@ function initSillyPhoneUI() {
         state.settings.navBlur = parseInt(navBlurVal);
         state.settings.glassOpacity = parseFloat(glassOpacityVal) * 100;
         state.settings.momentsBg = newMomentsBg;
-        state.settings.pureMode = isPureMode;
 
 
         state.userName = newUserName;
@@ -5531,17 +5528,7 @@ function initSillyPhoneUI() {
                     } catch (e) { console.error('[SillyPhone] 附件格式化失败:', e); }
                 }
 
-                if (state.settings.pureMode) {
-                    rawRequestData.ordered_prompts = [
-                        'world_info_before',
-                        'persona_description',
-                        'char_description',
-                        'char_personality',
-                        'world_info_after',
-                        'chat_history',
-                        'user_input'
-                    ];
-                }
+
 
                 const replyText = String(await st.generateRaw(rawRequestData) || '').trim();
 
