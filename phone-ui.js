@@ -98,19 +98,33 @@ function initSillyPhoneUI() {
 
     // --- SillyTavern 同层同步逻辑 ---
 
-    /** 获取 CSRF 令牌 (从父窗口提取) */
+    /** 获取 CSRF 令牌 (深度扫描模式) */
     function getCSRFToken() {
         try {
-            const parentDoc = window.parent ? window.parent.document : document;
-            const meta = parentDoc.querySelector('meta[name="csrf-token"]');
-            if (meta && meta.content) return meta.content;
-            if (window.parent && window.parent.jQuery && window.parent.jQuery.ajaxSettings && window.parent.jQuery.ajaxSettings.headers) {
-                const token = window.parent.jQuery.ajaxSettings.headers['X-CSRF-Token'];
-                if (token) return token;
+            const p = window.parent || window;
+            
+            // 1. 优先尝试父窗口全局变量 (酒馆最直接的令牌源)
+            if (p.csrf_token) return p.csrf_token;
+            if (p.token) return p.token;
+            
+            // 2. 尝试从 jQuery 全局配置抓取 (异步请求最可靠的来源)
+            const jq = p.jQuery || p.$ || window.jQuery || window.$;
+            if (jq && jq.ajaxSettings && jq.ajaxSettings.headers) {
+                const t = jq.ajaxSettings.headers['X-CSRF-Token'];
+                if (t) return t;
             }
-            if (window.parent && window.parent.csrf_token) return window.parent.csrf_token;
-            if (window.csrf_token) return window.csrf_token;
-        } catch (e) { console.error('[SillyPhone] 获取 CSRF Token 失败:', e); }
+            
+            // 3. 尝试从 Cookie 中物理提取 (底层兜底)
+            const cookieMatch = document.cookie.match(/csrf_token=([^;]+)/);
+            if (cookieMatch) return cookieMatch[1];
+            
+            // 4. 从 HTML 元标签中提取 (标准 Web 方案)
+            const meta = p.document.querySelector('meta[name="csrf-token"]');
+            if (meta && meta.content) return meta.content;
+            
+        } catch (e) {
+            console.warn('[SillyPhone] CSRF 深度扫描失败:', e);
+        }
         return '';
     }
 
@@ -402,6 +416,9 @@ function initSillyPhoneUI() {
 
         // 优先使用 jQuery.ajax (父窗口)
         if (window.parent && window.parent.jQuery) {
+            const token = getCSRFToken();
+            if (!token) console.warn('[SillyPhone] 警告: 未能抓取到 CSRF Token, 请检查登录状态');
+            
             for (const endpoint of endpoints) {
                 if (success) break;
                 try {
@@ -412,7 +429,7 @@ function initSillyPhoneUI() {
                             contentType: 'application/json',
                             data: JSON.stringify(payload),
                             headers: {
-                                'X-CSRF-Token': getCSRFToken()
+                                'X-CSRF-Token': token
                             },
                             success: () => {
                                 success = true;
@@ -421,7 +438,7 @@ function initSillyPhoneUI() {
                                 resolve();
                             },
                             error: (xhr) => {
-                                console.warn('[SillyPhone] 设置同步尝试失败 (Endpoint: ' + endpoint + '):', xhr.status);
+                                console.warn('[SillyPhone] 同步拒绝 (Status: ' + xhr.status + ', Msg: ' + (xhr.responseJSON ? xhr.responseJSON.error : 'CSRF Failed') + ')');
                                 if (xhr.status !== 404) reject(xhr);
                                 else resolve();
                             }
@@ -491,6 +508,7 @@ function initSillyPhoneUI() {
 
         // --- 方案 2: 使用父窗口 jQuery.ajax (原生绕过 CSRF) ---
         if (window.parent && window.parent.jQuery) {
+            const token = getCSRFToken();
             return new Promise((resolve) => {
                 const formData = new FormData();
                 formData.append('image', file);
@@ -502,10 +520,16 @@ function initSillyPhoneUI() {
                     contentType: false,
                     data: formData,
                     headers: {
-                        'X-CSRF-Token': getCSRFToken()
+                        'X-CSRF-Token': token
                     },
-                    success: (res) => resolve({ url: res && res.imgText ? res.imgText : null, description: res && res.description ? res.description : null }),
-                    error: () => resolve(null)
+                    success: (res) => {
+                        console.log('[SillyPhone] jQuery 模式上传图片成功');
+                        resolve({ url: res && res.imgText ? res.imgText : null, description: res && res.description ? res.description : null });
+                    },
+                    error: (xhr) => {
+                        console.warn('[SillyPhone] jQuery 图片上传失败:', xhr.status);
+                        resolve(null);
+                    }
                 });
             });
         }
