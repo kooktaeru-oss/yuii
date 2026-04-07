@@ -5196,7 +5196,10 @@ function initSillyPhoneUI() {
 
         // 异步循环处理每一条消息，转换成结构化格式
         for (const msg of recentSequence) {
-            if (msg.msgType === 'photo' || msg.msgType === 'image') {
+            // 判定是否为图片消息 (检查类型或检查占位符特征)
+            const isImageMsg = (msg.msgType === 'photo' || msg.msgType === 'image' || (msg.text && msg.text.startsWith('(IMG')));
+
+            if (isImageMsg) {
                 const base64 = await getMessageBase64(msg);
                 if (base64) {
                     hasImage = true;
@@ -5209,11 +5212,15 @@ function initSillyPhoneUI() {
                             }
                         ]
                     });
+                } else if (msg.text && msg.text.startsWith('(IMG')) {
+                    // 如果判定是图片但没拿到 Base64，且带有 (IMG) 占位符，强制标记 hasImage 以触发 Bridge 链路防护
+                    // 但不把这个占位符当做文字发出去
+                    hasImage = true;
                 }
             } else if (msg.type === 'user' && (msg.text || msg.content)) {
-                // 用户文本消息，排除占位符 (IMG)
+                // 用户文本消息，排除所有以 (IMG 开头的占位符 (包括带描述的)
                 let text = msg.text || msg.content;
-                if (text === '(IMG)') continue; 
+                if (text.startsWith('(IMG')) continue; 
                 
                 finalMessages.push({
                     role: 'user',
