@@ -413,7 +413,7 @@ function initSillyPhoneUI() {
 
     async function loadSettingsFromST() {
         try {
-            const response = await fetch('/api/extensions/settings/v1?extension=yuii-phone');
+            const response = await fetch('/api/extensions/settings/yuii-phone');
             if (response.ok) {
                 const data = await response.json();
                 if (data && data.settings) {
@@ -5293,35 +5293,49 @@ function initSillyPhoneUI() {
                 lastUserMsgText = msg.text;
             }
 
-            if (!multimodalAttachment && (msg.msgType === 'photo' || msg.msgType === 'image')) {
-                const url = msg.url || msg.serverPath;
+            if (!multimodalAttachment) {
+                // --- 扫描逻辑升级：全方位检查消息属性 ---
+                const url = msg.imageData || msg.url || msg.serverPath;
                 if (!url) continue;
 
-                // --- 扫描逻辑升级：支持多元化路径识别 ---
-                if (url.startsWith('data:')) {
-                    multimodalAttachment = url;
-                    targetImgMsg = msg;
-                } else if (url.startsWith('IMGDATA:') || url.startsWith('/api/images/get') || url.startsWith('user/images/')) {
-                    try {
-                        let fetchUrl = "";
-                        if (url.startsWith('user/images/')) {
-                            fetchUrl = `/api/images/get?path=${encodeURIComponent(url)}`;
-                        } else if (url.includes('path=')) {
-                            fetchUrl = url;
-                        } else {
-                            const cleanPath = url.replace('IMGDATA:', '');
-                            fetchUrl = `/api/images/get?path=${encodeURIComponent(cleanPath)}`;
-                        }
-                        
-                        const response = await fetch(fetchUrl);
-                        const blob = await response.blob();
-                        multimodalAttachment = await new Promise((resolve) => {
-                            const reader = new FileReader();
-                            reader.onloadend = () => resolve(reader.result);
-                            reader.readAsDataURL(blob);
-                        });
-                        if (multimodalAttachment) targetImgMsg = msg;
-                    } catch (e) { console.error('[SillyPhone] 获取图片附件失败:', e); }
+                // 检查是否是合法的图片特征（包括 Base64 和 服务器路径）
+                const isImage = msg.msgType === 'photo' || msg.msgType === 'image' || 
+                              url.startsWith('data:') || url.startsWith('IMGDATA:') || 
+                              url.startsWith('/api/images/get') || url.startsWith('user/images/');
+
+                if (isImage) {
+                    if (url.startsWith('data:')) {
+                        multimodalAttachment = url;
+                        targetImgMsg = msg;
+                    } else {
+                        try {
+                            let fetchUrl = "";
+                            if (url.startsWith('user/images/')) {
+                                fetchUrl = `/api/images/get?path=${encodeURIComponent(url)}`;
+                            } else if (url.startsWith('IMGDATA:')) {
+                                const cleanPath = url.replace('IMGDATA:', '');
+                                fetchUrl = `/api/images/get?path=${encodeURIComponent(cleanPath)}`;
+                            } else if (url.startsWith('/api/images/get')) {
+                                fetchUrl = url;
+                            } else if (url.includes('path=')) {
+                                fetchUrl = url;
+                            } else {
+                                // 兜底：尝试作为路径处理
+                                fetchUrl = `/api/images/get?path=${encodeURIComponent(url)}`;
+                            }
+                            
+                            const response = await fetch(fetchUrl);
+                            if (response.ok) {
+                                const blob = await response.blob();
+                                multimodalAttachment = await new Promise((resolve) => {
+                                    const reader = new FileReader();
+                                    reader.onloadend = () => resolve(reader.result);
+                                    reader.readAsDataURL(blob);
+                                });
+                                if (multimodalAttachment) targetImgMsg = msg;
+                            }
+                        } catch (e) { console.error('[SillyPhone] 获取图片附件失败:', e); }
+                    }
                 }
             }
         }
