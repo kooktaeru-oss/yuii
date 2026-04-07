@@ -98,6 +98,22 @@ function initSillyPhoneUI() {
 
     // --- SillyTavern 同层同步逻辑 ---
 
+    /** 获取 CSRF 令牌 (从父窗口提取) */
+    function getCSRFToken() {
+        try {
+            const parentDoc = window.parent ? window.parent.document : document;
+            const meta = parentDoc.querySelector('meta[name="csrf-token"]');
+            if (meta && meta.content) return meta.content;
+            if (window.parent && window.parent.jQuery && window.parent.jQuery.ajaxSettings && window.parent.jQuery.ajaxSettings.headers) {
+                const token = window.parent.jQuery.ajaxSettings.headers['X-CSRF-Token'];
+                if (token) return token;
+            }
+            if (window.parent && window.parent.csrf_token) return window.parent.csrf_token;
+            if (window.csrf_token) return window.csrf_token;
+        } catch (e) { console.error('[SillyPhone] 获取 CSRF Token 失败:', e); }
+        return '';
+    }
+
     function getSTInterface() {
         // 尝试从 window 或 window.parent 获取酒馆的 API
         const target = window.getCurrentMessageId ? window : window.parent;
@@ -395,6 +411,9 @@ function initSillyPhoneUI() {
                             method: 'POST',
                             contentType: 'application/json',
                             data: JSON.stringify(payload),
+                            headers: {
+                                'X-CSRF-Token': getCSRFToken()
+                            },
                             success: () => {
                                 success = true;
                                 state._useBackendSync = true;
@@ -482,6 +501,9 @@ function initSillyPhoneUI() {
                     processData: false,
                     contentType: false,
                     data: formData,
+                    headers: {
+                        'X-CSRF-Token': getCSRFToken()
+                    },
                     success: (res) => resolve({ url: res && res.imgText ? res.imgText : null, description: res && res.description ? res.description : null }),
                     error: () => resolve(null)
                 });
