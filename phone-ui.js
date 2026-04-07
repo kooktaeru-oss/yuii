@@ -340,6 +340,7 @@ function initSillyPhoneUI() {
         st.setChatMessages([{
             message_id: msgId,
             message: updatedMessage,
+            // 协议对齐：确保 extra.attachments 格式与酒馆标准一致
             extra: attachments.length > 0 ? { attachments: attachments } : {}
         }], { refresh: 'none' });
 
@@ -433,14 +434,18 @@ function initSillyPhoneUI() {
     async function uploadImageToST(file) {
         // --- 方案 1: 借道 kencuo/chajian (识图插件) 桥接器 ---
         if (window.parent && window.parent.__uploadImageByPlugin) {
-            console.log('[SillyPhone] 正在通过 Smart Media Assistant 上传...');
+            console.log('[SillyPhone] 正在通过 Smart Media Assistant 上传并识图...');
             try {
                 const result = await window.parent.__uploadImageByPlugin(file, {
                     path: 'phone',
-                    sendToChat: false
+                    sendToChat: false,
+                    enableAIVision: true,
+                    aiPrompt: '请用简短的一句话描述这张图片的内容。'
                 });
-                if (result && result.success && result.url) return result.url;
-            } catch (e) { console.error('[SillyPhone] 桥接上传异常:', e); }
+                if (result && result.success) {
+                    return { url: result.url, description: result.description || result.imgText };
+                }
+            } catch (e) { console.error('[SillyPhone] 桥接上传识图异常:', e); }
         }
 
         // --- 方案 2: 使用父窗口 jQuery.ajax (原生绕过 CSRF) ---
@@ -455,7 +460,7 @@ function initSillyPhoneUI() {
                     processData: false,
                     contentType: false,
                     data: formData,
-                    success: (res) => resolve(res && res.imgText ? res.imgText : null),
+                    success: (res) => resolve({ url: res && res.imgText ? res.imgText : null, description: res && res.description ? res.description : null }),
                     error: () => resolve(null)
                 });
             });
@@ -473,7 +478,7 @@ function initSillyPhoneUI() {
             });
             if (response.ok) {
                 const result = await response.json();
-                return result.imgText || null;
+                return { url: result.imgText || null, description: result.description || null };
             }
         } catch (e) { }
         return null;
@@ -5371,6 +5376,7 @@ function initSillyPhoneUI() {
         // --- 构造结构化图片对象 (对齐酒馆标准多模态格式) ---
         let structuralImage = null;
         if (multimodalAttachment) {
+            const imgDesc = (targetImgMsg && targetImgMsg.description) ? targetImgMsg.description : '一张图片';
             structuralImage = {
                 type: 'image',
                 role: 'user',
@@ -5381,10 +5387,10 @@ function initSillyPhoneUI() {
                         image_url: { url: multimodalAttachment }
                     }
                 ],
-                text: '[图片]', // 简化的兜底文本描述
+                text: `[图片:${imgDesc}]`, // 使用识别到的描述
                 imageData: multimodalAttachment,
                 fileName: (targetImgMsg ? targetImgMsg.fileName : null) || 'image.jpg',
-                imageDescription: '发送了一张图片',
+                imageDescription: imgDesc,
                 extra: {}
             };
         }
@@ -5407,7 +5413,7 @@ function initSillyPhoneUI() {
         // --- 结构化上下文注入 (关键：将 Context 中的图片消息替换为 Image-Type) ---
         if (structuralImage) {
             // 找到最后一条图片消息的位置（或者是 '[图片]' 占位符）
-            const lastPhotoIdx = [...lastMessages].reverse().findIndex(m => m.msgType === 'photo' || m.text === '[图片]' || m.text === '(IMG)');
+            const lastPhotoIdx = [...lastMessages].reverse().findIndex(m => m.msgType === 'photo' || (m.text && (m.text.includes('[图片]') || m.text.includes('(IMG)'))));
             if (lastPhotoIdx !== -1) {
                 const realIdx = lastMessages.length - 1 - lastPhotoIdx;
                 // 仅替换必要的字段，保留发送者等信息，但类型改为 image
@@ -5422,7 +5428,7 @@ function initSillyPhoneUI() {
         let userPrompt = customPrompt || lastUserMsgText || (mode === 'moments' ? '请回复朋友圈...' : '请回复...');
         
         // 规则实现：如果用户只发了图 (Prompt 只是占位符)，则清空文字 Prompt，依赖结构化输入
-        const isOnlyImage = structuralImage && (userPrompt === '[图片]' || userPrompt === '(IMG)' || !lastUserMsgText);
+        const isOnlyImage = structuralImage && (userPrompt.match(/^\[图片(:.*)?\]$/) || userPrompt === '(IMG)' || !lastUserMsgText);
         if (isOnlyImage) {
             userPrompt = ""; 
         }
@@ -5437,32 +5443,42 @@ function initSillyPhoneUI() {
             mode: mode,
             context: lastMessages,
             chatId: activeChatId,
-            structuralImage: structuralImage
+            structuralImage: structuralImage,
+            // 协议对齐：如果存在结构化图片，将其放入 extra.attachments 中同步
+            extra: structuralImage ? {
+                attachments: [{
+                    type: 'image',
+                    path: targetImgMsg ? (targetImgMsg.serverPath || targetImgMsg.url) : null,
+                    data: structuralImage.imageData
+                }]
+            } : {}
         };
 
-        // --- 核心修复：构造专用的多模态 Prompt 数组 ---
+        // --- 核心修复：构造专用的多模态 Prompt 数组 (对齐 ctrl 老师的 content 结构) ---
         if (structuralImage) {
             let mmp = [];
             
-            // 放入图片
+            // 1. 获取清理后的文本
+            const rawText = (customPrompt || lastUserMsgText || "").trim();
+            const cleanText = rawText.replace(/\[图片(:[^\]]*)?\]|\(IMG:[^\)]*\)|\(IMG\)/g, "").trim();
+
+            // 2. 构造多模态数组：文本在首，图片在后
+            if (cleanText && cleanText !== '[图片]' && cleanText !== '(IMG)') {
+                mmp.push({ type: 'text', text: cleanText });
+            }
+            
             mmp.push({
                 type: 'image_url',
                 image_url: { url: structuralImage.imageData }
             });
 
-            // 放入文字（如果有）
-            const cleanText = (customPrompt || lastUserMsgText || "").trim();
-            if (cleanText && cleanText !== '[图片]' && cleanText !== '(IMG)' && !cleanText.startsWith('(IMG:')) {
-                mmp.unshift({ type: 'text', text: cleanText });
-            }
-
             // 赋值给专用字段
             requestData.multimodal_prompt = mmp;
             
-            // 关键：将旧的 prompt 字段替换为轻微的提示，避免干扰
-            requestData.prompt = cleanText && cleanText !== '[图片]' && cleanText !== '(IMG)' ? cleanText : "";
+            // 覆盖原 prompt 字段为纯净文本，避免冗余
+            requestData.prompt = cleanText === '[图片]' || cleanText === '(IMG)' ? "" : cleanText;
             
-            console.log('[SillyPhone] 多模态数据注入完毕:', requestData.multimodal_prompt);
+            console.log('[SillyPhone] 多模态协议对齐完毕:', requestData.multimodal_prompt);
         }
 
         lastAIRequest = requestData;
@@ -6020,13 +6036,18 @@ function initSillyPhoneUI() {
         let fileName = file ? file.name : null;
         let finalDescription = descriptionInput;
 
-        // --- 识图逻辑已移除 (改为直接发送) ---
-        // 插件已不再独立调用外部 API 进行识图，现在由酒馆后台原生多模态支持。
         if (file) {
-            showToast('正在发送图片...', 'loader');
-            serverPath = await uploadImageToST(file);
+            setIslandState('loading');
+            islandText.textContent = '正在识图...';
+            showToast('正在上传并识别图片...', 'loader');
+            const result = await uploadImageToST(file);
+            if (result && typeof result === 'object') {
+                serverPath = result.url;
+                if (!finalDescription) finalDescription = result.description;
+            } else {
+                serverPath = result; // 兼容旧版或简单路径返回
+            }
         }
-
 
         const photoMsg = {
             msgType: 'photo',
