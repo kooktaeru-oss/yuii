@@ -375,10 +375,13 @@ function initSillyPhoneUI() {
             settings: state.settings
         };
 
+        // --- 核心修复：统一使用 yuii-phone 作为插件名 ---
+        const endpoint = `/api/extensions/settings/yuii-phone`;
+
         // 方案 1: 优先尝试调用父窗口的 jQuery.ajax (自带 CSRF)
         if (window.parent && window.parent.jQuery) {
             window.parent.jQuery.ajax({
-                url: '/api/extensions/settings/v1',
+                url: endpoint,
                 method: 'POST',
                 contentType: 'application/json',
                 data: JSON.stringify(payload),
@@ -395,7 +398,7 @@ function initSillyPhoneUI() {
 
         // 方案 2: 回退到 fetch (带令牌)
         try {
-            await fetch('/api/extensions/settings/v1', {
+            await fetch(endpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -5294,14 +5297,22 @@ function initSillyPhoneUI() {
                 const url = msg.url || msg.serverPath;
                 if (!url) continue;
 
-                // 核心：直接获取 Base64 用于附件挂载，不再调用外部识图接口
+                // --- 扫描逻辑升级：支持多元化路径识别 ---
                 if (url.startsWith('data:')) {
                     multimodalAttachment = url;
                     targetImgMsg = msg;
-                } else if (url.startsWith('IMGDATA:') || url.startsWith('/api/images/get')) {
+                } else if (url.startsWith('IMGDATA:') || url.startsWith('/api/images/get') || url.startsWith('user/images/')) {
                     try {
-                        const cleanPath = url.includes('IMGDATA:') ? url.replace('IMGDATA:', '') : url.split('path=')[1];
-                        const fetchUrl = url.includes('path=') ? url : `/api/images/get?path=${encodeURIComponent(cleanPath)}`;
+                        let fetchUrl = "";
+                        if (url.startsWith('user/images/')) {
+                            fetchUrl = `/api/images/get?path=${encodeURIComponent(url)}`;
+                        } else if (url.includes('path=')) {
+                            fetchUrl = url;
+                        } else {
+                            const cleanPath = url.replace('IMGDATA:', '');
+                            fetchUrl = `/api/images/get?path=${encodeURIComponent(cleanPath)}`;
+                        }
+                        
                         const response = await fetch(fetchUrl);
                         const blob = await response.blob();
                         multimodalAttachment = await new Promise((resolve) => {
