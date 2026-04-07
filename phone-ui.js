@@ -5549,15 +5549,18 @@ function initSillyPhoneUI() {
                         const base64Data = structuralImage.imageData.includes(',') ? structuralImage.imageData.split(',')[1] : structuralImage.imageData;
                         const mime = structuralImage.imageData.includes(';') ? structuralImage.imageData.split(';')[0].split(':')[1] : 'image/jpeg';
                         
-                        // 1. 设置标准的 images 数组
+                        // --- 核心修复：还原 user_input 为字符串，躲避酒馆宏替换逻辑 ---
+                        // 酒馆的 evaluateMacros 只处理字符串，传入对象会导致 content.replace is not a function 报错
+                        
+                        // 1. 使用标准 images 属性传递二进制数据 (躲避宏替换)
                         rawRequestData.images = [{ data: base64Data, mime: mime }];
                         
-                        // 2. 尝试将用户输入设为标准的多模态 Part 数组 (某些后端需要)
-                        const rawPrompt = (userPrompt + stickerPrompt + globalConstraints + dynamicPresetPrompt + visionSystemInfo).trim();
-                        rawRequestData.user_input = [
-                            { type: 'text', text: rawPrompt },
-                            { type: 'image_url', image_url: { url: structuralImage.imageData } }
-                        ];
+                        // 2. 传递多模态 Prompt 指令
+                        rawRequestData.multimodal_prompt = [structuralImage];
+                        
+                        // 3. 保持 user_input 为纯文本
+                        rawRequestData.user_input = (userPrompt + stickerPrompt + globalConstraints + dynamicPresetPrompt + visionSystemInfo).trim();
+                        
                     } catch (e) { console.error('[SillyPhone] 附件格式化失败:', e); }
                 }
 
