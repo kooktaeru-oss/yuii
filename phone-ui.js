@@ -375,8 +375,8 @@ function initSillyPhoneUI() {
             settings: state.settings
         };
 
-        // --- 核心修复：统一使用 yuii-phone 作为插件名 ---
-        const endpoint = `/api/extensions/settings/yuii-phone`;
+        // --- 核心修复：使用标准 v1 接口，确保兼容性 ---
+        const endpoint = `/api/extensions/settings/v1`;
 
         // 方案 1: 优先尝试调用父窗口的 jQuery.ajax (自带 CSRF)
         if (window.parent && window.parent.jQuery) {
@@ -413,7 +413,7 @@ function initSillyPhoneUI() {
 
     async function loadSettingsFromST() {
         try {
-            const response = await fetch('/api/extensions/settings/yuii-phone');
+            const response = await fetch('/api/extensions/settings/v1?extension=yuii-phone');
             if (response.ok) {
                 const data = await response.json();
                 if (data && data.settings) {
@@ -5287,6 +5287,7 @@ function initSillyPhoneUI() {
         // 倒序找图和找最后一条用户文本
         for (let i = recentMsgs.length - 1; i >= 0; i--) {
             const msg = recentMsgs[i];
+            console.log('[SillyPhone] 正在扫描消息: ', msg);
             
             // 找最后一条用户消息的内容作为 Prompt (如果 customPrompt 为空)
             if (!customPrompt && msg.type === 'user' && msg.text && !lastUserMsgText) {
@@ -5294,16 +5295,36 @@ function initSillyPhoneUI() {
             }
 
             if (!multimodalAttachment) {
-                // --- 扫描逻辑升级：全方位检查消息属性 ---
-                const url = msg.imageData || msg.url || msg.serverPath;
+                // --- 超级扫描器 2.0：全方位深度扫描 ---
+                let url = msg.imageData || msg.url || msg.serverPath;
+
+                // 1. 尝试从 extra.attachments 中抓取 (酒馆标准格式)
+                if (!url && msg.extra && msg.extra.attachments && msg.extra.attachments.length > 0) {
+                    const att = msg.extra.attachments.find(a => a.type === 'image');
+                    if (att) {
+                        url = att.path || att.url;
+                        console.log('[SillyPhone] 从 attachments 中发现图片:', url);
+                    }
+                }
+
+                // 2. 尝试全文本正则扫描 (处理文字中嵌入的 IMGDATA 等)
+                if (!url && msg.text) {
+                    const imgMatch = msg.text.match(/IMGDATA:([^\s|\]]+)/) || msg.text.match(/data:image\/[a-zA-Z]+;base64,[^\s|\]]+/);
+                    if (imgMatch) {
+                        url = imgMatch[0];
+                        console.log('[SillyPhone] 在全文中正则捕获到图片特征:', url);
+                    }
+                }
+
                 if (!url) continue;
 
-                // 检查是否是合法的图片特征（包括 Base64 和 服务器路径）
+                // 检查是否是合法的图片特征
                 const isImage = msg.msgType === 'photo' || msg.msgType === 'image' || 
                               url.startsWith('data:') || url.startsWith('IMGDATA:') || 
                               url.startsWith('/api/images/get') || url.startsWith('user/images/');
 
                 if (isImage) {
+                    console.log('[SillyPhone] 命中图片特征，开始处理:', url);
                     if (url.startsWith('data:')) {
                         multimodalAttachment = url;
                         targetImgMsg = msg;
@@ -5324,6 +5345,7 @@ function initSillyPhoneUI() {
                                 fetchUrl = `/api/images/get?path=${encodeURIComponent(url)}`;
                             }
                             
+                            console.log('[SillyPhone] 正在从后端拉取图片:', fetchUrl);
                             const response = await fetch(fetchUrl);
                             if (response.ok) {
                                 const blob = await response.blob();
@@ -5332,9 +5354,14 @@ function initSillyPhoneUI() {
                                     reader.onloadend = () => resolve(reader.result);
                                     reader.readAsDataURL(blob);
                                 });
-                                if (multimodalAttachment) targetImgMsg = msg;
+                                if (multimodalAttachment) {
+                                    console.log('[SillyPhone] 图片二进制转换成功 (Base64 ByteSize):', multimodalAttachment.length);
+                                    targetImgMsg = msg;
+                                }
+                            } else {
+                                console.warn('[SillyPhone] 后端拉取图片失败, Status:', response.status);
                             }
-                        } catch (e) { console.error('[SillyPhone] 获取图片附件失败:', e); }
+                        } catch (e) { console.error('[SillyPhone] 获取图片附件异常:', e); }
                     }
                 }
             }
