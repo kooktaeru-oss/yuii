@@ -5196,10 +5196,9 @@ function initSillyPhoneUI() {
 
         // 异步循环处理每一条消息，转换成结构化格式
         for (const msg of recentSequence) {
-            // 判定是否为图片消息 (检查类型或检查占位符特征)
-            const isImageMsg = (msg.msgType === 'photo' || msg.msgType === 'image' || (msg.text && msg.text.startsWith('(IMG')));
-
-            if (isImageMsg) {
+            const isImage = msg.msgType === 'photo' || msg.msgType === 'image' || (typeof msg.text === 'string' && msg.text.startsWith('(IMG'));
+            
+            if (isImage) {
                 const base64 = await getMessageBase64(msg);
                 if (base64) {
                     hasImage = true;
@@ -5212,15 +5211,15 @@ function initSillyPhoneUI() {
                             }
                         ]
                     });
-                } else if (msg.text && msg.text.startsWith('(IMG')) {
-                    // 如果判定是图片但没拿到 Base64，且带有 (IMG) 占位符，强制标记 hasImage 以触发 Bridge 链路防护
-                    // 但不把这个占位符当做文字发出去
-                    hasImage = true;
                 }
-            } else if (msg.type === 'user' && (msg.text || msg.content)) {
-                // 用户文本消息，排除所有以 (IMG 开头的占位符 (包括带描述的)
-                let text = msg.text || msg.content;
-                if (text.startsWith('(IMG')) continue; 
+                // 重要：图片消息处理完后，严禁再作为普通文本进入后续逻辑
+                continue;
+            } 
+            
+            if (msg.type === 'user' && (msg.text || msg.content)) {
+                // 用户文本消息，严格排除任何形式的 (IMG) 或 (IMG:...) 占位符
+                let text = (msg.text || msg.content || '').trim();
+                if (/^\(IMG(:.*)?\)$/.test(text)) continue; 
                 
                 finalMessages.push({
                     role: 'user',
@@ -5453,6 +5452,256 @@ function initSillyPhoneUI() {
 
 
 
+    async function triggerAIResponse(customPrompt = null, targetId = null, chatId = null) {
+        if (isAIRequestPending) return;
+
+        isAIRequestPending = true;
+        setIslandState('loading');
+
+        const activeChatId = chatId || (state.currentChat ? state.currentChat.id : 'system_queue');
+        if (!state.messages[activeChatId]) state.messages[activeChatId] = [];
+
+        // --- 识图逻辑集成 (静默扫描补丁) ---
+        // 扫描最近的消息，寻找最近的一张照片作为多模态附件
+        const recentMsgs = state.messages[activeChatId].slice(-8);
+        let multimodalAttachment = null;
+        let lastUserMsgText = null;
+        let targetImgMsg = null; // 记录源图片消息
+
+        // 倒序找图和找最后一条用户文本
+        for (let i = recentMsgs.length - 1; i >= 0; i--) {
+            const msg = recentMsgs[i];
+            
+            // 找最后一条用户消息的内容作为 Prompt (如果 customPrompt 为空)
+            if (!customPrompt && msg.type === 'user' && msg.text && !lastUserMsgText) {
+                lastUserMsgText = msg.text;
+            }
+
+            if (!multimodalAttachment && (msg.msgType === 'photo' || msg.msgType === 'image')) {
+                const url = msg.url || msg.serverPath;
+                if (!url) continue;
+
+                // 核心：直接获取 Base64 用于附件挂载，不再调用外部识图接口
+                if (url.startsWith('data:')) {
+                    multimodalAttachment = url;
+                    targetImgMsg = msg;
+                } else if (url.startsWith('IMGDATA:') || url.startsWith('/api/images/get')) {
+                    try {
+                        const cleanPath = url.includes('IMGDATA:') ? url.replace('IMGDATA:', '') : url.split('path=')[1];
+                        const fetchUrl = url.includes('path=') ? url : `/api/images/get?path=${encodeURIComponent(cleanPath)}`;
+                        const response = await fetch(fetchUrl);
+                        const blob = await response.blob();
+                        multimodalAttachment = await new Promise((resolve) => {
+                            const reader = new FileReader();
+                            reader.onloadend = () => resolve(reader.result);
+                            reader.readAsDataURL(blob);
+                        });
+                        if (multimodalAttachment) targetImgMsg = msg;
+                    } catch (e) { console.error('[SillyPhone] 获取图片附件失败:', e); }
+                }
+            }
+        }
+        // --- 识图逻辑结束 ---
+
+        // --- 构造结构化图片对象 ---
+        let structuralImage = null;
+        if (multimodalAttachment) {
+            structuralImage = {
+                type: 'image',
+                text: '发送了一张图片',
+                imageData: multimodalAttachment,
+                fileName: (targetImgMsg ? targetImgMsg.fileName : null) || 'image.jpg',
+                imageDescription: '发送了一张图片',
+                extra: {}
+            };
+        }
+
+        const mode = state.currentPage === 'moments' ? 'moments' : 'chat';
+
+        // 注入全局系统约束
+        const userNames = [state.userName, state.stUserName, '我', 'user', 'me', state.wechatId].filter(Boolean);
+        const userNameStr = userNames.join('、');
+
+        const globalConstraints = '';
+
+        // 使用构建生成 Prompt 的函数，过滤掉历史记录
+        const currentSessionMessages = buildGenerationPrompt(activeChatId);
+        let lastMessages = currentSessionMessages.slice(-6).map(m => {
+            const { time, ...rest } = m;
+            return rest;
+        });
+
+        // --- 结构化上下文注入 (关键：将 Context 中的图片消息替换为 Image-Type) ---
+        if (structuralImage) {
+            // 找到最后一条图片消息的位置（或者是 '(IMG)' 占位符）
+            const lastPhotoIdx = [...lastMessages].reverse().findIndex(m => m.msgType === 'photo' || m.text === '(IMG)');
+            if (lastPhotoIdx !== -1) {
+                const realIdx = lastMessages.length - 1 - lastPhotoIdx;
+                // 仅替换必要的字段，保留发送者等信息，但类型改为 image
+                lastMessages[realIdx] = {
+                    ...lastMessages[realIdx],
+                    ...structuralImage
+                };
+            }
+        }
+
+        // 核心 Prompt 构建优化
+        let userPrompt = customPrompt || lastUserMsgText || (mode === 'moments' ? '请回复朋友圈...' : '请回复...');
+        
+        // 规则实现：如果用户只发了图 (Prompt 只是占位符)，则清空文字 Prompt，依赖结构化输入
+        const isOnlyImage = structuralImage && (userPrompt === '(IMG)' || !lastUserMsgText);
+        if (isOnlyImage) {
+            userPrompt = ""; 
+        }
+
+        const requestData = {
+            source: 'yuii-phone',
+            type: 'YUII_AI_REQUEST',
+            requestId: 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+            prompt: userPrompt,
+            targetId: targetId || activeChatId,
+            mode: mode,
+            context: lastMessages,
+            chatId: activeChatId
+        };
+        
+        // 显式挂载到 requestData 根部，方便 Bridge 提取
+        if (structuralImage) requestData.structuralImage = structuralImage;
+
+        lastAIRequest = requestData;
+
+        console.log('[SillyPhone] 发送 AI 请求 (携带结构化输入):', requestData);
+
+        const st = getSTInterface();
+
+        // 动态注入当前角色绑定的表情包清单
+        let stickerPrompt = "";
+        if (mode === 'chat' && state.currentChat && !state.currentChat.isGroup) {
+            const charName = state.currentChat.name;
+            const availableLabels = [];
+            for (const catName in state.stickers) {
+                const cat = state.stickers[catName];
+                // 检查该分类是否绑定了当前角色
+                if (cat.roles && cat.roles.includes(charName)) {
+                    cat.items.forEach(item => {
+                        if (item.label) availableLabels.push(item.label);
+                    });
+                }
+            }
+            if (availableLabels.length > 0) {
+                stickerPrompt = `\n[系统提示：你当前可用的表情包标签如下，请在需要时使用：${availableLabels.join('、')}。发送格式：[角色昵称|表情包|标签名]]`;
+            }
+        }
+
+        // 尝试使用同层原生 API 进行生成
+        // 动态读取轻预设，在生成时临时注入，绝不污染聊天记录
+        let dynamicPresetPrompt = '';
+        if (state.presets && state.presets.length > 0) {
+            const activePresets = state.presets.filter(p => p.enabled);
+            if (activePresets.length > 0) {
+                dynamicPresetPrompt = `\n[系统底层约束，请严格遵守以下规则：]\n${activePresets.map(p => p.content).join('\n\n')}\n`;
+            }
+        }
+
+        // 尝试使用同层原生 API 进行生成 (如果有图片，我们跳过这里，强制走 Bridge 链路处理多模态)
+        if (st.generateRaw && !structuralImage) {
+            try {
+                // 确保在生成前同步最新状态到聊天记录
+                syncToSillyTavern();
+
+                const visionSystemInfo = structuralImage ? '[系统提示：用户发送了一张图片，请结合图片内容进行回复。]' : '';
+
+                const rawRequestData = {
+                    user_input: (userPrompt + stickerPrompt + globalConstraints + dynamicPresetPrompt + visionSystemInfo).trim(),
+                    should_silence: true
+                };
+
+                // --- 注入多模态附件 (同层支持) ---
+                if (structuralImage) {
+                    console.log('[SillyPhone] 正在挂载多模态附件, 文本 Prompt:', userPrompt);
+                    try {
+                        const base64Parts = structuralImage.imageData.split(',');
+                        const data = base64Parts[1];
+                        const mime = base64Parts[0].split(';')[0].split(':')[1] || 'image/jpeg';
+                        
+                        // 包含结构化数据
+                        rawRequestData.images = [{ data, mime }];
+                        rawRequestData.attachments = [{ type: 'image', data, mime }];
+                        rawRequestData.structuralImage = structuralImage; 
+                    } catch (e) { console.error('[SillyPhone] 附件格式化失败:', e); }
+                }
+
+                if (state.settings.pureMode) {
+                    rawRequestData.ordered_prompts = [
+                        'world_info_before',
+                        'persona_description',
+                        'char_description',
+                        'char_personality',
+                        'world_info_after',
+                        'chat_history',
+                        'user_input'
+                    ];
+                }
+
+                const replyText = String(await st.generateRaw(rawRequestData) || '').trim();
+
+                // 检查是否已被取消
+                if (!isAIRequestPending) return;
+
+                isAIRequestPending = false;
+                if (replyText) {
+                    processAIReply(replyText, activeChatId, mode, targetId || activeChatId);
+                    // 启动打字队列，逐条弹出消息
+                    if (state.typingQueue && state.typingQueue.length > 0 && typeof window.processTypingQueue === 'function') {
+                        window.processTypingQueue();
+                    } else {
+                        setIslandState('default');
+                    }
+                } else {
+                    setIslandState('default');
+                    showToast('生成返回为空', 'x-circle');
+                }
+            } catch (error) {
+                console.error('[SillyPhone] 同层生成失败:', error);
+                isAIRequestPending = false;
+                setIslandState('default');
+                showToast('生成失败: ' + error.message, 'x-circle');
+            }
+            return;
+        } else if (st.executeSlashCommands && !structuralImage) {
+            try {
+                syncToSillyTavern();
+                let genPrompt = customPrompt || (mode === 'moments' ? '请回复朋友圈...' : '请回复...');
+                genPrompt += stickerPrompt + globalConstraints + dynamicPresetPrompt;
+
+                await st.executeSlashCommands(`/gen ${String(genPrompt).replace(/\n/g, " ")}`);
+                // Slash 命令生成后，通常会通过其他机制（如监听 DOM 或轮询）获取结果
+                // 这里为了兼容性，我们仍然发送 postMessage 兜底
+            } catch (error) {
+                console.error('[SillyPhone] Slash 命令执行失败:', error);
+                isAIRequestPending = false;
+                setIslandState('default');
+            }
+        }
+
+        // 兜底：如果没有同层 API，则发送 postMessage 给桥接脚本
+        if (dynamicPresetPrompt) {
+            requestData.customPrompt = (requestData.customPrompt || '') + dynamicPresetPrompt;
+        }
+
+        // 兜底：如果没有同层 API，则发送 postMessage 给桥接脚本
+        window.parent.postMessage(requestData, '*');
+
+        if (aiResponseTimer) clearTimeout(aiResponseTimer);
+        aiResponseTimer = setTimeout(() => {
+            if (isAIRequestPending) {
+                isAIRequestPending = false;
+                setIslandState('default');
+                showToast('响应超时，请重试', 'x-circle');
+                aiResponseTimer = null;
+            }
+        }, 60000);
+    }
 
     let selectedStickers = new Set();
 
