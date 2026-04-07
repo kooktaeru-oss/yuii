@@ -5313,12 +5313,20 @@ function initSillyPhoneUI() {
         }
         // --- 识图逻辑结束 ---
 
-        // --- 构造结构化图片对象 ---
+        // --- 构造结构化图片对象 (对齐酒馆标准多模态格式) ---
         let structuralImage = null;
         if (multimodalAttachment) {
             structuralImage = {
                 type: 'image',
-                text: '发送了一张图片',
+                role: 'user',
+                // 关键点：使用内容数组格式，直接适配后端多模态检测
+                content: [
+                    {
+                        type: 'image_url',
+                        image_url: { url: multimodalAttachment }
+                    }
+                ],
+                text: '[图片]', // 简化的兜底文本描述
                 imageData: multimodalAttachment,
                 fileName: (targetImgMsg ? targetImgMsg.fileName : null) || 'image.jpg',
                 imageDescription: '发送了一张图片',
