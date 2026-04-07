@@ -98,36 +98,6 @@ function initSillyPhoneUI() {
 
     // --- SillyTavern 同层同步逻辑 ---
 
-    /** 获取 CSRF 令牌 (深度扫描模式) */
-    function getCSRFToken() {
-        try {
-            const p = window.parent || window;
-            
-            // 1. 优先尝试父窗口全局变量 (酒馆最直接的令牌源)
-            if (p.csrf_token) return p.csrf_token;
-            if (p.token) return p.token;
-            
-            // 2. 尝试从 jQuery 全局配置抓取 (异步请求最可靠的来源)
-            const jq = p.jQuery || p.$ || window.jQuery || window.$;
-            if (jq && jq.ajaxSettings && jq.ajaxSettings.headers) {
-                const t = jq.ajaxSettings.headers['X-CSRF-Token'];
-                if (t) return t;
-            }
-            
-            // 3. 尝试从 Cookie 中物理提取 (底层兜底)
-            const cookieMatch = document.cookie.match(/csrf_token=([^;]+)/);
-            if (cookieMatch) return cookieMatch[1];
-            
-            // 4. 从 HTML 元标签中提取 (标准 Web 方案)
-            const meta = p.document.querySelector('meta[name="csrf-token"]');
-            if (meta && meta.content) return meta.content;
-            
-        } catch (e) {
-            console.warn('[SillyPhone] CSRF 深度扫描失败:', e);
-        }
-        return '';
-    }
-
     function getSTInterface() {
         // 尝试从 window 或 window.parent 获取酒馆的 API
         const target = window.getCurrentMessageId ? window : window.parent;
@@ -205,13 +175,12 @@ function initSillyPhoneUI() {
                     text += `<${sender}|${quotedContent}|${content}>\n`;
                 } else if (msgType === 'photo') {
                     const desc = msg.description || '';
-                    // 核心：如果是 chajian 插件上传的路径，确保格式能被后端识别
                     const rawPath = msg.serverPath || '';
                     const path = rawPath ? `|IMGDATA:${rawPath}` : '';
                     const fileName = msg.fileName ? `|FILENAME:${msg.fileName}` : '';
-                    
-                    // 使用标准的酒馆图片占位格式
-                    text += `[${sender}|图片|${desc}${path}${fileName}|${time}]\n`;
+                    const avatar = msg.senderAvatar || '';
+                    // 采用更加直观的 [名字|头像|图片|描述|路径|时间] 格式，增强 AI 联想力
+                    text += `[${sender}|${avatar}|图片|${desc}${path}${fileName}|${time}]\n`;
                 } else if (msgType === 'sticker') {
                     text += `[${sender}|图片|发送了一个表情包|${msg.label || '表情包'}|${time}]\n`;
                 } else if (msgType === 'voice') {
@@ -355,11 +324,11 @@ function initSillyPhoneUI() {
                 const msgs = state.messages[chatId];
                 if (!Array.isArray(msgs)) continue;
                 msgs.forEach(m => {
-                    // 仅同步非历史消息且有服务器路径的图片
-                    if (m.msgType === 'photo' && !m.isHistory && m.serverPath) {
+                    // 仅同步非历史消息且有服务器路径或 URL 的图片
+                    if ((m.msgType === 'photo' || m.msgType === 'image') && !m.isHistory && (m.serverPath || m.url)) {
                         attachments.push({
                             type: 'image',
-                            path: m.serverPath
+                            path: m.serverPath || m.url
                         });
                     }
                 });
@@ -406,67 +375,39 @@ function initSillyPhoneUI() {
             settings: state.settings
         };
 
-        // --- 方案 1: 多级 API 探测，解决 404 兼容性问题 ---
-        const endpoints = [
-            `/api/extensions/settings/v1`,
-            `/api/extensions/settings` // 标准接口兜底
-        ];
+        // --- 核心修复：使用标准 v1 接口，确保兼容性 ---
+        const endpoint = `/api/extensions/settings/v1`;
 
-        let success = false;
-
-        // 优先使用 jQuery.ajax (父窗口)
+        // 方案 1: 优先尝试调用父窗口的 jQuery.ajax (自带 CSRF)
         if (window.parent && window.parent.jQuery) {
-            const token = getCSRFToken();
-            if (!token) console.warn('[SillyPhone] 警告: 未能抓取到 CSRF Token, 请检查登录状态');
-            
-            for (const endpoint of endpoints) {
-                if (success) break;
-                try {
-                    await new Promise((resolve, reject) => {
-                        window.parent.jQuery.ajax({
-                            url: endpoint,
-                            method: 'POST',
-                            contentType: 'application/json',
-                            data: JSON.stringify(payload),
-                            headers: {
-                                'X-CSRF-Token': token
-                            },
-                            success: () => {
-                                success = true;
-                                state._useBackendSync = true;
-                                console.log('[SillyPhone] 设置同步成功 (Endpoint: ' + endpoint + ')');
-                                resolve();
-                            },
-                            error: (xhr) => {
-                                console.warn('[SillyPhone] 同步拒绝 (Status: ' + xhr.status + ', Msg: ' + (xhr.responseJSON ? xhr.responseJSON.error : 'CSRF Failed') + ')');
-                                if (xhr.status !== 404) reject(xhr);
-                                else resolve();
-                            }
-                        });
-                    });
-                } catch (e) { break; }
-            }
-            if (success) return;
+            window.parent.jQuery.ajax({
+                url: endpoint,
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(payload),
+                success: () => {
+                    state._useBackendSync = true;
+                    console.log('[SillyPhone] 设置同步成功');
+                },
+                error: (xhr) => {
+                    console.warn('[SillyPhone] 设置同步失败:', xhr.status);
+                }
+            });
+            return;
         }
 
         // 方案 2: 回退到 fetch (带令牌)
-        for (const endpoint of endpoints) {
-            if (success) break;
-            try {
-                const response = await fetch(endpoint, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-Token': getCSRFToken()
-                    },
-                    body: JSON.stringify(payload)
-                });
-                if (response.ok) {
-                    success = true;
-                    console.log('[SillyPhone] Fetch 模式同步设置成功');
-                    break;
-                }
-            } catch (e) { }
+        try {
+            await fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': getCSRFToken()
+                },
+                body: JSON.stringify(payload)
+            });
+        } catch (e) {
+            console.warn('[SillyPhone] Fetch 模式同步设置失败', e);
         }
     }
 
@@ -492,23 +433,18 @@ function initSillyPhoneUI() {
     async function uploadImageToST(file) {
         // --- 方案 1: 借道 kencuo/chajian (识图插件) 桥接器 ---
         if (window.parent && window.parent.__uploadImageByPlugin) {
-            console.log('[SillyPhone] 正在通过 Smart Media Assistant 上传并识图...');
+            console.log('[SillyPhone] 正在通过 Smart Media Assistant 上传...');
             try {
                 const result = await window.parent.__uploadImageByPlugin(file, {
                     path: 'phone',
-                    sendToChat: false,
-                    enableAIVision: true,
-                    aiPrompt: '请用简短的一句话描述这张图片的内容。'
+                    sendToChat: false
                 });
-                if (result && result.success) {
-                    return { url: result.url, description: result.description || result.imgText };
-                }
-            } catch (e) { console.error('[SillyPhone] 桥接上传识图异常:', e); }
+                if (result && result.success && result.url) return result.url;
+            } catch (e) { console.error('[SillyPhone] 桥接上传异常:', e); }
         }
 
         // --- 方案 2: 使用父窗口 jQuery.ajax (原生绕过 CSRF) ---
         if (window.parent && window.parent.jQuery) {
-            const token = getCSRFToken();
             return new Promise((resolve) => {
                 const formData = new FormData();
                 formData.append('image', file);
@@ -519,17 +455,8 @@ function initSillyPhoneUI() {
                     processData: false,
                     contentType: false,
                     data: formData,
-                    headers: {
-                        'X-CSRF-Token': token
-                    },
-                    success: (res) => {
-                        console.log('[SillyPhone] jQuery 模式上传图片成功');
-                        resolve({ url: res && res.imgText ? res.imgText : null, description: res && res.description ? res.description : null });
-                    },
-                    error: (xhr) => {
-                        console.warn('[SillyPhone] jQuery 图片上传失败:', xhr.status);
-                        resolve(null);
-                    }
+                    success: (res) => resolve(res && res.imgText ? res.imgText : null),
+                    error: () => resolve(null)
                 });
             });
         }
@@ -546,7 +473,7 @@ function initSillyPhoneUI() {
             });
             if (response.ok) {
                 const result = await response.json();
-                return { url: result.imgText || null, description: result.description || null };
+                return result.imgText || null;
             }
         } catch (e) { }
         return null;
@@ -5369,31 +5296,19 @@ function initSillyPhoneUI() {
 
             if (!multimodalAttachment) {
                 // --- 超级扫描器 2.0：全方位深度扫描 ---
-                let url = msg.url || msg.serverPath;
-                let base64 = msg.imageData || (msg.extra && msg.extra.imageData);
+                let url = msg.imageData || msg.url || msg.serverPath;
 
-                // 1. 优先尝试本地缓存的 Base64 (规避 404)
-                if (base64 && base64.startsWith('data:')) {
-                    console.log('[SillyPhone] 发现本地缓存图片数据，跳过后端拉取');
-                    multimodalAttachment = base64;
-                    targetImgMsg = msg;
-                }
-
-                // 2. 尝试从 extra.attachments 中抓取 (酒馆标准格式)
-                if (!multimodalAttachment && msg.extra && msg.extra.attachments && msg.extra.attachments.length > 0) {
+                // 1. 尝试从 extra.attachments 中抓取 (酒馆标准格式)
+                if (!url && msg.extra && msg.extra.attachments && msg.extra.attachments.length > 0) {
                     const att = msg.extra.attachments.find(a => a.type === 'image');
                     if (att) {
                         url = att.path || att.url;
-                        if (att.data && att.data.startsWith('data:')) {
-                            multimodalAttachment = att.data;
-                            targetImgMsg = msg;
-                        }
                         console.log('[SillyPhone] 从 attachments 中发现图片:', url);
                     }
                 }
 
-                // 3. 尝试全文本正则扫描 (处理文字中嵌入的 IMGDATA 等)
-                if (!multimodalAttachment && !url && msg.text) {
+                // 2. 尝试全文本正则扫描 (处理文字中嵌入的 IMGDATA 等)
+                if (!url && msg.text) {
                     const imgMatch = msg.text.match(/IMGDATA:([^\s|\]]+)/) || msg.text.match(/data:image\/[a-zA-Z]+;base64,[^\s|\]]+/);
                     if (imgMatch) {
                         url = imgMatch[0];
@@ -5401,58 +5316,52 @@ function initSillyPhoneUI() {
                     }
                 }
 
-                if (!url && !multimodalAttachment) continue;
+                if (!url) continue;
 
-                // 4. 执行后端拉取 (如果本地没有缓存)
-                if (!multimodalAttachment) {
-                    // 检查是否是合法的图片特征
-                    const isImage = msg.msgType === 'photo' || msg.msgType === 'image' || 
-                                  url.startsWith('data:') || url.startsWith('IMGDATA:') || 
-                                  url.startsWith('/api/images/get') || url.startsWith('user/images/') || 
-                                  url.substring(1).startsWith('user/images/');
+                // 检查是否是合法的图片特征
+                const isImage = msg.msgType === 'photo' || msg.msgType === 'image' || 
+                              url.startsWith('data:') || url.startsWith('IMGDATA:') || 
+                              url.startsWith('/api/images/get') || url.startsWith('user/images/');
 
-                    if (isImage) {
-                        console.log('[SillyPhone] 命中图片特征，开始处理:', url);
-                        if (url.startsWith('data:')) {
-                            multimodalAttachment = url;
-                            targetImgMsg = msg;
-                        } else {
-                            try {
-                                let fetchUrl = "";
-                                let cleanPath = url;
-                                if (cleanPath.startsWith('IMGDATA:')) cleanPath = cleanPath.replace('IMGDATA:', '');
-                                if (cleanPath.startsWith('/')) cleanPath = cleanPath.substring(1);
-
-                                if (url.startsWith('user/images/') || cleanPath.startsWith('user/images/')) {
-                                    fetchUrl = `/api/images/get?path=${encodeURIComponent(cleanPath)}`;
-                                } else if (url.startsWith('/api/images/get')) {
-                                    fetchUrl = url;
-                                } else if (url.includes('path=')) {
-                                    fetchUrl = url;
-                                } else {
-                                    fetchUrl = `/api/images/get?path=${encodeURIComponent(cleanPath)}`;
-                                }
-                                
-                                console.log('[SillyPhone] 正在从后端拉取图片:', fetchUrl);
-                                const response = await fetch(fetchUrl);
-                                if (response.ok) {
-                                    const blob = await response.blob();
-                                    multimodalAttachment = await new Promise((resolve) => {
-                                        const reader = new FileReader();
-                                        reader.onloadend = () => resolve(reader.result);
-                                        reader.readAsDataURL(blob);
-                                    });
-                                    if (multimodalAttachment) {
-                                        console.log('[SillyPhone] 图片二进制转换成功 (Base64 ByteSize):', multimodalAttachment.length);
-                                        targetImgMsg = msg;
-                                    }
-                                } else {
-                                    console.warn('[SillyPhone] 后端拉取图片失败, Status:', response.status);
-                                }
-                            } catch (e) {
-                                console.error('[SillyPhone] 获取图片附件异常:', e);
+                if (isImage) {
+                    console.log('[SillyPhone] 命中图片特征，开始处理:', url);
+                    if (url.startsWith('data:')) {
+                        multimodalAttachment = url;
+                        targetImgMsg = msg;
+                    } else {
+                        try {
+                            let fetchUrl = "";
+                            if (url.startsWith('user/images/')) {
+                                fetchUrl = `/api/images/get?path=${encodeURIComponent(url)}`;
+                            } else if (url.startsWith('IMGDATA:')) {
+                                const cleanPath = url.replace('IMGDATA:', '');
+                                fetchUrl = `/api/images/get?path=${encodeURIComponent(cleanPath)}`;
+                            } else if (url.startsWith('/api/images/get')) {
+                                fetchUrl = url;
+                            } else if (url.includes('path=')) {
+                                fetchUrl = url;
+                            } else {
+                                // 兜底：尝试作为路径处理
+                                fetchUrl = `/api/images/get?path=${encodeURIComponent(url)}`;
                             }
-                        }
+                            
+                            console.log('[SillyPhone] 正在从后端拉取图片:', fetchUrl);
+                            const response = await fetch(fetchUrl);
+                            if (response.ok) {
+                                const blob = await response.blob();
+                                multimodalAttachment = await new Promise((resolve) => {
+                                    const reader = new FileReader();
+                                    reader.onloadend = () => resolve(reader.result);
+                                    reader.readAsDataURL(blob);
+                                });
+                                if (multimodalAttachment) {
+                                    console.log('[SillyPhone] 图片二进制转换成功 (Base64 ByteSize):', multimodalAttachment.length);
+                                    targetImgMsg = msg;
+                                }
+                            } else {
+                                console.warn('[SillyPhone] 后端拉取图片失败, Status:', response.status);
+                            }
+                        } catch (e) { console.error('[SillyPhone] 获取图片附件异常:', e); }
                     }
                 }
             }
@@ -5462,7 +5371,6 @@ function initSillyPhoneUI() {
         // --- 构造结构化图片对象 (对齐酒馆标准多模态格式) ---
         let structuralImage = null;
         if (multimodalAttachment) {
-            const imgDesc = (targetImgMsg && targetImgMsg.description) ? targetImgMsg.description : '一张图片';
             structuralImage = {
                 type: 'image',
                 role: 'user',
@@ -5473,10 +5381,10 @@ function initSillyPhoneUI() {
                         image_url: { url: multimodalAttachment }
                     }
                 ],
-                text: `[图片:${imgDesc}]`, // 使用识别到的描述
+                text: '[图片]', // 简化的兜底文本描述
                 imageData: multimodalAttachment,
                 fileName: (targetImgMsg ? targetImgMsg.fileName : null) || 'image.jpg',
-                imageDescription: imgDesc,
+                imageDescription: '发送了一张图片',
                 extra: {}
             };
         }
@@ -5499,7 +5407,7 @@ function initSillyPhoneUI() {
         // --- 结构化上下文注入 (关键：将 Context 中的图片消息替换为 Image-Type) ---
         if (structuralImage) {
             // 找到最后一条图片消息的位置（或者是 '[图片]' 占位符）
-            const lastPhotoIdx = [...lastMessages].reverse().findIndex(m => m.msgType === 'photo' || (m.text && (m.text.includes('[图片]') || m.text.includes('(IMG)'))));
+            const lastPhotoIdx = [...lastMessages].reverse().findIndex(m => m.msgType === 'photo' || m.text === '[图片]' || m.text === '(IMG)');
             if (lastPhotoIdx !== -1) {
                 const realIdx = lastMessages.length - 1 - lastPhotoIdx;
                 // 仅替换必要的字段，保留发送者等信息，但类型改为 image
@@ -5510,16 +5418,11 @@ function initSillyPhoneUI() {
             }
         }
 
-        // 核心 Prompt 构建优化：增强识图文本支持
+        // 核心 Prompt 构建优化
         let userPrompt = customPrompt || lastUserMsgText || (mode === 'moments' ? '请回复朋友圈...' : '请回复...');
         
-        // 自动提取并补充识图描述 (如果 prompt 只有 [图片])
-        if (targetImgMsg && targetImgMsg.description && (userPrompt === "[图片]" || userPrompt === "(IMG)")) {
-            userPrompt = `[图片:${targetImgMsg.description}]`;
-        }
-
         // 规则实现：如果用户只发了图 (Prompt 只是占位符)，则清空文字 Prompt，依赖结构化输入
-        const isOnlyImage = structuralImage && (userPrompt.match(/^\[图片(:.*)?\]$/) || userPrompt === '(IMG)' || !lastUserMsgText);
+        const isOnlyImage = structuralImage && (userPrompt === '[图片]' || userPrompt === '(IMG)' || !lastUserMsgText);
         if (isOnlyImage) {
             userPrompt = ""; 
         }
@@ -5607,8 +5510,8 @@ function initSillyPhoneUI() {
             }
         }
 
-        // 尝试使用同层原生 API 进行生成 (如果有图片，强制走 Bridge 链路以支持结构化多模态)
-        if (st.generateRaw && !structuralImage) {
+        // 尝试使用同层原生 API 进行生成 (优先尝试 generateRaw，无论是否有图)
+        if (st.generateRaw) {
             try {
                 // 确保在生成前同步最新状态到聊天记录
                 syncToSillyTavern();
@@ -5676,7 +5579,7 @@ function initSillyPhoneUI() {
                 showToast('生成失败: ' + error.message, 'x-circle');
             }
             return;
-        } else if (st.executeSlashCommands && !structuralImage) {
+        } else if (st.executeSlashCommands) {
             try {
                 syncToSillyTavern();
                 let genPrompt = customPrompt || (mode === 'moments' ? '请回复朋友圈...' : '请回复...');
@@ -6127,24 +6030,18 @@ function initSillyPhoneUI() {
         let fileName = file ? file.name : null;
         let finalDescription = descriptionInput;
 
+        // --- 识图逻辑已移除 (改为直接发送) ---
+        // 插件已不再独立调用外部 API 进行识图，现在由酒馆后台原生多模态支持。
         if (file) {
-            setIslandState('loading');
-            islandText.textContent = '正在识图...';
-            showToast('正在上传并识别图片...', 'loader');
-            const result = await uploadImageToST(file);
-            if (result && typeof result === 'object') {
-                serverPath = result.url;
-                if (!finalDescription) finalDescription = result.description;
-            } else {
-                serverPath = result; // 兼容旧版或简单路径返回
-            }
+            showToast('正在发送图片...', 'loader');
+            serverPath = await uploadImageToST(file);
         }
+
 
         const photoMsg = {
             msgType: 'photo',
             text: finalDescription ? `[图片:${finalDescription}]` : '[图片]',
             serverPath: serverPath,
-            imageData: base64Data, // 关键：缓存 Base64 以绕过后端 404 拉取失败
             fileName: fileName,
             description: finalDescription
         };
