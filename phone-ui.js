@@ -174,8 +174,7 @@ function initSillyPhoneUI() {
                     const quotedContent = msg.quotedMsg.text || msg.quotedMsg.content || '';
                     text += `<${sender}|${quotedContent}|${content}>\n`;
                 } else if (msgType === 'photo') {
-                    // 如果是原生传图且有路径，我们保持 Raw 代码极致干净，甚至可以省略文字描述
-                    const desc = msg.description || '发送了一张图片';
+                    const desc = msg.description || '';
                     const path = msg.serverPath ? `|IMGDATA:${msg.serverPath}` : '';
                     const fileName = msg.fileName ? `|FILENAME:${msg.fileName}` : '';
                     text += `[${sender}|图片|${desc}${path}${fileName}|${time}]\n`;
@@ -5351,8 +5350,8 @@ function initSillyPhoneUI() {
 
         // --- 结构化上下文注入 (关键：将 Context 中的图片消息替换为 Image-Type) ---
         if (structuralImage) {
-            // 找到最后一条图片消息的位置（或者是 '(IMG)' 占位符）
-            const lastPhotoIdx = [...lastMessages].reverse().findIndex(m => m.msgType === 'photo' || m.text === '(IMG)');
+            // 找到最后一条图片消息的位置（或者是 '[图片]' 占位符）
+            const lastPhotoIdx = [...lastMessages].reverse().findIndex(m => m.msgType === 'photo' || m.text === '[图片]' || m.text === '(IMG)');
             if (lastPhotoIdx !== -1) {
                 const realIdx = lastMessages.length - 1 - lastPhotoIdx;
                 // 仅替换必要的字段，保留发送者等信息，但类型改为 image
@@ -5367,7 +5366,7 @@ function initSillyPhoneUI() {
         let userPrompt = customPrompt || lastUserMsgText || (mode === 'moments' ? '请回复朋友圈...' : '请回复...');
         
         // 规则实现：如果用户只发了图 (Prompt 只是占位符)，则清空文字 Prompt，依赖结构化输入
-        const isOnlyImage = structuralImage && (userPrompt === '(IMG)' || !lastUserMsgText);
+        const isOnlyImage = structuralImage && (userPrompt === '[图片]' || userPrompt === '(IMG)' || !lastUserMsgText);
         if (isOnlyImage) {
             userPrompt = ""; 
         }
@@ -5394,9 +5393,9 @@ function initSillyPhoneUI() {
             });
 
             // 如果用户有输入真实的文字，也作为 Part 放入 Prompt
-            // 过滤掉 (IMG) 占位符
+            // 过滤掉 [图片] 占位符
             const cleanText = (customPrompt || lastUserMsgText || "").trim();
-            if (cleanText && cleanText !== '(IMG)' && !cleanText.startsWith('(IMG:')) {
+            if (cleanText && cleanText !== '[图片]' && cleanText !== '(IMG)' && !cleanText.startsWith('(IMG:')) {
                 multimodalPrompt.unshift({ type: 'text', text: cleanText });
             }
 
@@ -5968,7 +5967,7 @@ function initSillyPhoneUI() {
 
         const photoMsg = {
             msgType: 'photo',
-            text: finalDescription ? `(IMG:${finalDescription})` : '(IMG)',
+            text: finalDescription ? `[图片:${finalDescription}]` : '[图片]',
             serverPath: serverPath,
             fileName: fileName,
             description: finalDescription
