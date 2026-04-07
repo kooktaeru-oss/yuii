@@ -5382,6 +5382,27 @@ function initSillyPhoneUI() {
             context: lastMessages,
             chatId: activeChatId
         };
+
+        // --- 强制 Prompt 升级 (针对桥接端不解析 Context 的补丁) ---
+        if (structuralImage) {
+            let multimodalPrompt = [];
+            
+            // 核心：将图片以标准格式放入 Prompt
+            multimodalPrompt.push({
+                type: 'image_url',
+                image_url: { url: structuralImage.imageData }
+            });
+
+            // 如果用户有输入真实的文字，也作为 Part 放入 Prompt
+            // 过滤掉 (IMG) 占位符
+            const cleanText = (customPrompt || lastUserMsgText || "").trim();
+            if (cleanText && cleanText !== '(IMG)' && !cleanText.startsWith('(IMG:')) {
+                multimodalPrompt.unshift({ type: 'text', text: cleanText });
+            }
+
+            requestData.prompt = multimodalPrompt;
+            console.log('[SillyPhone] 已将 Prompt 升级为多模态数组:', requestData.prompt);
+        }
         
         // 显式挂载到 requestData 根部，方便 Bridge 提取
         if (structuralImage) requestData.structuralImage = structuralImage;
