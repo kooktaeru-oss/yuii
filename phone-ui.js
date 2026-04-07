@@ -5336,10 +5336,12 @@ function initSillyPhoneUI() {
                     } else {
                         try {
                             let fetchUrl = "";
-                            if (url.startsWith('user/images/')) {
-                                fetchUrl = `/api/images/get?path=${encodeURIComponent(url)}`;
-                            } else if (url.startsWith('IMGDATA:')) {
-                                const cleanPath = url.replace('IMGDATA:', '');
+                            // 路径归一化：移除开头的斜杠，对齐酒馆后端 API 期望
+                            let cleanPath = url;
+                            if (cleanPath.startsWith('IMGDATA:')) cleanPath = cleanPath.replace('IMGDATA:', '');
+                            if (cleanPath.startsWith('/')) cleanPath = cleanPath.substring(1);
+
+                            if (url.startsWith('user/images/') || cleanPath.startsWith('user/images/')) {
                                 fetchUrl = `/api/images/get?path=${encodeURIComponent(cleanPath)}`;
                             } else if (url.startsWith('/api/images/get')) {
                                 fetchUrl = url;
@@ -5347,7 +5349,7 @@ function initSillyPhoneUI() {
                                 fetchUrl = url;
                             } else {
                                 // 兜底：尝试作为路径处理
-                                fetchUrl = `/api/images/get?path=${encodeURIComponent(url)}`;
+                                fetchUrl = `/api/images/get?path=${encodeURIComponent(cleanPath)}`;
                             }
                             
                             console.log('[SillyPhone] 正在从后端拉取图片:', fetchUrl);
@@ -5424,9 +5426,14 @@ function initSillyPhoneUI() {
             }
         }
 
-        // 核心 Prompt 构建优化
+        // 核心 Prompt 构建优化：增强识图文本支持
         let userPrompt = customPrompt || lastUserMsgText || (mode === 'moments' ? '请回复朋友圈...' : '请回复...');
         
+        // 自动提取并补充识图描述 (如果 prompt 只有 [图片])
+        if (targetImgMsg && targetImgMsg.description && (userPrompt === "[图片]" || userPrompt === "(IMG)")) {
+            userPrompt = `[图片:${targetImgMsg.description}]`;
+        }
+
         // 规则实现：如果用户只发了图 (Prompt 只是占位符)，则清空文字 Prompt，依赖结构化输入
         const isOnlyImage = structuralImage && (userPrompt.match(/^\[图片(:.*)?\]$/) || userPrompt === '(IMG)' || !lastUserMsgText);
         if (isOnlyImage) {
