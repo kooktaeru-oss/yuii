@@ -364,31 +364,6 @@ function initSillyPhoneUI() {
     }
 
     /**
-     * 辅助函数：将图片消息转换为 Base64 Data URL
-     */
-    async function getMessageBase64(msg) {
-        const url = msg.url || msg.serverPath;
-        if (!url) return null;
-
-        if (url.startsWith('data:')) return url;
-
-        try {
-            const cleanPath = url.includes('IMGDATA:') ? url.replace('IMGDATA:', '') : url.split('path=')[1];
-            const fetchUrl = url.includes('path=') ? url : `/api/images/get?path=${encodeURIComponent(cleanPath)}`;
-            const response = await fetch(fetchUrl);
-            const blob = await response.blob();
-            return await new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result);
-                reader.readAsDataURL(blob);
-            });
-        } catch (e) {
-            console.error('[SillyPhone] 获取图片 Base64 失败:', e);
-            return null;
-        }
-    }
-
-    /**
      * C. 后端设置持久化 (Backend Persistence)
      */
     async function saveSettingsToST() {
@@ -5176,174 +5151,6 @@ function initSillyPhoneUI() {
         }
     }
 
-    async function triggerAIResponse(customPrompt = null, targetId = null, chatId = null) {
-        if (isAIRequestPending) return;
-
-        isAIRequestPending = true;
-        setIslandState('loading');
-
-        const activeChatId = chatId || (state.currentChat ? state.currentChat.id : 'system_queue');
-        if (!state.messages[activeChatId]) state.messages[activeChatId] = [];
-
-        // --- 核心：多模态序列组装 (原生 Messages 架构) ---
-        // 提取当前对话的所有非历史消息
-        const allMessages = buildGenerationPrompt(activeChatId);
-        // 只提取最近的 12 条消息，构造上下文和当前生成输入
-        const recentSequence = allMessages.slice(-12);
-
-        const finalMessages = [];
-        let hasImage = false;
-
-        // 异步循环处理每一条消息，转换成结构化格式
-        for (const msg of recentSequence) {
-            const isImage = msg.msgType === 'photo' || msg.msgType === 'image' || (typeof msg.text === 'string' && msg.text.startsWith('(IMG'));
-            
-            if (isImage) {
-                const base64 = await getMessageBase64(msg);
-                if (base64) {
-                    hasImage = true;
-                    finalMessages.push({
-                        role: 'user',
-                        content: [
-                            {
-                                type: 'image_url',
-                                image_url: { url: base64 }
-                            }
-                        ]
-                    });
-                }
-                // 重要：图片消息处理完后，严禁再作为普通文本进入后续逻辑
-                continue;
-            } 
-            
-            if (msg.type === 'user' && (msg.text || msg.content)) {
-                // 用户文本消息，严格排除任何形式的 (IMG) 或 (IMG:...) 占位符
-                let text = (msg.text || msg.content || '').trim();
-                if (/^\(IMG(:.*)?\)$/.test(text)) continue; 
-                
-                finalMessages.push({
-                    role: 'user',
-                    content: text
-                });
-            } else if (msg.type === 'character' && (msg.text || msg.content)) {
-                // 角色历史回复
-                finalMessages.push({
-                    role: 'assistant',
-                    content: msg.text || msg.content
-                });
-            }
-        }
-
-        const mode = state.currentPage === 'moments' ? 'moments' : 'chat';
-
-        // 注入全局系统约束
-        const userNames = [state.userName, state.stUserName, '我', 'user', 'me', state.wechatId].filter(Boolean);
-        const globalConstraints = '';
-
-        // 准备请求数据包
-        const requestData = {
-            source: 'yuii-phone',
-            type: 'YUII_AI_REQUEST',
-            requestId: 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-            targetId: targetId || activeChatId,
-            mode: mode,
-            chatId: activeChatId,
-            // 关键：最终发送给模型的序列
-            messages: finalMessages, 
-            // 兼容性：保留 context 字段
-            context: finalMessages.map(m => {
-                const { ...rest } = m;
-                return rest;
-            })
-        };
-
-        // 只有在没图片的情况下才尝试走简化的单条文字 Prompt 逻辑
-        let userPrompt = customPrompt || (finalMessages.length > 0 ? (finalMessages[finalMessages.length-1].content) : (mode === 'moments' ? '请回复朋友圈...' : '请回复...'));
-        // 针对图片 content 为 array 的情况，或者当 Prompt 是占位符时，清空文字 Prompt
-        if (typeof userPrompt !== 'string' || /^\(IMG(:.*)?\)$/.test(userPrompt)) {
-            userPrompt = ""; 
-        }
-
-        lastAIRequest = requestData;
-
-        console.log('[SillyPhone] 发送深度多模态 AI 请求:', requestData);
-
-        const st = getSTInterface();
-
-        // 动态注入当前角色绑定的表情包清单
-        let stickerPrompt = "";
-        if (mode === 'chat' && state.currentChat && !state.currentChat.isGroup) {
-            const charName = state.currentChat.name;
-            const availableLabels = [];
-            for (const catName in state.stickers) {
-                const cat = state.stickers[catName];
-                if (cat.roles && cat.roles.includes(charName)) {
-                    cat.items.forEach(item => {
-                        if (item.label) availableLabels.push(item.label);
-                    });
-                }
-            }
-            if (availableLabels.length > 0) {
-                stickerPrompt = `\n[系统提示：你当前可用的表情包标签如下，请在需要时使用：${availableLabels.join('、')}。发送格式：[角色昵称|表情包|标签名]]`;
-            }
-        }
-
-        let dynamicPresetPrompt = '';
-        if (state.presets && state.presets.length > 0) {
-            const activePresets = state.presets.filter(p => p.enabled);
-            if (activePresets.length > 0) {
-                dynamicPresetPrompt = `\n[系统底层约束，请严格遵守以下规则：]\n${activePresets.map(p => p.content).join('\n\n')}\n`;
-            }
-        }
-
-        // --- 至关重要：生成分支决策 ---
-        // 如果包含图片，我们不再走同层 st.generateRaw (因为它通常只处理单条 user_input)。
-        // 我们强制切换到 Bridge 模式，由桥接层负责组装最终发给模型的复杂多模态消息数组。
-        if (st.generateRaw && !hasImage) {
-            try {
-                syncToSillyTavern();
-                const rawRequestData = {
-                    user_input: (userPrompt + stickerPrompt + globalConstraints + dynamicPresetPrompt).trim(),
-                    should_silence: true
-                };
-
-                if (state.settings.pureMode) {
-                    rawRequestData.ordered_prompts = ['world_info_before', 'persona_description', 'char_description', 'char_personality', 'world_info_after', 'chat_history', 'user_input'];
-                }
-
-                const replyText = String(await st.generateRaw(rawRequestData) || '').trim();
-                if (!isAIRequestPending) return;
-                isAIRequestPending = false;
-                if (replyText) {
-                    processAIReply(replyText, activeChatId, mode, targetId || activeChatId);
-                }
-            } catch (e) {
-                console.error('[SillyPhone] AI 生成失败:', e);
-                isAIRequestPending = false;
-                setIslandState('default');
-            }
-        } else {
-            // 多模态 Bridge 模式：通过 postMessage 发送给父窗口桥接脚本
-            try {
-                window.parent.postMessage(requestData, '*');
-                
-                if (aiResponseTimer) clearTimeout(aiResponseTimer);
-                aiResponseTimer = setTimeout(() => {
-                    if (isAIRequestPending) {
-                        isAIRequestPending = false;
-                        setIslandState('default');
-                        showToast('响应超时，请重试', 'x-circle');
-                        aiResponseTimer = null;
-                    }
-                }, 60000);
-            } catch (e) {
-                console.error('[SillyPhone] 多模态请求发送失败:', e);
-                isAIRequestPending = false;
-                setIslandState('default');
-            }
-        }
-    }
-
     function deleteMessage(chatId, index) {
         const msg = state.messages[chatId][index];
         state.messages[chatId].splice(index, 1);
@@ -5606,7 +5413,7 @@ function initSillyPhoneUI() {
             }
         }
 
-        // 尝试使用同层原生 API 进行生成 (如果有图片，我们跳过这里，强制走 Bridge 链路处理多模态)
+        // 尝试使用同层原生 API 进行生成 (如果有图片，强制走 Bridge 链路以支持结构化多模态)
         if (st.generateRaw && !structuralImage) {
             try {
                 // 确保在生成前同步最新状态到聊天记录
