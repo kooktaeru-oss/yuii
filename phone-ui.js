@@ -5259,7 +5259,10 @@ function initSillyPhoneUI() {
 
         // 只有在没图片的情况下才尝试走简化的单条文字 Prompt 逻辑
         let userPrompt = customPrompt || (finalMessages.length > 0 ? (finalMessages[finalMessages.length-1].content) : (mode === 'moments' ? '请回复朋友圈...' : '请回复...'));
-        if (typeof userPrompt !== 'string') userPrompt = ""; // 针对图片 content 为 array 的情况
+        // 针对图片 content 为 array 的情况，或者当 Prompt 是占位符时，清空文字 Prompt
+        if (typeof userPrompt !== 'string' || /^\(IMG(:.*)?\)$/.test(userPrompt)) {
+            userPrompt = ""; 
+        }
 
         lastAIRequest = requestData;
 
