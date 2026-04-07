@@ -175,8 +175,12 @@ function initSillyPhoneUI() {
                     text += `<${sender}|${quotedContent}|${content}>\n`;
                 } else if (msgType === 'photo') {
                     const desc = msg.description || '';
-                    const path = msg.serverPath ? `|IMGDATA:${msg.serverPath}` : '';
+                    // 核心：如果是 chajian 插件上传的路径，确保格式能被后端识别
+                    const rawPath = msg.serverPath || '';
+                    const path = rawPath ? `|IMGDATA:${rawPath}` : '';
                     const fileName = msg.fileName ? `|FILENAME:${msg.fileName}` : '';
+                    
+                    // 使用标准的酒馆图片占位格式
                     text += `[${sender}|图片|${desc}${path}${fileName}|${time}]\n`;
                 } else if (msgType === 'sticker') {
                     text += `[${sender}|图片|发送了一个表情包|${msg.label || '表情包'}|${time}]\n`;
@@ -5376,35 +5380,38 @@ function initSillyPhoneUI() {
             type: 'YUII_AI_REQUEST',
             requestId: 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
             prompt: userPrompt,
+            multimodal_prompt: null, // 新增：显式多模态字段
             targetId: targetId || activeChatId,
             mode: mode,
             context: lastMessages,
-            chatId: activeChatId
+            chatId: activeChatId,
+            structuralImage: structuralImage
         };
 
-        // --- 强制 Prompt 升级 (针对桥接端不解析 Context 的补丁) ---
+        // --- 核心修复：构造专用的多模态 Prompt 数组 ---
         if (structuralImage) {
-            let multimodalPrompt = [];
+            let mmp = [];
             
-            // 核心：将图片以标准格式放入 Prompt
-            multimodalPrompt.push({
+            // 放入图片
+            mmp.push({
                 type: 'image_url',
                 image_url: { url: structuralImage.imageData }
             });
 
-            // 如果用户有输入真实的文字，也作为 Part 放入 Prompt
-            // 过滤掉 [图片] 占位符
+            // 放入文字（如果有）
             const cleanText = (customPrompt || lastUserMsgText || "").trim();
             if (cleanText && cleanText !== '[图片]' && cleanText !== '(IMG)' && !cleanText.startsWith('(IMG:')) {
-                multimodalPrompt.unshift({ type: 'text', text: cleanText });
+                mmp.unshift({ type: 'text', text: cleanText });
             }
 
-            requestData.prompt = multimodalPrompt;
-            console.log('[SillyPhone] 已将 Prompt 升级为多模态数组:', requestData.prompt);
+            // 赋值给专用字段
+            requestData.multimodal_prompt = mmp;
+            
+            // 关键：将旧的 prompt 字段替换为轻微的提示，避免干扰
+            requestData.prompt = cleanText && cleanText !== '[图片]' && cleanText !== '(IMG)' ? cleanText : "";
+            
+            console.log('[SillyPhone] 多模态数据注入完毕:', requestData.multimodal_prompt);
         }
-        
-        // 显式挂载到 requestData 根部，方便 Bridge 提取
-        if (structuralImage) requestData.structuralImage = structuralImage;
 
         lastAIRequest = requestData;
 
@@ -5456,16 +5463,20 @@ function initSillyPhoneUI() {
 
                 // --- 注入多模态附件 (同层支持) ---
                 if (structuralImage) {
-                    console.log('[SillyPhone] 正在挂载多模态附件, 文本 Prompt:', userPrompt);
+                    console.log('[SillyPhone] 正在挂载多模态附件到 generateRaw:', structuralImage);
                     try {
-                        const base64Parts = structuralImage.imageData.split(',');
-                        const data = base64Parts[1];
-                        const mime = base64Parts[0].split(';')[0].split(':')[1] || 'image/jpeg';
+                        const base64Data = structuralImage.imageData.includes(',') ? structuralImage.imageData.split(',')[1] : structuralImage.imageData;
+                        const mime = structuralImage.imageData.includes(';') ? structuralImage.imageData.split(';')[0].split(':')[1] : 'image/jpeg';
                         
-                        // 包含结构化数据
-                        rawRequestData.images = [{ data, mime }];
-                        rawRequestData.attachments = [{ type: 'image', data, mime }];
-                        rawRequestData.structuralImage = structuralImage; 
+                        // 1. 设置标准的 images 数组
+                        rawRequestData.images = [{ data: base64Data, mime: mime }];
+                        
+                        // 2. 尝试将用户输入设为标准的多模态 Part 数组 (某些后端需要)
+                        const rawPrompt = (userPrompt + stickerPrompt + globalConstraints + dynamicPresetPrompt + visionSystemInfo).trim();
+                        rawRequestData.user_input = [
+                            { type: 'text', text: rawPrompt },
+                            { type: 'image_url', image_url: { url: structuralImage.imageData } }
+                        ];
                     } catch (e) { console.error('[SillyPhone] 附件格式化失败:', e); }
                 }
 
