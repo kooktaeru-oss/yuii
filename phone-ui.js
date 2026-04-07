@@ -446,17 +446,25 @@ function initSillyPhoneUI() {
      * D. 图片后端上传 (Image Backend Upload)
      */
     async function uploadImageToST(file) {
-        // --- 方案 1: 借道 kencuo/chajian (识图插件) 桥接器 ---
-        if (window.parent && window.parent.__uploadImageByPlugin) {
-            console.log('[SillyPhone] 正在通过 Smart Media Assistant 上传...');
+        // --- 方案 1: 借道 Olivia's Toolkit (橄榄百宝箱) 或其它兼容桥接器 ---
+        const bridgeUpload = window.parent.__uploadImageByPlugin || window.__uploadImageByPlugin;
+        if (bridgeUpload) {
+            console.log('[SillyPhone] 发现图片上传绿色通道，正在调用...');
             try {
-                const result = await window.parent.__uploadImageByPlugin(file, {
-                    path: 'phone',
-                    sendToChat: false
-                });
-                // 兼容 Olivia's Toolkit: 只要有 url 即可认为成功
-                if (result && (result.success || result.url)) return result.url;
-            } catch (e) { console.error('[SillyPhone] 桥接上传异常:', e); }
+                // 部分插件需要第二个参数 (配置)，Olivia's 不需要但传了也没事
+                const result = await bridgeUpload(file, { path: 'phone', sendToChat: false });
+                
+                // 兼容多种返回格式: {url: "..."} 或 {success: true, url: "..."} 或 直接返回字符串
+                if (result) {
+                    const finalUrl = typeof result === 'string' ? result : (result.url || (result.success && result.data));
+                    if (finalUrl) {
+                        console.log('[SillyPhone] 通过绿色通道上传成功:', finalUrl);
+                        return finalUrl;
+                    }
+                }
+            } catch (e) { 
+                console.error('[SillyPhone] 绿色通道上传异常:', e);
+            }
         }
 
         // --- 方案 2: 使用父窗口 jQuery.ajax (原生绕过 CSRF) ---
