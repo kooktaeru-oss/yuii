@@ -387,10 +387,21 @@ function initSillyPhoneUI() {
                 data: JSON.stringify(payload),
                 success: () => {
                     state._useBackendSync = true;
-                    console.log('[SillyPhone] 设置同步成功');
+                    console.log('[SillyPhone] 设置同步成功 (v1)');
                 },
                 error: (xhr) => {
-                    console.warn('[SillyPhone] 设置同步失败:', xhr.status);
+                    // 如果 v1 失败，尝试降级到无版本号接口
+                    if (xhr.status === 404) {
+                        const legacyEndpoint = '/api/extensions/settings';
+                        window.parent.jQuery.ajax({
+                            url: legacyEndpoint,
+                            method: 'POST',
+                            contentType: 'application/json',
+                            data: JSON.stringify(payload),
+                            success: () => console.log('[SillyPhone] 设置同步成功 (Legacy)'),
+                            error: (xhr2) => console.warn('[SillyPhone] 降级同步也失败:', xhr2.status)
+                        });
+                    }
                 }
             });
             return;
@@ -5331,19 +5342,18 @@ function initSillyPhoneUI() {
                     } else {
                         try {
                             let fetchUrl = "";
-                            if (url.startsWith('user/images/')) {
-                                fetchUrl = `/api/images/get?path=${encodeURIComponent(url)}`;
-                            } else if (url.startsWith('IMGDATA:')) {
-                                const cleanPath = url.replace('IMGDATA:', '');
-                                fetchUrl = `/api/images/get?path=${encodeURIComponent(cleanPath)}`;
-                            } else if (url.startsWith('/api/images/get')) {
-                                fetchUrl = url;
-                            } else if (url.includes('path=')) {
+                            // 坑位修复：移除路径开头的斜杠，防止 404 (SillyTavern API 规范)
+                            let cleanPath = url;
+                            if (cleanPath.startsWith('/')) cleanPath = cleanPath.substring(1);
+                            if (cleanPath.startsWith('IMGDATA:')) cleanPath = cleanPath.replace('IMGDATA:', '');
+                            
+                            if (url.startsWith('/api/images/get') || url.includes('path=')) {
                                 fetchUrl = url;
                             } else {
-                                // 兜底：尝试作为路径处理
-                                fetchUrl = `/api/images/get?path=${encodeURIComponent(url)}`;
+                                fetchUrl = `/api/images/get?path=${encodeURIComponent(cleanPath)}`;
                             }
+                            
+                            console.log('[SillyPhone] 正在从后端拉取图片 (修正后):', fetchUrl);
                             
                             console.log('[SillyPhone] 正在从后端拉取图片:', fetchUrl);
                             const response = await fetch(fetchUrl);
@@ -5361,7 +5371,15 @@ function initSillyPhoneUI() {
                             } else {
                                 console.warn('[SillyPhone] 后端拉取图片失败, Status:', response.status);
                             }
-                        } catch (e) { console.error('[SillyPhone] 获取图片附件异常:', e); }
+                        } catch (e) { 
+                            console.error('[SillyPhone] 获取图片附件异常:', e); 
+                            // 三级补丁：如果拉取失败且 msg 本身具备二进制数据，则强制使用 Base64
+                            if (!multimodalAttachment && msg.imageData && msg.imageData.startsWith('data:')) {
+                                console.log('[SillyPhone] 拉取失败，强制回退到内存 Base64 缓存');
+                                multimodalAttachment = msg.imageData;
+                                targetImgMsg = msg;
+                            }
+                        }
                     }
                 }
             }
